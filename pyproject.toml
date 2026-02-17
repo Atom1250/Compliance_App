@@ -4,16 +4,27 @@ version = "0.1.0"
 description = "Deterministic compliance analysis application"
 requires-python = ">=3.11"
 readme = "README.md"
+dependencies = [
+  "alembic==1.14.1",
+  "fastapi==0.115.8",
+  "pydantic-settings==2.8.1",
+  "pypdf==5.3.1",
+  "python-multipart==0.0.20",
+  "sqlalchemy==2.0.38",
+  "uvicorn==0.34.0",
+  "psycopg[binary]==3.2.5",
+]
 
 [project.optional-dependencies]
 dev = [
+  "httpx==0.28.1",
   "pytest==8.3.5",
   "ruff==0.9.10",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 addopts = "-q"
 asyncio_default_fixture_loop_scope = "function"
 
