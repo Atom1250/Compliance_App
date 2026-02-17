@@ -37,11 +37,13 @@ Planned PRs:
 - PR-001: Tooling + CI baseline (`make lint`, `make test`), Python package scaffold, and deterministic run-fingerprint unit tests.
 - PR-002: Added Codex GitHub Action workflows and prompt files for PR conveyor execution and automated PR review comments.
 - PR-001 and PR-002 are merged to `main` and active in repository workflows/tooling.
+- PR-003 (in progress): Normalized Codex workflow naming and prompt-file paths to match runbook (`Codex Run Prompt (Create PR)` with `pr-001.md` / `pr-002.md`).
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
 - Sample documents for deterministic tests: must be small and redistributable.
 - Choice of PDF parsing stack: must be deterministic and testable; avoid fragile OCR in MVP.
+- Manual check still required in GitHub Actions UI to confirm `Codex Run Prompt (Create PR)` appears and dispatches with repository secrets.
 
 ## 6) Decisions Log (High Level)
 - Start with Option 1: GitHub Actions + Codex GitHub Action for stable autonomy.
