@@ -27,7 +27,7 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-000
+Next PR ID: PR-002
 
 Planned PRs:
 - PR-000: Repo scaffold + agent memory files + PR template
@@ -35,7 +35,8 @@ Planned PRs:
 - PR-002: Codex GitHub Action workflows + prompt files wired to PR review automation
 
 ## 4) Completed Work
-(None yet)
+- PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
+- PR-001: Tooling + CI baseline (`make lint`, `make test`), Python package scaffold, and deterministic run-fingerprint unit tests.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
