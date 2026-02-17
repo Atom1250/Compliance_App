@@ -30,15 +30,13 @@ We are building a compliance analysis application for EU clients:
 Next PR ID: PR-003
 
 Planned PRs:
-- PR-000: Repo scaffold + agent memory files + PR template
-- PR-001: Tooling + CI (lint/test), minimal `make` targets
-- PR-002: Codex GitHub Action workflows + prompt files wired to PR review automation
 - PR-003: Deterministic ingestion + chunk ID strategy implementation (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
 - PR-001: Tooling + CI baseline (`make lint`, `make test`), Python package scaffold, and deterministic run-fingerprint unit tests.
 - PR-002: Added Codex GitHub Action workflows and prompt files for PR conveyor execution and automated PR review comments.
+- PR-001 and PR-002 are merged to `main` and active in repository workflows/tooling.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
