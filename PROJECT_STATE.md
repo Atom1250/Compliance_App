@@ -38,6 +38,7 @@ Planned PRs:
 - PR-002: Added Codex GitHub Action workflows and prompt files for PR conveyor execution and automated PR review comments.
 - PR-001 and PR-002 are merged to `main` and active in repository workflows/tooling.
 - PR-003 (in progress): Normalized Codex workflow naming and prompt-file paths to match runbook (`Codex Run Prompt (Create PR)` with `pr-001.md` / `pr-002.md`).
+- Added CI autofix loop workflow (`codex_fix_ci.yml`) that triggers on failed `CI` workflow runs and applies bounded Codex fix attempts via `.github/codex/prompts/fix_ci.md`.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
