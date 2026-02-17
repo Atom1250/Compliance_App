@@ -46,11 +46,19 @@ jobs:
         run: |
           mkdir -p "${{ runner.temp }}/codex-home"
 
+      - name: Verify OPENAI_API_KEY is present
+        run: |
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "OPENAI_API_KEY secret is missing/empty for this run."
+            exit 1
+          fi
+
       - name: Run Codex on prompt file
         id: codex
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@v1.3
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.58.0"
           prompt-file: ${{ inputs.prompt_file }}
           codex-home: ${{ runner.temp }}/codex-home
 
