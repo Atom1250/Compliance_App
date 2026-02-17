@@ -48,6 +48,11 @@ jobs:
             echo "run_codex=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Prepare Codex home
+        if: steps.attempts.outputs.run_codex == 'true'
+        run: |
+          mkdir -p "${{ runner.temp }}/codex-home"
+
       - name: Run Codex with CI fix prompt
         if: steps.attempts.outputs.run_codex == 'true'
         id: codex
@@ -55,6 +60,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .github/codex/prompts/fix_ci.md
+          codex-home: ${{ runner.temp }}/codex-home
 
       - name: Commit autofix changes
         if: steps.attempts.outputs.run_codex == 'true'
@@ -89,4 +95,3 @@ jobs:
               issue_number: prNumber,
               body: `## Codex CI Autofix\n\n${body}`,
             });
-

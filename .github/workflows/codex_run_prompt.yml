@@ -42,12 +42,17 @@ jobs:
         run: |
           git checkout -B "${{ inputs.pr_branch }}"
 
+      - name: Prepare Codex home
+        run: |
+          mkdir -p "${{ runner.temp }}/codex-home"
+
       - name: Run Codex on prompt file
         id: codex
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: ${{ inputs.prompt_file }}
+          codex-home: ${{ runner.temp }}/codex-home
 
       - name: Configure git identity
         run: |
@@ -90,4 +95,3 @@ jobs:
               const pr = await github.rest.pulls.create({ owner, repo, head, base, title, body });
               core.info(`Created PR #${pr.data.number}`);
             }
-
