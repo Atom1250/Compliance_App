@@ -1,0 +1,45 @@
+name: Codex PR Conveyor
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_id:
+        description: PR conveyor step to execute
+        required: true
+        default: PR-002
+        type: choice
+        options:
+          - PR-000
+          - PR-001
+          - PR-002
+
+permissions:
+  contents: read
+
+jobs:
+  codex-conveyor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve prompt file
+        id: prompt
+        shell: bash
+        run: |
+          case "${{ inputs.pr_id }}" in
+            PR-000) echo "file=.github/codex/prompts/pr_000_prompt.md" >> "$GITHUB_OUTPUT" ;;
+            PR-001) echo "file=.github/codex/prompts/pr_001_prompt.md" >> "$GITHUB_OUTPUT" ;;
+            PR-002) echo "file=.github/codex/prompts/pr_002_prompt.md" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "Unsupported pr_id: ${{ inputs.pr_id }}"
+              exit 1
+              ;;
+          esac
+
+      - name: Run Codex conveyor step
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ steps.prompt.outputs.file }}
