@@ -63,6 +63,9 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Run UAT golden contract
+        run: python -m pytest tests/test_uat_harness.py
+
   workflow-validation:
     runs-on: ubuntu-latest
     steps:

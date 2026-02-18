@@ -7,6 +7,16 @@ Initial project scaffold.
 - Install: `python3 -m pip install -e .[dev]`
 - Lint: `make lint`
 - Test: `make test`
+- UAT golden harness: `make uat`
+
+## UAT Harness
+
+Run deterministic end-to-end UAT (company -> upload -> execute -> report -> evidence pack):
+
+- Command: `make uat`
+- Golden artifact: `tests/golden/uat_harness_snapshot.json`
+- Update golden (intentional contract change only):
+  - `python3 scripts/run_uat_harness.py --update-golden`
 
 ## API
 

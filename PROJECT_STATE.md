@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-180
+Next PR ID: TBD
 
 Planned PRs:
-- PR-180: UAT pack + golden end-to-end harness (planned)
+- (No queued PRs in current roadmap; add next sequence before execution)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -237,6 +237,11 @@ Planned PRs:
   - Added CI PR template checklist gating to fail pull requests with missing required checked items.
   - Added workflow validation job in CI to assert hardening invariants for Codex/CI workflows.
   - Added automated tests covering workflow pinning and checklist-gate configuration expectations.
+- PR-180: UAT pack + golden end-to-end harness completed:
+  - Added deterministic UAT harness module and CLI script that executes company->upload->execute->report->manifest->evidence-pack flow.
+  - Added committed UAT golden snapshot and repeatability/contract tests for harness output.
+  - Added `make uat` target and README operator runbook instructions for local deterministic UAT execution.
+  - Added CI UAT golden-contract step to run `tests/test_uat_harness.py` on pushes and pull requests.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

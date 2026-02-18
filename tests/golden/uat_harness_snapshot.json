@@ -1,0 +1,23 @@
+{
+  "evidence_pack": {
+    "entries": [
+      "assessments.jsonl",
+      "evidence.jsonl",
+      "manifest.json"
+    ],
+    "manifest_file_count": 2
+  },
+  "flow": {
+    "report_path_template": "/reports/run-{run_id}.html",
+    "report_url_matches_template": true,
+    "terminal_status": "completed"
+  },
+  "golden_contract_hash": "5d9a6464d60c943538be2063792f117791fbe1c6c5e153ccc7ed8ab1ca7af8fc",
+  "manifest": {
+    "bundle_id": "esrs_mini",
+    "bundle_version": "2026.01",
+    "model_name": "deterministic-local-v1",
+    "retrieval_policy_version": "hybrid-v1",
+    "retrieval_top_k": 5
+  }
+}
