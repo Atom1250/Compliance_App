@@ -30,7 +30,7 @@ We are building a compliance analysis application for EU clients:
 Next PR ID: TBD
 
 Planned PRs:
-- TBD: no further PR currently defined after PR-140.
+- TBD: no further PR currently defined after PR-150.
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -177,6 +177,11 @@ Planned PRs:
   - Added extraction client provider wiring to build OpenAI-compatible clients from runtime settings.
   - Added run execution provider selection (`llm_provider=\"local_lm_studio\"`) while preserving deterministic fallback mode.
   - Added tests for local provider config wiring and execute endpoint local-provider path selection.
+- PR-150: Local LLM health check endpoint completed:
+  - Added `GET /llm-health` endpoint for local LLM config visibility (base URL/model).
+  - Added optional probe mode (`probe=true`) to actively test LM Studio-compatible connectivity.
+  - Added deterministic probe result response fields (`reachable`, `detail`) for operator diagnostics.
+  - Added endpoint tests for non-probe config response and mocked probe-path behavior.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

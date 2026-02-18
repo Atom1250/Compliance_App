@@ -425,4 +425,17 @@ Definition of Done
 Run execution can use LM Studio local model path via configuration without external cloud dependency.
 Tests
 Unit tests for local LLM config/provider wiring and execute endpoint provider selection.
+PR-150 — Local LLM Health Check Endpoint
+Objective
+Provide explicit runtime visibility into local LLM availability and configuration.
+Scope
+Add system endpoint:
+GET /llm-health
+Returns configured local LLM base URL and model.
+Supports optional active probe (`probe=true`) against LM Studio-compatible endpoint.
+Probe result is reported deterministically as reachable/unreachable with detail.
+Definition of Done
+Operators can verify local LLM configuration and optionally probe runtime reachability via API.
+Tests
+Endpoint tests for non-probe response and probe-path behavior with mocked probe result.
 END OF ROADMAP
