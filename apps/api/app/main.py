@@ -9,6 +9,7 @@ from collections.abc import Callable
 from uuid import uuid4
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -87,6 +88,18 @@ def create_app() -> FastAPI:
     )
     validate_runtime_configuration(settings)
     app = FastAPI(title=settings.app_name, version=settings.app_version)
+    allowed_origins = [
+        origin.strip()
+        for origin in settings.cors_allowed_origins.split(",")
+        if origin.strip()
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.add_middleware(RequestOpsMiddleware)
     app.include_router(system_router)
     app.include_router(companies_router)

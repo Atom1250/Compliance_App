@@ -8,6 +8,10 @@ Initial project scaffold.
 - Lint: `make lint`
 - Test: `make test`
 - UAT golden harness: `make uat`
+- Install web deps: `make ui-setup`
+- Launch full app locally (opens browser): `make dev`
+- Default local URLs: UI `http://127.0.0.1:3001`, API `http://127.0.0.1:8001`
+- Override ports if needed: `make dev WEB_PORT=3100 API_PORT=8100`
 
 ## UAT Harness
 

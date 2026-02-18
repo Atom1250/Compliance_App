@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     request_rate_limit_enabled: bool = True
     request_rate_limit_window_seconds: int = 60
     request_rate_limit_max_requests: int = 30
+    cors_allowed_origins: str = (
+        "http://localhost:3000,http://127.0.0.1:3000,"
+        "http://localhost:3001,http://127.0.0.1:3001"
+    )
 
     model_config = SettingsConfigDict(env_prefix="COMPLIANCE_APP_", extra="ignore")
 
