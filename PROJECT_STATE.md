@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-050
+Next PR ID: PR-051
 
 Planned PRs:
-- PR-050: Deterministic HTML report generator (planned)
+- PR-051: Evidence pack ZIP export (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -107,6 +107,11 @@ Planned PRs:
   - Added persistent run cache storage (`run_cache_entry`) for run-hash keyed output reuse.
   - Implemented cache-first execution helper returning cached output and skipping recomputation on hash hit.
   - Added deterministic tests for run hash stability/input sensitivity and cache-hit behavior with identical output reuse.
+- PR-050: Deterministic HTML report generator completed:
+  - Added deterministic HTML report renderer with executive summary, coverage metrics, gap summary, and datapoint table.
+  - Added inline citation references in datapoint rows using evidence chunk IDs.
+  - Added timestamp normalization utility for stable snapshot testing.
+  - Added snapshot-style and repeatability tests to verify byte-stable normalized HTML output for identical inputs.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
