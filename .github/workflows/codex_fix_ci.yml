@@ -53,12 +53,21 @@ jobs:
         run: |
           mkdir -p "${{ runner.temp }}/codex-home"
 
+      - name: Verify OPENAI_API_KEY is present
+        if: steps.attempts.outputs.run_codex == 'true'
+        run: |
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "OPENAI_API_KEY secret is missing/empty for this run."
+            exit 1
+          fi
+
       - name: Run Codex with CI fix prompt
         if: steps.attempts.outputs.run_codex == 'true'
         id: codex
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@v1.3
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.58.0"
           prompt-file: .github/codex/prompts/fix_ci.md
           codex-home: ${{ runner.temp }}/codex-home
 

@@ -27,10 +27,9 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-179
+Next PR ID: PR-180
 
 Planned PRs:
-- PR-179: CI and autonomy workflow hardening (planned)
 - PR-180: UAT pack + golden end-to-end harness (planned)
 
 ## 4) Completed Work
@@ -233,6 +232,11 @@ Planned PRs:
   - Added structured redaction policy for sensitive logging fields (`api_key`, `authorization`, `*_key`, etc.) in audit event serialization.
   - Added startup-time runtime validation for rate-limit parameters and LLM base URL format.
   - Added tests for log redaction behavior, runtime config fail-fast, and sensitive-route throttling semantics.
+- PR-179: CI and autonomy workflow hardening completed:
+  - Hardened Codex review/autofix workflows with secret-presence guardrails and pinned Codex action/version.
+  - Added CI PR template checklist gating to fail pull requests with missing required checked items.
+  - Added workflow validation job in CI to assert hardening invariants for Codex/CI workflows.
+  - Added automated tests covering workflow pinning and checklist-gate configuration expectations.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
