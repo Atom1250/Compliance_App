@@ -12,13 +12,13 @@ We are building a compliance analysis application for EU clients:
 - Local LLM used for structured extraction; external services only for optional web search in later phases
 
 ## 1) Architectural Snapshot (Current)
-- Backend: FastAPI (planned)
-- Worker: background job runner (planned)
-- DB: Postgres + pgvector (planned)
-- Object storage: S3-compatible (MinIO in dev; planned)
-- Frontend: Next.js (planned; later)
-- Requirements Library: versioned bundles stored in repo and imported into DB
-- Determinism: strict (stable chunk IDs, retrieval tie-breaks, schema-only LLM outputs, run-hash caching)
+- Backend: FastAPI app with tenant-scoped lifecycle/document/retrieval/system endpoints implemented
+- Worker: synchronous execution in API process (background runner pending PR-175)
+- DB: SQLAlchemy + Alembic migrations with Postgres/pgvector schema support implemented
+- Object storage: immutable local object-store service implemented (S3-compatible MinIO dev path configured)
+- Frontend: Next.js workflow UI implemented for company/upload/run/status/report with LLM controls
+- Requirements Library: versioned bundles in-repo with importer + applicability/materiality integration
+- Determinism: strict chunk IDs, retrieval tie-breaks, schema-only extraction, run-hash cache, deterministic reporting/export
 
 ## 2) Non-Negotiables
 - Requirements-first / datapoint-native / evidence gating
@@ -27,10 +27,19 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: TBD
+Next PR ID: PR-171
 
 Planned PRs:
-- (No additional PRs currently planned in `docs/PR_CONVEYOR_PLAN.md`)
+- PR-171: Run manifest persistence + API exposure (planned)
+- PR-172: Strict run-hash cache integration in execute API (planned)
+- PR-173: Evidence pack download endpoint (planned)
+- PR-174: Frontend workflow API hardening (planned)
+- PR-175: Background job runner for run execution (planned)
+- PR-176: Tenant isolation hardening audit (planned)
+- PR-177: Deterministic retrieval tuning lock (planned)
+- PR-178: Security and operations baseline (planned)
+- PR-179: CI and autonomy workflow hardening (planned)
+- PR-180: UAT pack + golden end-to-end harness (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -187,6 +196,11 @@ Planned PRs:
   - Wired run configuration flow to call `POST /runs` then `POST /runs/{run_id}/execute` with `llm_provider`.
   - Added frontend LLM health panel that reads `/llm-health` and supports active `probe=true` checks.
   - Added scaffold tests validating provider wiring, `/llm-health` route usage, and probe UI controls.
+- PR-170: Roadmap + state normalization completed:
+  - Added authoritative roadmap sections for PR-170 through PR-180 with objective/scope/DoD/tests.
+  - Normalized architectural snapshot to reflect implemented backend/frontend/data capabilities.
+  - Replaced `Next PR ID: TBD` by advancing sequence to `PR-171`.
+  - Added planned PR index entries for PR-171 through PR-180.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

@@ -452,4 +452,127 @@ Definition of Done
 Operators can configure local LLM execution mode from UI and validate LM Studio health before execution.
 Tests
 UI scaffold tests validate provider wiring and LLM health panel route usage.
+PR-170 — Roadmap + State Normalization
+Objective
+Re-align roadmap and project state with implemented reality so autonomous PR execution can continue safely.
+Scope
+Normalize `PROJECT_STATE.md`:
+- Set `Next PR ID` to `PR-170` before execution, then advance to `PR-171` on completion.
+- Replace stale "(planned)" architecture notes with implemented status where already delivered.
+- Add planned PR index entries for PR-171 onward.
+Normalize `docs/PR_CONVEYOR_PLAN.md`:
+- Add the new PR sequence PR-170 through PR-180.
+- Keep scope boundaries explicit and deterministic-focused.
+Definition of Done
+Roadmap and project state are consistent, and `Next PR ID` points to the next executable roadmap item after this PR.
+Tests
+Run `make lint` and `make test` to confirm no regressions from documentation/state updates.
+PR-171 — Run Manifest Persistence + API Exposure
+Objective
+Persist and expose complete reproducibility manifests for each run.
+Scope
+Persist run manifest fields including document hashes, bundle versions, retrieval params, model identity, prompt hash, and git SHA.
+Add endpoint:
+GET `/runs/{run_id}/manifest`
+Enforce tenant scoping and deterministic field serialization.
+Definition of Done
+Operators can retrieve a complete reproducibility manifest for any authorized run.
+Tests
+Unit/integration tests for manifest completeness, deterministic serialization, and tenant isolation.
+PR-172 — Strict Run-Hash Cache Integration in Execute API
+Objective
+Make run execution endpoint cache-aware and reproducibility-first.
+Scope
+Integrate run-hash cache lookup into `POST /runs/{run_id}/execute`.
+On identical inputs, return cached outputs and skip recomputation.
+Ensure response contract is deterministic across cache-hit/cache-miss paths.
+Definition of Done
+Identical execution inputs deterministically return cached results.
+Tests
+Integration tests for cache hit/miss behavior and byte-identical normalized outputs.
+PR-173 — Evidence Pack Download Endpoint
+Objective
+Expose evidence pack export through a tenant-scoped API route.
+Scope
+Add endpoint:
+GET `/runs/{run_id}/evidence-pack`
+Wire deterministic ZIP export service to route handler.
+Enforce tenant isolation and stable artifact naming.
+Definition of Done
+Authorized users can download deterministic evidence packs for completed runs.
+Tests
+Integration tests for happy path, tenant isolation denial, and evidence pack contract checks.
+PR-174 — Frontend Workflow API Hardening
+Objective
+Remove remaining demo behavior in operational UI and rely on explicit backend workflow states.
+Scope
+Harden frontend workflow pages to use backend lifecycle APIs for run create/execute/status/report/evidence-pack states.
+Improve deterministic error state rendering and retry affordances.
+Definition of Done
+UI workflow behaves predictably against live API responses without opaque fallback behavior.
+Tests
+UI scaffold/integration tests asserting route usage and explicit error-state rendering.
+PR-175 — Background Job Runner for Run Execution
+Objective
+Move execution off request path while preserving deterministic run transitions.
+Scope
+Introduce background worker execution for run jobs.
+Ensure API returns queued/running/completed/failed transitions deterministically.
+Define idempotent retry behavior.
+Definition of Done
+Run execution is asynchronous with deterministic lifecycle state semantics.
+Tests
+Integration tests for queue lifecycle, retry idempotency, and status polling consistency.
+PR-176 — Tenant Isolation Hardening Audit
+Objective
+Close remaining multi-tenant data boundary gaps across storage and APIs.
+Scope
+Audit and enforce tenant filters/indexes for all run-related entities (assessments, cache, events, exports, retrieval artifacts).
+Add missing guards where needed.
+Definition of Done
+Cross-tenant data access is blocked for all relevant API and persistence paths.
+Tests
+Negative integration tests for cross-tenant access across all audited endpoints.
+PR-177 — Deterministic Retrieval Tuning Lock
+Objective
+Lock retrieval scoring/tie-break configuration as versioned runtime policy.
+Scope
+Version and persist retrieval policy parameters in run manifest.
+Ensure deterministic ranking/tie-break behavior remains stable under policy pinning.
+Definition of Done
+Retrieval behavior is reproducibly pinned by explicit policy version.
+Tests
+Determinism tests validating ordering stability and policy-version pin behavior.
+PR-178 — Security and Operations Baseline
+Objective
+Strengthen production-readiness controls without altering compliance logic.
+Scope
+Add request correlation IDs and structured redaction policy for sensitive fields.
+Add startup-time secret/config validation enhancements.
+Add basic route-level rate limiting for sensitive endpoints.
+Definition of Done
+Security and ops controls are present, deterministic, and covered by tests.
+Tests
+Tests for redaction, startup validation failure modes, and throttling behavior.
+PR-179 — CI and Autonomy Workflow Hardening
+Objective
+Stabilize GitHub automation pipelines that drive autonomous PR execution/review.
+Scope
+Harden Codex run/review/autofix workflows and add workflow validation checks.
+Enforce PR template checklist gating in CI.
+Definition of Done
+Workflow automation is reliable and failures are surfaced with actionable diagnostics.
+Tests
+Workflow lint/validation tests and failure-path assertions.
+PR-180 — UAT Pack + Golden End-to-End Harness
+Objective
+Provide a deterministic user-acceptance and regression harness for full workflow validation.
+Scope
+Add a single-command UAT harness that runs company->upload->execute->report->evidence-pack flow.
+Compare outputs against normalized golden artifacts.
+Document operator runbook for local execution.
+Definition of Done
+UAT harness can be run repeatedly with deterministic pass/fail outcomes.
+Tests
+End-to-end deterministic golden contract test in CI.
 END OF ROADMAP
