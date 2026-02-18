@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-043
+Next PR ID: PR-050
 
 Planned PRs:
-- PR-043: Run hashing + cache (planned)
+- PR-050: Deterministic HTML report generator (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -102,6 +102,11 @@ Planned PRs:
   - Implemented predictable downgrade rules (`Present -> Partial`, `Partial -> Absent`) when verification fails.
   - Integrated verification into the assessment pipeline prior to persistence.
   - Added crafted edge-case tests for numeric mismatch, missing evidence chunks, and year consistency failures.
+- PR-043: Run hashing + cache completed:
+  - Added deterministic run hash computation from document hashes, company profile, materiality inputs, bundle version, retrieval params, and prompt hash.
+  - Added persistent run cache storage (`run_cache_entry`) for run-hash keyed output reuse.
+  - Implemented cache-first execution helper returning cached output and skipping recomputation on hash hit.
+  - Added deterministic tests for run hash stability/input sensitivity and cache-hit behavior with identical output reuse.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

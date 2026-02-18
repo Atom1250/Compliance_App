@@ -18,6 +18,7 @@ REQUIRED_TABLES = {
     "embedding",
     "requirement_bundle",
     "run",
+    "run_cache_entry",
     "run_materiality",
     "run_event",
 }
