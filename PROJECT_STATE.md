@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-022
+Next PR ID: PR-030
 
 Planned PRs:
-- PR-022: Hybrid retrieval engine (planned)
+- PR-030: Requirements bundle system (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -67,6 +67,11 @@ Planned PRs:
   - Added `chunk` and `embedding` tables plus Alembic migration with pgvector extension bootstrap for PostgreSQL environments.
   - Added FTS-ready `content_tsv` column and persistence wiring to generate chunks from extracted document pages during upload.
   - Added chunk determinism and retrieval-sanity tests with explicit stable tie-break behavior.
+- PR-022: Hybrid retrieval engine completed:
+  - Added deterministic hybrid retrieval service combining lexical and vector similarity with explicit weighted scoring.
+  - Implemented stable tie-break ordering by `chunk_id` when combined scores are equal.
+  - Added structured retrieval API endpoint (`POST /retrieval/search`) returning typed retrieval result records.
+  - Added ordering determinism tests validating repeatable ranking and tie-break behavior.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
