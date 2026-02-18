@@ -27,6 +27,8 @@ export default function CompanySetupPage() {
         throw new Error("Missing company id in API response.");
       }
       localStorage.setItem("company_id", String(created.id));
+      localStorage.setItem("company_name", name);
+      localStorage.setItem("company_reporting_year", reportingYear);
       setCompanyId(created.id);
       setStatus(`Company ${created.id} saved.`);
     } catch (caught) {

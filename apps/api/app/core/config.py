@@ -30,6 +30,13 @@ class Settings(BaseSettings):
         "http://localhost:3000,http://127.0.0.1:3000,"
         "http://localhost:3001,http://127.0.0.1:3001"
     )
+    tavily_enabled: bool = False
+    tavily_api_key: str = ""
+    tavily_base_url: str = "https://api.tavily.com/search"
+    tavily_timeout_seconds: float = 20.0
+    tavily_max_results: int = 8
+    tavily_download_timeout_seconds: float = 30.0
+    tavily_max_document_bytes: int = 10000000
 
     model_config = SettingsConfigDict(env_prefix="COMPLIANCE_APP_", extra="ignore")
 

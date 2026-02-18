@@ -9,6 +9,7 @@ export type CompanySetupPayload = {
 export type UploadPayload = {
   companyId: number;
   file: File;
+  title?: string;
 };
 
 export type RunConfigPayload = {
@@ -24,6 +25,22 @@ export type LLMHealthResponse = {
   model: string;
   reachable: boolean | null;
   detail: string;
+};
+
+export type AutoDiscoverResponse = {
+  company_id: number;
+  candidates_considered: number;
+  ingested_count: number;
+  ingested_documents: Array<{
+    document_id: number;
+    title: string;
+    source_url: string;
+    duplicate: boolean;
+  }>;
+  skipped: Array<{
+    source_url: string;
+    reason: string;
+  }>;
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -78,6 +95,7 @@ export async function createCompany(payload: CompanySetupPayload): Promise<{ id:
 export async function uploadDocument(payload: UploadPayload): Promise<{ documentId: number } | null> {
   const form = new FormData();
   form.append("company_id", String(payload.companyId));
+  form.append("title", payload.title ?? payload.file.name ?? "Uploaded Document");
   form.append("file", payload.file);
 
   const response = await fetch(`${API_BASE_URL}/documents/upload`, {
@@ -93,6 +111,19 @@ export async function uploadDocument(payload: UploadPayload): Promise<{ document
 
   const json = (await response.json()) as { document_id: number };
   return { documentId: json.document_id };
+}
+
+export async function autoDiscoverDocuments(
+  companyId: number,
+  maxDocuments = 3
+): Promise<AutoDiscoverResponse> {
+  return request<AutoDiscoverResponse>("/documents/auto-discover", {
+    method: "POST",
+    body: JSON.stringify({
+      company_id: companyId,
+      max_documents: maxDocuments
+    })
+  });
 }
 
 export async function configureRun(payload: RunConfigPayload): Promise<{ runId: number } | null> {

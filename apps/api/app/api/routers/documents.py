@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,15 +11,38 @@ from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import Company, Document, DocumentFile
 from apps.api.app.db.session import get_db_session
-from apps.api.app.services.chunking import persist_chunks_for_document
-from apps.api.app.services.document_extraction import (
-    extract_pages_for_document,
-    persist_document_pages,
+from apps.api.app.services.document_ingestion import ingest_document_bytes
+from apps.api.app.services.tavily_discovery import (
+    download_discovery_candidate,
+    search_tavily_documents,
 )
-from apps.api.app.services.object_storage import ensure_bytes_stored
-from compliance_app.document_identity import sha256_bytes
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+class AutoDiscoverRequest(BaseModel):
+    company_id: int = Field(ge=1)
+    max_documents: int = Field(default=3, ge=1, le=10)
+
+
+class AutoDiscoverItem(BaseModel):
+    document_id: int
+    title: str
+    source_url: str
+    duplicate: bool
+
+
+class AutoDiscoverSkipItem(BaseModel):
+    source_url: str
+    reason: str
+
+
+class AutoDiscoverResponse(BaseModel):
+    company_id: int
+    candidates_considered: int
+    ingested_count: int
+    ingested_documents: list[AutoDiscoverItem]
+    skipped: list[AutoDiscoverSkipItem]
 
 
 @router.post("/upload")
@@ -40,48 +64,92 @@ async def upload_document(
     if not content:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="empty file")
 
-    content_hash = sha256_bytes(content)
-    existing = db.scalar(
-        select(DocumentFile)
-        .join(Document, Document.id == DocumentFile.document_id)
-        .where(DocumentFile.sha256_hash == content_hash, Document.tenant_id == auth.tenant_id)
+    return ingest_document_bytes(
+        db=db,
+        tenant_id=auth.tenant_id,
+        company_id=company_id,
+        title=title,
+        filename=file.filename or "uploaded-document.bin",
+        content=content,
     )
-    if existing is not None:
-        return {
-            "document_id": existing.document_id,
-            "document_file_id": existing.id,
-            "sha256_hash": existing.sha256_hash,
-            "storage_uri": existing.storage_uri,
-            "duplicate": True,
-        }
+
+
+@router.post("/auto-discover", response_model=AutoDiscoverResponse)
+def auto_discover_documents(
+    payload: AutoDiscoverRequest,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> AutoDiscoverResponse:
+    company = db.scalar(
+        select(Company).where(Company.id == payload.company_id, Company.tenant_id == auth.tenant_id)
+    )
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="company not found")
 
     settings = get_settings()
-    stored_path = ensure_bytes_stored(settings.object_storage_root, content_hash, content)
-    storage_uri = f"{settings.object_storage_uri_prefix}{stored_path.resolve()}"
+    if not settings.tavily_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="tavily discovery is disabled",
+        )
+    if not settings.tavily_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="tavily api key is not configured",
+        )
 
-    document = Document(company_id=company_id, tenant_id=auth.tenant_id, title=title)
-    db.add(document)
-    db.flush()
-
-    document_file = DocumentFile(
-        document_id=document.id,
-        sha256_hash=content_hash,
-        storage_uri=storage_uri,
+    candidates = search_tavily_documents(
+        company_name=company.name,
+        reporting_year=company.reporting_year,
+        api_key=settings.tavily_api_key,
+        base_url=settings.tavily_base_url,
+        timeout_seconds=settings.tavily_timeout_seconds,
+        max_results=settings.tavily_max_results,
     )
-    db.add(document_file)
-    extracted_pages = extract_pages_for_document(content, file.filename or "")
-    persist_document_pages(db, document.id, extracted_pages)
-    persist_chunks_for_document(db, document_id=document.id, document_hash=content_hash)
-    db.commit()
-    db.refresh(document_file)
+    ingested: list[AutoDiscoverItem] = []
+    skipped: list[AutoDiscoverSkipItem] = []
 
-    return {
-        "document_id": document.id,
-        "document_file_id": document_file.id,
-        "sha256_hash": document_file.sha256_hash,
-        "storage_uri": document_file.storage_uri,
-        "duplicate": False,
-    }
+    for candidate in candidates:
+        if len(ingested) >= payload.max_documents:
+            break
+        try:
+            downloaded = download_discovery_candidate(
+                candidate=candidate,
+                timeout_seconds=settings.tavily_download_timeout_seconds,
+                max_document_bytes=settings.tavily_max_document_bytes,
+            )
+            title = downloaded.title or downloaded.filename
+            result = ingest_document_bytes(
+                db=db,
+                tenant_id=auth.tenant_id,
+                company_id=company.id,
+                title=title[:255],
+                filename=downloaded.filename,
+                content=downloaded.content,
+            )
+            ingested.append(
+                AutoDiscoverItem(
+                    document_id=int(result["document_id"]),
+                    title=title,
+                    source_url=downloaded.source_url,
+                    duplicate=bool(result["duplicate"]),
+                )
+            )
+        except Exception as exc:
+            skipped.append(
+                AutoDiscoverSkipItem(
+                    source_url=candidate.url,
+                    reason=f"{type(exc).__name__}: {exc}",
+                )
+            )
+
+    return AutoDiscoverResponse(
+        company_id=company.id,
+        candidates_considered=len(candidates),
+        ingested_count=len(ingested),
+        ingested_documents=ingested,
+        skipped=skipped,
+    )
 
 
 @router.get("/{document_id}")
