@@ -411,4 +411,18 @@ Definition of Done
 Run execution endpoint stores assessments via existing pipeline and updates run status deterministically.
 Tests
 Integration tests for execute happy path and cross-tenant denial.
+PR-140 — Local LLM (LM Studio) Integration
+Objective
+Enable local LLM extraction using LM Studio OpenAI-compatible endpoint.
+Scope
+Add configurable local LLM settings:
+Base URL default `http://127.0.0.1:1234`
+Model default `ministral-3-8b-instruct-2512-mlx`
+API key field for OpenAI-compatible auth.
+Add extraction client provider wiring that can build a runtime client from settings.
+Allow run execution endpoint to select local LLM provider path.
+Definition of Done
+Run execution can use LM Studio local model path via configuration without external cloud dependency.
+Tests
+Unit tests for local LLM config/provider wiring and execute endpoint provider selection.
 END OF ROADMAP

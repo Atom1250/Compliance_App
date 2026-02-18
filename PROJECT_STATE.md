@@ -30,7 +30,7 @@ We are building a compliance analysis application for EU clients:
 Next PR ID: TBD
 
 Planned PRs:
-- TBD: no further PR currently defined after PR-130.
+- TBD: no further PR currently defined after PR-140.
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -172,6 +172,11 @@ Planned PRs:
   - Implemented deterministic local extraction fallback execution path for non-LLM environments.
   - Added structured audit events for run execution lifecycle (`started`, `completed`, `failed`).
   - Added integration tests for execute happy path, assessment persistence, and cross-tenant denial.
+- PR-140: Local LLM (LM Studio) integration completed:
+  - Added local LLM runtime configuration defaults for LM Studio (`http://127.0.0.1:1234`, `ministral-3-8b-instruct-2512-mlx`).
+  - Added extraction client provider wiring to build OpenAI-compatible clients from runtime settings.
+  - Added run execution provider selection (`llm_provider=\"local_lm_studio\"`) while preserving deterministic fallback mode.
+  - Added tests for local provider config wiring and execute endpoint local-provider path selection.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

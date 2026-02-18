@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.auth import AuthContext, require_auth_context
+from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import Company, Run, RunMateriality
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.assessment_pipeline import (
@@ -19,6 +20,7 @@ from apps.api.app.services.assessment_pipeline import (
 )
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
 from apps.api.app.services.llm_extraction import ExtractionClient
+from apps.api.app.services.llm_provider import build_extraction_client_from_settings
 
 router = APIRouter(prefix="/runs", tags=["materiality"])
 
@@ -82,6 +84,7 @@ class RunExecuteRequest(BaseModel):
     bundle_version: str = Field(min_length=1)
     retrieval_top_k: int = Field(default=5, ge=1, le=100)
     retrieval_model_name: str = Field(default="default", min_length=1)
+    llm_provider: str = Field(default="deterministic_fallback", min_length=1)
 
 
 class RunExecuteResponse(BaseModel):
@@ -234,12 +237,17 @@ def execute_run(
     db.commit()
 
     try:
-        assessments = execute_assessment_pipeline(
-            db,
-            extraction_client=ExtractionClient(
+        extraction_client = (
+            build_extraction_client_from_settings(get_settings())
+            if payload.llm_provider == "local_lm_studio"
+            else ExtractionClient(
                 transport=_DeterministicAbsentTransport(),
                 model="deterministic-local-v1",
-            ),
+            )
+        )
+        assessments = execute_assessment_pipeline(
+            db,
+            extraction_client=extraction_client,
             config=AssessmentRunConfig(
                 run_id=run.id,
                 bundle_id=payload.bundle_id,

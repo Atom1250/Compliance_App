@@ -8,6 +8,7 @@ from alembic import command
 from alembic.config import Config
 from app.requirements.importer import import_bundle, load_bundle
 from apps.api.app.db.models import Chunk, Company, DatapointAssessment, Document, Run
+from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.main import app
 
 AUTH_DEFAULT = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
@@ -113,3 +114,53 @@ def test_run_execute_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
         headers=AUTH_OTHER,
     )
     assert response.status_code == 404
+
+
+def test_run_execute_accepts_local_lm_studio_provider(monkeypatch, tmp_path: Path) -> None:
+    class _MockTransport:
+        def create_response(self, *, model, input_text, temperature, json_schema):
+            del model, input_text, temperature, json_schema
+            return {
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": (
+                                    '{"status":"Absent","value":null,"evidence_chunk_ids":[],'  # noqa: E501
+                                    '"rationale":"Mock LM Studio provider path."}'
+                                ),
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    from apps.api.app.api.routers import materiality as materiality_router_module
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        materiality_router_module,
+        "build_extraction_client_from_settings",
+        lambda _settings: ExtractionClient(
+            transport=_MockTransport(),
+            model="ministral-3-8b-instruct-2512-mlx",
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": "esrs_mini",
+            "bundle_version": "2026.01",
+            "llm_provider": "local_lm_studio",
+        },
+        headers=AUTH_DEFAULT,
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
