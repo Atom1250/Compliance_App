@@ -13,7 +13,12 @@ from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.db.models import Company, Run, RunMateriality
 from apps.api.app.db.session import get_db_session
+from apps.api.app.services.assessment_pipeline import (
+    AssessmentRunConfig,
+    execute_assessment_pipeline,
+)
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
+from apps.api.app.services.llm_extraction import ExtractionClient
 
 router = APIRouter(prefix="/runs", tags=["materiality"])
 
@@ -70,6 +75,47 @@ class RunStatusResponse(BaseModel):
 class RunReportResponse(BaseModel):
     run_id: int
     url: str
+
+
+class RunExecuteRequest(BaseModel):
+    bundle_id: str = Field(min_length=1)
+    bundle_version: str = Field(min_length=1)
+    retrieval_top_k: int = Field(default=5, ge=1, le=100)
+    retrieval_model_name: str = Field(default="default", min_length=1)
+
+
+class RunExecuteResponse(BaseModel):
+    run_id: int
+    status: str
+    assessment_count: int
+
+
+class _DeterministicAbsentTransport:
+    def create_response(
+        self,
+        *,
+        model: str,
+        input_text: str,
+        temperature: float,
+        json_schema: dict,
+    ):
+        del model, input_text, temperature, json_schema
+        return {
+            "output": [
+                {
+                    "type": "message",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": (
+                                '{"status":"Absent","value":null,"evidence_chunk_ids":[],'  # noqa: E501
+                                '"rationale":"Deterministic local execution fallback."}'
+                            ),
+                        }
+                    ],
+                }
+            ]
+        }
 
 
 @router.post("", response_model=RunCreateResponse)
@@ -154,6 +200,89 @@ def run_report(
     )
     db.commit()
     return RunReportResponse(run_id=run.id, url=url)
+
+
+@router.post("/{run_id}/execute", response_model=RunExecuteResponse)
+def execute_run(
+    run_id: int,
+    payload: RunExecuteRequest,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunExecuteResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+
+    run.status = "running"
+    append_run_event(
+        db,
+        run_id=run.id,
+        event_type="run.execution.started",
+        payload={
+            "tenant_id": auth.tenant_id,
+            "bundle_id": payload.bundle_id,
+            "bundle_version": payload.bundle_version,
+        },
+    )
+    log_structured_event(
+        "run.execution.started",
+        run_id=run.id,
+        tenant_id=auth.tenant_id,
+        bundle_id=payload.bundle_id,
+        bundle_version=payload.bundle_version,
+    )
+    db.commit()
+
+    try:
+        assessments = execute_assessment_pipeline(
+            db,
+            extraction_client=ExtractionClient(
+                transport=_DeterministicAbsentTransport(),
+                model="deterministic-local-v1",
+            ),
+            config=AssessmentRunConfig(
+                run_id=run.id,
+                bundle_id=payload.bundle_id,
+                bundle_version=payload.bundle_version,
+                retrieval_top_k=payload.retrieval_top_k,
+                retrieval_model_name=payload.retrieval_model_name,
+            ),
+        )
+        run.status = "completed"
+        append_run_event(
+            db,
+            run_id=run.id,
+            event_type="run.execution.completed",
+            payload={"tenant_id": auth.tenant_id, "assessment_count": len(assessments)},
+        )
+        log_structured_event(
+            "run.execution.completed",
+            run_id=run.id,
+            tenant_id=auth.tenant_id,
+            assessment_count=len(assessments),
+        )
+        db.commit()
+        return RunExecuteResponse(
+            run_id=run.id,
+            status=run.status,
+            assessment_count=len(assessments),
+        )
+    except Exception as exc:  # pragma: no cover - defensive run-state update
+        run.status = "failed"
+        append_run_event(
+            db,
+            run_id=run.id,
+            event_type="run.execution.failed",
+            payload={"tenant_id": auth.tenant_id, "error": str(exc)},
+        )
+        log_structured_event(
+            "run.execution.failed",
+            run_id=run.id,
+            tenant_id=auth.tenant_id,
+            error=str(exc),
+        )
+        db.commit()
+        raise
 
 
 @router.post("/{run_id}/materiality", response_model=MaterialityUpsertResponse)

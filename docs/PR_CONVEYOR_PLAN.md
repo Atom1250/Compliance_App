@@ -398,4 +398,17 @@ Definition of Done
 Company setup can be completed via API with tenant-safe behavior and deterministic list ordering.
 Tests
 Integration tests for create/list happy path and cross-tenant isolation.
+PR-130 — Run Execution API
+Objective
+Provide deterministic run execution trigger for configured runs.
+Scope
+Add endpoint:
+POST /runs/{run_id}/execute
+Run is tenant-scoped and transitions through lifecycle statuses.
+Execution records structured audit events for start/completion/failure.
+Use deterministic local extraction fallback for execution in non-LLM environments.
+Definition of Done
+Run execution endpoint stores assessments via existing pipeline and updates run status deterministically.
+Tests
+Integration tests for execute happy path and cross-tenant denial.
 END OF ROADMAP

@@ -30,7 +30,7 @@ We are building a compliance analysis application for EU clients:
 Next PR ID: TBD
 
 Planned PRs:
-- TBD: no further PR currently defined after PR-120.
+- TBD: no further PR currently defined after PR-130.
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -167,6 +167,11 @@ Planned PRs:
   - Enforced deterministic company list ordering (`name`, `id`) within tenant scope.
   - Added structured audit events for company create/list actions.
   - Added integration tests for company create/list happy path and cross-tenant isolation.
+- PR-130: Run execution API completed:
+  - Added tenant-scoped run execution route: `POST /runs/{run_id}/execute`.
+  - Implemented deterministic local extraction fallback execution path for non-LLM environments.
+  - Added structured audit events for run execution lifecycle (`started`, `completed`, `failed`).
+  - Added integration tests for execute happy path, assessment persistence, and cross-tenant denial.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
