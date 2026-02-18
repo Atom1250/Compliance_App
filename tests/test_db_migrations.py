@@ -11,6 +11,7 @@ REQUIRED_TABLES = {
     "chunk",
     "company",
     "datapoint_def",
+    "datapoint_assessment",
     "document",
     "document_file",
     "document_page",

@@ -102,8 +102,12 @@ class ExtractionClient:
         self._transport = transport
         self._model = model
 
+    @property
+    def model_name(self) -> str:
+        return self._model
+
     def extract(self, *, datapoint_key: str, context_chunks: list[str]) -> ExtractionResult:
-        prompt = self._build_prompt(datapoint_key=datapoint_key, context_chunks=context_chunks)
+        prompt = self.build_prompt(datapoint_key=datapoint_key, context_chunks=context_chunks)
         response_payload = self._transport.create_response(
             model=self._model,
             input_text=prompt,
@@ -114,7 +118,7 @@ class ExtractionClient:
         return ExtractionResult.model_validate(parsed)
 
     @staticmethod
-    def _build_prompt(*, datapoint_key: str, context_chunks: list[str]) -> str:
+    def build_prompt(*, datapoint_key: str, context_chunks: list[str]) -> str:
         chunks_text = "\n\n".join(context_chunks)
         return (
             f"Assess datapoint {datapoint_key}. Return JSON only matching schema.\n"

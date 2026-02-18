@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-041
+Next PR ID: PR-042
 
 Planned PRs:
-- PR-041: Datapoint assessment pipeline (planned)
+- PR-042: Verification pass (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -92,6 +92,11 @@ Planned PRs:
   - Defined strict extraction JSON schema (`status`, `value`, `evidence_chunk_ids`, `rationale`) with schema-only parsing.
   - Implemented hard evidence gating validation rejecting Present/Partial without evidence IDs.
   - Added mock-based extraction tests for temperature enforcement, schema validation, and evidence gating behavior.
+- PR-041: Datapoint assessment pipeline completed:
+  - Added deterministic retrieval -> extraction -> persistence pipeline for required datapoints.
+  - Added `datapoint_assessment` storage schema with run/datapoint uniqueness and manifest metadata fields.
+  - Persisted extraction provenance per assessment (`model_name`, `prompt_hash`, deterministic `retrieval_params`).
+  - Added mocked integration test validating stored assessment outputs and deterministic manifest fields.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
