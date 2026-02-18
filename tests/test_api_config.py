@@ -6,11 +6,13 @@ from apps.api.main import app
 
 def test_settings_load_from_environment(monkeypatch) -> None:
     monkeypatch.setenv("COMPLIANCE_APP_APP_VERSION", "9.9.9")
+    monkeypatch.setenv("COMPLIANCE_APP_PDF_EXPORT_ENABLED", "true")
     get_settings.cache_clear()
 
     settings = get_settings()
 
     assert settings.app_version == "9.9.9"
+    assert settings.pdf_export_enabled is True
 
 
 def test_version_endpoint_uses_settings(monkeypatch) -> None:

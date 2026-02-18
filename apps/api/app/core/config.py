@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://compliance:compliance@localhost:5432/compliance_app"
     object_storage_root: Path = Path(".data/object_store")
     object_storage_uri_prefix: str = "file://"
+    pdf_export_enabled: bool = False
 
     model_config = SettingsConfigDict(env_prefix="COMPLIANCE_APP_", extra="ignore")
 

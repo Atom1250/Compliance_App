@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-052
+Next PR ID: PR-060
 
 Planned PRs:
-- PR-052: Optional PDF export (planned)
+- PR-060: Green finance requirements bundle (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -117,6 +117,11 @@ Planned PRs:
   - Added stable entry ordering and fixed ZIP metadata timestamps to ensure reproducible archives for identical inputs.
   - Added document integrity validation by re-hashing referenced document bytes against stored `sha256_hash`.
   - Added manifest integrity test validating file structure and SHA-256 checks for all packed artifacts.
+- PR-052: Optional PDF export completed:
+  - Added optional PDF export service to convert HTML reports into PDF bytes.
+  - Added explicit feature flag behavior so PDF generation is skipped when disabled.
+  - Added graceful dependency-missing error handling for environments without PDF renderer libraries.
+  - Added unit tests for disabled mode, enabled export path, and dependency-missing behavior.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
