@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
-from apps.api.app.db.models import Company, Run, RunMateriality
+from apps.api.app.db.models import Company, Run, RunManifest, RunMateriality
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.assessment_pipeline import (
     AssessmentRunConfig,
@@ -21,6 +21,7 @@ from apps.api.app.services.assessment_pipeline import (
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
+from apps.api.app.services.run_manifest import RunManifestPayload, persist_run_manifest
 
 router = APIRouter(prefix="/runs", tags=["materiality"])
 
@@ -77,6 +78,17 @@ class RunStatusResponse(BaseModel):
 class RunReportResponse(BaseModel):
     run_id: int
     url: str
+
+
+class RunManifestResponse(BaseModel):
+    run_id: int
+    document_hashes: list[str]
+    bundle_id: str
+    bundle_version: str
+    retrieval_params: dict[str, object]
+    model_name: str
+    prompt_hash: str
+    git_sha: str
 
 
 class RunExecuteRequest(BaseModel):
@@ -205,6 +217,32 @@ def run_report(
     return RunReportResponse(run_id=run.id, url=url)
 
 
+@router.get("/{run_id}/manifest", response_model=RunManifestResponse)
+def run_manifest(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunManifestResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+
+    manifest = db.scalar(select(RunManifest).where(RunManifest.run_id == run.id))
+    if manifest is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="manifest not found")
+
+    return RunManifestResponse(
+        run_id=run.id,
+        document_hashes=json.loads(manifest.document_hashes),
+        bundle_id=manifest.bundle_id,
+        bundle_version=manifest.bundle_version,
+        retrieval_params=json.loads(manifest.retrieval_params),
+        model_name=manifest.model_name,
+        prompt_hash=manifest.prompt_hash,
+        git_sha=manifest.git_sha,
+    )
+
+
 @router.post("/{run_id}/execute", response_model=RunExecuteResponse)
 def execute_run(
     run_id: int,
@@ -237,8 +275,9 @@ def execute_run(
     db.commit()
 
     try:
+        settings = get_settings()
         extraction_client = (
-            build_extraction_client_from_settings(get_settings())
+            build_extraction_client_from_settings(settings)
             if payload.llm_provider == "local_lm_studio"
             else ExtractionClient(
                 transport=_DeterministicAbsentTransport(),
@@ -255,6 +294,24 @@ def execute_run(
                 retrieval_top_k=payload.retrieval_top_k,
                 retrieval_model_name=payload.retrieval_model_name,
             ),
+        )
+        persist_run_manifest(
+            db,
+            payload=RunManifestPayload(
+                run_id=run.id,
+                tenant_id=run.tenant_id,
+                company_id=run.company_id,
+                bundle_id=payload.bundle_id,
+                bundle_version=payload.bundle_version,
+                retrieval_params={
+                    "top_k": payload.retrieval_top_k,
+                    "retrieval_model_name": payload.retrieval_model_name,
+                    "query_mode": "hybrid",
+                },
+                model_name=extraction_client.model_name,
+                git_sha=settings.git_sha,
+            ),
+            assessments=assessments,
         )
         run.status = "completed"
         append_run_event(

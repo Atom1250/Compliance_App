@@ -19,6 +19,7 @@ REQUIRED_TABLES = {
     "requirement_bundle",
     "run",
     "run_cache_entry",
+    "run_manifest",
     "run_materiality",
     "run_event",
 }

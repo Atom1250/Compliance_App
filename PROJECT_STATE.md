@@ -27,10 +27,9 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-171
+Next PR ID: PR-172
 
 Planned PRs:
-- PR-171: Run manifest persistence + API exposure (planned)
 - PR-172: Strict run-hash cache integration in execute API (planned)
 - PR-173: Evidence pack download endpoint (planned)
 - PR-174: Frontend workflow API hardening (planned)
@@ -201,6 +200,11 @@ Planned PRs:
   - Normalized architectural snapshot to reflect implemented backend/frontend/data capabilities.
   - Replaced `Next PR ID: TBD` by advancing sequence to `PR-171`.
   - Added planned PR index entries for PR-171 through PR-180.
+- PR-171: Run manifest persistence + API exposure completed:
+  - Added `run_manifest` persistence table + migration for deterministic run-level manifest storage.
+  - Persisted manifest fields during execution: document hashes, bundle/version, retrieval params, model identity, prompt hash aggregate, and git SHA.
+  - Added tenant-scoped `GET /runs/{run_id}/manifest` endpoint with deterministic JSON serialization.
+  - Added integration tests for manifest completeness/shape and cross-tenant access denial.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

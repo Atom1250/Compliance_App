@@ -177,3 +177,20 @@ class RunCacheEntry(Base):
     run_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     output_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RunManifest(Base):
+    __tablename__ = "run_manifest"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("run.id"), nullable=False, unique=True, index=True
+    )
+    document_hashes: Mapped[str] = mapped_column(Text, nullable=False)
+    bundle_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    bundle_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    retrieval_params: Mapped[str] = mapped_column(Text, nullable=False)
+    model_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    git_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
