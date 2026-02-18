@@ -1,7 +1,12 @@
 from pathlib import Path
 
-from app.green_finance.matrix import generate_obligations_matrix, load_green_finance_bundle
+from app.green_finance.matrix import (
+    generate_obligations_matrix,
+    generate_obligations_matrix_from_assessments,
+    load_green_finance_bundle,
+)
 from app.requirements.importer import load_bundle
+from apps.api.app.db.models import DatapointAssessment
 
 
 def test_green_finance_bundle_loads_for_requirements_importer() -> None:
@@ -63,3 +68,44 @@ def test_green_finance_matrix_not_generated_when_mode_disabled() -> None:
     )
 
     assert rows == []
+
+
+def test_green_finance_matrix_from_assessments_enforces_evidence_gating() -> None:
+    bundle = load_green_finance_bundle(Path("requirements/green_finance_icma_eugb/bundle.json"))
+    assessments = [
+        DatapointAssessment(
+            run_id=1,
+            datapoint_key="GF-OBL-01",
+            status="Present",
+            value="framework published",
+            evidence_chunk_ids='["chunk-2","chunk-1"]',
+            rationale="Published in framework document.",
+            model_name="gpt-5",
+            prompt_hash="prompt-hash",
+            retrieval_params='{"query_mode":"hybrid","top_k":3}',
+        ),
+        DatapointAssessment(
+            run_id=1,
+            datapoint_key="GF-OBL-02",
+            status="Absent",
+            value=None,
+            evidence_chunk_ids="[]",
+            rationale="No allocation report found.",
+            model_name="gpt-5",
+            prompt_hash="prompt-hash",
+            retrieval_params='{"query_mode":"hybrid","top_k":3}',
+        ),
+    ]
+
+    rows = generate_obligations_matrix_from_assessments(
+        enabled=True,
+        obligations=bundle.obligations,
+        assessments=assessments,
+    )
+
+    assert rows[0]["produced"] is True
+    assert rows[0]["evidence"] == ["chunk-1", "chunk-2"]
+    assert rows[0]["gap"] == []
+    assert rows[1]["produced"] is False
+    assert rows[1]["evidence"] == []
+    assert rows[1]["gap"] == ["allocation_report", "allocation_table", "unallocated_balance"]

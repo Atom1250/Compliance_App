@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-061
+Next PR ID: PR-070
 
 Planned PRs:
-- PR-061: Green finance extraction pipeline (planned)
+- PR-070: Minimal Next.js UI (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -127,6 +127,11 @@ Planned PRs:
   - Added obligation metadata (required artifacts and required data elements) for matrix rendering.
   - Implemented deterministic obligations matrix generation with output fields: obligation, required, produced, evidence, gap.
   - Added tests for bundle loading, enabled-mode matrix generation, and disabled-mode suppression.
+- PR-061: Green finance extraction pipeline completed:
+  - Added green finance extraction pipeline that reuses the existing deterministic datapoint assessment engine.
+  - Implemented retrieval + schema-enforced extraction flow for green finance obligations via the green finance requirements bundle.
+  - Added reporting matrix generation directly from extracted assessments with evidence gating aligned to ESRS rules.
+  - Added integration tests for enabled pipeline execution (stored assessments + reported matrix) and disabled-mode no-op behavior.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
