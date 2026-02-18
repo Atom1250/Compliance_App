@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-040
+Next PR ID: PR-041
 
 Planned PRs:
-- PR-040: LLM client + schema enforcement (planned)
+- PR-041: Datapoint assessment pipeline (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -87,6 +87,11 @@ Planned PRs:
   - Added persistent run-level topic decisions via `run_materiality` storage and DB migration support.
   - Integrated materiality filtering into applicability evaluation with deterministic ordering.
   - Added fixture-based tests confirming toggling materiality changes required datapoints.
+- PR-040: LLM client + schema enforcement completed:
+  - Added deterministic OpenAI-compatible LLM extraction client abstraction with enforced `temperature=0`.
+  - Defined strict extraction JSON schema (`status`, `value`, `evidence_chunk_ids`, `rationale`) with schema-only parsing.
+  - Implemented hard evidence gating validation rejecting Present/Partial without evidence IDs.
+  - Added mock-based extraction tests for temperature enforcement, schema validation, and evidence gating behavior.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

@@ -1,0 +1,133 @@
+"""Deterministic, schema-enforced LLM extraction service."""
+
+from __future__ import annotations
+
+import json
+from enum import Enum
+from typing import Any, Protocol
+
+import httpx
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class ExtractionStatus(str, Enum):
+    PRESENT = "Present"
+    PARTIAL = "Partial"
+    ABSENT = "Absent"
+    NA = "NA"
+
+
+class ExtractionResult(BaseModel):
+    """Schema-only extraction result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: ExtractionStatus
+    value: str | None = None
+    evidence_chunk_ids: list[str] = Field(default_factory=list)
+    rationale: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_evidence_gating(self) -> ExtractionResult:
+        if (
+            self.status in {ExtractionStatus.PRESENT, ExtractionStatus.PARTIAL}
+            and not self.evidence_chunk_ids
+        ):
+            raise ValueError("Present/Partial status requires evidence_chunk_ids")
+        return self
+
+
+class LLMTransport(Protocol):
+    """OpenAI-compatible transport contract."""
+
+    def create_response(
+        self,
+        *,
+        model: str,
+        input_text: str,
+        temperature: float,
+        json_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return response payload from an OpenAI-compatible backend."""
+
+
+class OpenAICompatibleTransport:
+    """HTTP transport for OpenAI-compatible `/responses` API."""
+
+    def __init__(self, *, base_url: str, api_key: str, timeout_seconds: float = 30.0) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+        self._timeout_seconds = timeout_seconds
+
+    def create_response(
+        self,
+        *,
+        model: str,
+        input_text: str,
+        temperature: float,
+        json_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = {
+            "model": model,
+            "input": input_text,
+            "temperature": temperature,
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "extraction_result",
+                    "schema": json_schema,
+                }
+            },
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+        response = httpx.post(
+            f"{self._base_url}/responses",
+            headers=headers,
+            json=payload,
+            timeout=self._timeout_seconds,
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+class ExtractionClient:
+    """Deterministic extraction client that enforces schema and temperature=0."""
+
+    def __init__(self, *, transport: LLMTransport, model: str) -> None:
+        self._transport = transport
+        self._model = model
+
+    def extract(self, *, datapoint_key: str, context_chunks: list[str]) -> ExtractionResult:
+        prompt = self._build_prompt(datapoint_key=datapoint_key, context_chunks=context_chunks)
+        response_payload = self._transport.create_response(
+            model=self._model,
+            input_text=prompt,
+            temperature=0.0,
+            json_schema=ExtractionResult.model_json_schema(),
+        )
+        parsed = self._extract_json_text(response_payload)
+        return ExtractionResult.model_validate(parsed)
+
+    @staticmethod
+    def _build_prompt(*, datapoint_key: str, context_chunks: list[str]) -> str:
+        chunks_text = "\n\n".join(context_chunks)
+        return (
+            f"Assess datapoint {datapoint_key}. Return JSON only matching schema.\n"
+            f"Context chunks:\n{chunks_text}"
+        )
+
+    @staticmethod
+    def _extract_json_text(response_payload: dict[str, Any]) -> dict[str, Any]:
+        output_items = response_payload.get("output", [])
+        for item in output_items:
+            if item.get("type") != "message":
+                continue
+            for content in item.get("content", []):
+                if content.get("type") == "output_text" and isinstance(content.get("text"), str):
+                    return json.loads(content["text"])
+        raise ValueError("No JSON output_text found in response payload")
