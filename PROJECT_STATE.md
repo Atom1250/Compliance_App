@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: TBD
+Next PR ID: PR-082
 
 Planned PRs:
-- TBD: no further PR is currently defined in `docs/PR_CONVEYOR_PLAN.md` after PR-080.
+- PR-082: Structured logging + audit trail (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -142,6 +142,11 @@ Planned PRs:
   - Added tenant isolation columns and indexes for core entity roots (`company`, `document`, `run`) with migration support.
   - Enforced tenant-scoped filtering in document, run/materiality, and retrieval API paths.
   - Added tests validating unauthorized access blocking and cross-tenant data isolation behavior.
+- PR-090: Golden run + contract tests completed:
+  - Added golden fixture document under `tests/fixtures/golden/` for deterministic contract validation.
+  - Added golden snapshot harness producing deterministic output contract fields (hashes, chunk IDs, ranking, report snapshot).
+  - Added committed snapshot artifact under `tests/golden/` and drift test that fails CI when output changes.
+  - Added repeatability test confirming identical golden-run outputs across repeated execution.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
