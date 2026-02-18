@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,7 +13,15 @@ from sqlalchemy.orm import Session
 from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
-from apps.api.app.db.models import Company, Run, RunManifest, RunMateriality
+from apps.api.app.db.models import (
+    Company,
+    DatapointAssessment,
+    Document,
+    DocumentFile,
+    Run,
+    RunManifest,
+    RunMateriality,
+)
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.assessment_pipeline import (
     AssessmentRunConfig,
@@ -21,6 +30,7 @@ from apps.api.app.services.assessment_pipeline import (
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
+from apps.api.app.services.run_cache import RunHashInput, get_or_compute_cached_output
 from apps.api.app.services.run_manifest import RunManifestPayload, persist_run_manifest
 
 router = APIRouter(prefix="/runs", tags=["materiality"])
@@ -284,17 +294,85 @@ def execute_run(
                 model="deterministic-local-v1",
             )
         )
-        assessments = execute_assessment_pipeline(
-            db,
-            extraction_client=extraction_client,
-            config=AssessmentRunConfig(
-                run_id=run.id,
-                bundle_id=payload.bundle_id,
-                bundle_version=payload.bundle_version,
-                retrieval_top_k=payload.retrieval_top_k,
-                retrieval_model_name=payload.retrieval_model_name,
-            ),
+
+        company = db.scalar(
+            select(Company).where(Company.id == run.company_id, Company.tenant_id == auth.tenant_id)
         )
+        if company is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="company not found")
+
+        materiality_rows = db.scalars(
+            select(RunMateriality)
+            .where(RunMateriality.run_id == run.id)
+            .order_by(RunMateriality.topic)
+        ).all()
+        materiality_inputs = {row.topic: row.is_material for row in materiality_rows}
+
+        document_hashes = db.scalars(
+            select(DocumentFile.sha256_hash)
+            .join(Document, Document.id == DocumentFile.document_id)
+            .where(Document.company_id == run.company_id, Document.tenant_id == run.tenant_id)
+            .order_by(DocumentFile.sha256_hash)
+        ).all()
+        document_hashes = sorted(set(document_hashes))
+
+        retrieval_params = {
+            "bundle_id": payload.bundle_id,
+            "bundle_version": payload.bundle_version,
+            "llm_provider": payload.llm_provider,
+            "query_mode": "hybrid",
+            "retrieval_model_name": payload.retrieval_model_name,
+            "top_k": payload.retrieval_top_k,
+        }
+        prompt_seed = {
+            "bundle_id": payload.bundle_id,
+            "bundle_version": payload.bundle_version,
+            "llm_provider": payload.llm_provider,
+            "model_name": extraction_client.model_name,
+            "retrieval_params": retrieval_params,
+        }
+        prompt_hash = hashlib.sha256(
+            json.dumps(prompt_seed, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+        computed_assessments: list[DatapointAssessment] | None = None
+
+        def _compute_assessments():
+            nonlocal computed_assessments
+            computed_assessments = execute_assessment_pipeline(
+                db,
+                extraction_client=extraction_client,
+                config=AssessmentRunConfig(
+                    run_id=run.id,
+                    bundle_id=payload.bundle_id,
+                    bundle_version=payload.bundle_version,
+                    retrieval_top_k=payload.retrieval_top_k,
+                    retrieval_model_name=payload.retrieval_model_name,
+                ),
+            )
+            return computed_assessments
+
+        output_json, cache_hit = get_or_compute_cached_output(
+            db,
+            run_id=run.id,
+            hash_input=RunHashInput(
+                document_hashes=document_hashes,
+                company_profile={
+                    "employees": company.employees,
+                    "listed_status": company.listed_status,
+                    "reporting_year": company.reporting_year,
+                    "turnover": company.turnover,
+                },
+                materiality_inputs=materiality_inputs,
+                bundle_version=payload.bundle_version,
+                retrieval_params=retrieval_params,
+                prompt_hash=prompt_hash,
+            ),
+            compute_assessments=_compute_assessments,
+        )
+        parsed_output = json.loads(output_json)
+        assessment_count = len(parsed_output)
+
         persist_run_manifest(
             db,
             payload=RunManifestPayload(
@@ -303,34 +381,36 @@ def execute_run(
                 company_id=run.company_id,
                 bundle_id=payload.bundle_id,
                 bundle_version=payload.bundle_version,
-                retrieval_params={
-                    "top_k": payload.retrieval_top_k,
-                    "retrieval_model_name": payload.retrieval_model_name,
-                    "query_mode": "hybrid",
-                },
+                retrieval_params=retrieval_params,
                 model_name=extraction_client.model_name,
+                prompt_hash=prompt_hash,
                 git_sha=settings.git_sha,
             ),
-            assessments=assessments,
+            assessments=computed_assessments or [],
         )
         run.status = "completed"
         append_run_event(
             db,
             run_id=run.id,
             event_type="run.execution.completed",
-            payload={"tenant_id": auth.tenant_id, "assessment_count": len(assessments)},
+            payload={
+                "tenant_id": auth.tenant_id,
+                "assessment_count": assessment_count,
+                "cache_hit": cache_hit,
+            },
         )
         log_structured_event(
             "run.execution.completed",
             run_id=run.id,
             tenant_id=auth.tenant_id,
-            assessment_count=len(assessments),
+            assessment_count=assessment_count,
+            cache_hit=cache_hit,
         )
         db.commit()
         return RunExecuteResponse(
             run_id=run.id,
             status=run.status,
-            assessment_count=len(assessments),
+            assessment_count=assessment_count,
         )
     except Exception as exc:  # pragma: no cover - defensive run-state update
         run.status = "failed"

@@ -7,7 +7,15 @@ from sqlalchemy.orm import Session
 from alembic import command
 from alembic.config import Config
 from app.requirements.importer import import_bundle, load_bundle
-from apps.api.app.db.models import Chunk, Company, DatapointAssessment, Document, DocumentFile, Run
+from apps.api.app.db.models import (
+    Chunk,
+    Company,
+    DatapointAssessment,
+    Document,
+    DocumentFile,
+    Run,
+    RunCacheEntry,
+)
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.main import app
 
@@ -203,6 +211,9 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
     assert payload["bundle_id"] == "esrs_mini"
     assert payload["bundle_version"] == "2026.01"
     assert payload["retrieval_params"] == {
+        "bundle_id": "esrs_mini",
+        "bundle_version": "2026.01",
+        "llm_provider": "deterministic_fallback",
         "query_mode": "hybrid",
         "retrieval_model_name": "default",
         "top_k": 7,
@@ -230,3 +241,51 @@ def test_run_manifest_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
 
     forbidden = client.get(f"/runs/{run_id}/manifest", headers=AUTH_OTHER)
     assert forbidden.status_code == 404
+
+
+def test_run_execute_cache_hit_skips_pipeline_and_preserves_cached_output(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.api.routers import materiality as materiality_router_module
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    call_count = {"count": 0}
+    original_execute = materiality_router_module.execute_assessment_pipeline
+
+    def counting_execute(*args, **kwargs):
+        call_count["count"] += 1
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(materiality_router_module, "execute_assessment_pipeline", counting_execute)
+    client = TestClient(app)
+
+    payload = {
+        "bundle_id": "esrs_mini",
+        "bundle_version": "2026.01",
+        "retrieval_top_k": 5,
+        "retrieval_model_name": "default",
+        "llm_provider": "deterministic_fallback",
+    }
+    first = client.post(f"/runs/{run_id}/execute", json=payload, headers=AUTH_DEFAULT)
+    assert first.status_code == 200
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        first_entry = session.scalar(select(RunCacheEntry))
+        assert first_entry is not None
+        first_cached_output = first_entry.output_json
+        assert len(first_cached_output) > 0
+
+    second = client.post(f"/runs/{run_id}/execute", json=payload, headers=AUTH_DEFAULT)
+    assert second.status_code == 200
+    assert first.json() == second.json()
+    assert call_count["count"] == 1
+
+    with Session(engine) as session:
+        entries = session.scalars(select(RunCacheEntry)).all()
+        assert len(entries) == 1
+        assert entries[0].output_json == first_cached_output

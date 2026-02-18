@@ -22,6 +22,7 @@ class RunManifestPayload:
     bundle_version: str
     retrieval_params: dict[str, Any]
     model_name: str
+    prompt_hash: str
     git_sha: str
 
 
@@ -60,7 +61,9 @@ def persist_run_manifest(
     document_hashes = _document_hashes_for_company(
         db, tenant_id=payload.tenant_id, company_id=payload.company_id
     )
-    prompt_hash = _aggregate_prompt_hash(assessments)
+    prompt_hash = payload.prompt_hash
+    if assessments:
+        prompt_hash = _aggregate_prompt_hash(assessments)
     retrieval_params_json = _canonical_json(payload.retrieval_params)
     document_hashes_json = _canonical_json(document_hashes)
 
@@ -91,4 +94,3 @@ def persist_run_manifest(
     db.commit()
     db.refresh(existing)
     return existing
-
