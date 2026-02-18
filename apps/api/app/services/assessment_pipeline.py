@@ -13,7 +13,11 @@ from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.db.models import DatapointAssessment, DatapointDefinition, RequirementBundle, Run
 from apps.api.app.services.audit import append_run_event, log_structured_event
 from apps.api.app.services.llm_extraction import ExtractionClient
-from apps.api.app.services.retrieval import retrieve_chunks
+from apps.api.app.services.retrieval import (
+    get_retrieval_policy,
+    retrieval_policy_to_dict,
+    retrieve_chunks,
+)
 from apps.api.app.services.verification import verify_assessment
 
 
@@ -94,6 +98,7 @@ def execute_assessment_pipeline(
         "top_k": config.retrieval_top_k,
         "retrieval_model_name": config.retrieval_model_name,
         "query_mode": "hybrid",
+        "retrieval_policy": retrieval_policy_to_dict(get_retrieval_policy()),
     }
     retrieval_params_json = json.dumps(
         retrieval_params_payload, sort_keys=True, separators=(",", ":")
@@ -112,6 +117,7 @@ def execute_assessment_pipeline(
             top_k=config.retrieval_top_k,
             tenant_id=run.tenant_id,
             model_name=config.retrieval_model_name,
+            policy=get_retrieval_policy(),
         )
         context_chunks = [item.text for item in retrieval_results]
 

@@ -266,7 +266,7 @@ def execute_run(
     run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
-    assessment_count = current_assessment_count(db, run_id=run.id)
+    assessment_count = current_assessment_count(db, run_id=run.id, tenant_id=auth.tenant_id)
     latest_execution_event = db.scalar(
         select(RunEvent.event_type)
         .where(

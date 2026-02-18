@@ -4,15 +4,28 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.app.db.models import Chunk, Document, Embedding
 
-LEXICAL_WEIGHT = 0.6
-VECTOR_WEIGHT = 0.4
+
+@dataclass(frozen=True)
+class RetrievalPolicy:
+    version: str
+    lexical_weight: float
+    vector_weight: float
+    tie_break: str
+
+
+DEFAULT_RETRIEVAL_POLICY = RetrievalPolicy(
+    version="hybrid-v1",
+    lexical_weight=0.6,
+    vector_weight=0.4,
+    tie_break="chunk_id",
+)
 
 
 @dataclass(frozen=True)
@@ -26,6 +39,14 @@ class RetrievalResult:
     lexical_score: float
     vector_score: float
     combined_score: float
+
+
+def get_retrieval_policy() -> RetrievalPolicy:
+    return DEFAULT_RETRIEVAL_POLICY
+
+
+def retrieval_policy_to_dict(policy: RetrievalPolicy) -> dict[str, float | str]:
+    return asdict(policy)
 
 
 def _tokenize(query: str) -> list[str]:
@@ -76,10 +97,13 @@ def retrieve_chunks(
     tenant_id: str | None = None,
     document_id: int | None = None,
     model_name: str = "default",
+    policy: RetrievalPolicy | None = None,
 ) -> list[RetrievalResult]:
     """Run deterministic hybrid retrieval with explicit tie-breaks."""
     if top_k <= 0:
         return []
+
+    active_policy = policy or get_retrieval_policy()
 
     stmt = select(Chunk).join(Document, Document.id == Chunk.document_id).order_by(Chunk.chunk_id)
     if tenant_id is not None:
@@ -112,7 +136,9 @@ def retrieve_chunks(
             if chunk_embedding is not None:
                 vector_score = _cosine_similarity(query_embedding, chunk_embedding)
 
-        combined_score = (LEXICAL_WEIGHT * lexical_score) + (VECTOR_WEIGHT * vector_score)
+        combined_score = (active_policy.lexical_weight * lexical_score) + (
+            active_policy.vector_weight * vector_score
+        )
 
         scored.append(
             RetrievalResult(
@@ -128,5 +154,7 @@ def retrieve_chunks(
             )
         )
 
+    if active_policy.tie_break != "chunk_id":
+        raise ValueError(f"Unsupported tie-break policy: {active_policy.tie_break}")
     scored.sort(key=lambda item: (-item.combined_score, item.chunk_id))
     return scored[:top_k]

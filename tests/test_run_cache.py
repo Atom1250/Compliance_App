@@ -111,3 +111,33 @@ def test_run_cache_hit_skips_reprocessing_and_returns_identical_output(tmp_path:
         assert second_hit is True
         assert call_count["count"] == 1
         assert first_output == second_output
+
+
+def test_run_hash_changes_when_retrieval_policy_version_changes() -> None:
+    base = RunHashInput(
+        tenant_id="default",
+        document_hashes=["doc-hash-1"],
+        company_profile={"employees": 100, "listed_status": True, "reporting_year": 2026},
+        materiality_inputs={"climate": True},
+        bundle_version="2026.01",
+        retrieval_params={
+            "query_mode": "hybrid",
+            "retrieval_policy": {"version": "hybrid-v1"},
+            "top_k": 3,
+        },
+        prompt_hash="prompt-hash-1",
+    )
+    changed = RunHashInput(
+        tenant_id="default",
+        document_hashes=["doc-hash-1"],
+        company_profile={"employees": 100, "listed_status": True, "reporting_year": 2026},
+        materiality_inputs={"climate": True},
+        bundle_version="2026.01",
+        retrieval_params={
+            "query_mode": "hybrid",
+            "retrieval_policy": {"version": "hybrid-v2"},
+            "top_k": 3,
+        },
+        prompt_hash="prompt-hash-1",
+    )
+    assert compute_run_hash(base) != compute_run_hash(changed)

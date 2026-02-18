@@ -27,10 +27,9 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-177
+Next PR ID: PR-178
 
 Planned PRs:
-- PR-177: Deterministic retrieval tuning lock (planned)
 - PR-178: Security and operations baseline (planned)
 - PR-179: CI and autonomy workflow hardening (planned)
 - PR-180: UAT pack + golden end-to-end harness (planned)
@@ -225,6 +224,11 @@ Planned PRs:
   - Enforced tenant-scoped reads/writes across audit trail, materiality updates, manifests, evidence-pack export, and run execution event lookups.
   - Hardened run-hash cache by incorporating `tenant_id` into hash inputs and cache lookups to avoid cross-tenant reuse.
   - Updated determinism/contract fixtures and integration paths to reflect tenant-scoped cache and manifest semantics.
+- PR-177: Deterministic retrieval tuning lock completed:
+  - Added explicit retrieval policy object with pinned version (`hybrid-v1`), weighted scoring params, and tie-break policy.
+  - Wired retrieval policy metadata into assessment pipeline/run execution retrieval params and persisted it in run manifests.
+  - Included retrieval policy version in run-hash inputs to pin cache reproducibility by retrieval policy.
+  - Added tests for retrieval policy determinism and policy-version pin behavior in run-hash stability checks.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

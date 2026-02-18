@@ -27,6 +27,7 @@ from apps.api.app.services.assessment_pipeline import (
 from apps.api.app.services.audit import append_run_event, log_structured_event
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
+from apps.api.app.services.retrieval import get_retrieval_policy, retrieval_policy_to_dict
 from apps.api.app.services.run_cache import RunHashInput, get_or_compute_cached_output
 from apps.api.app.services.run_manifest import RunManifestPayload, persist_run_manifest
 
@@ -68,12 +69,15 @@ class _DeterministicAbsentTransport:
         }
 
 
-def _assessment_count(db: Session, *, run_id: int) -> int:
+def _assessment_count(db: Session, *, run_id: int, tenant_id: str) -> int:
     return int(
         db.scalar(
             select(func.count())
             .select_from(DatapointAssessment)
-            .where(DatapointAssessment.run_id == run_id)
+            .where(
+                DatapointAssessment.run_id == run_id,
+                DatapointAssessment.tenant_id == tenant_id,
+            )
         )
         or 0
     )
@@ -141,6 +145,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 .order_by(DocumentFile.sha256_hash)
             ).all()
             document_hashes = sorted(set(document_hashes))
+            retrieval_policy = get_retrieval_policy()
 
             retrieval_params = {
                 "bundle_id": payload.bundle_id,
@@ -148,6 +153,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 "llm_provider": payload.llm_provider,
                 "query_mode": "hybrid",
                 "retrieval_model_name": payload.retrieval_model_name,
+                "retrieval_policy": retrieval_policy_to_dict(retrieval_policy),
                 "top_k": payload.retrieval_top_k,
             }
             prompt_seed = {
@@ -262,5 +268,5 @@ def enqueue_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
     thread.start()
 
 
-def current_assessment_count(db: Session, *, run_id: int) -> int:
-    return _assessment_count(db, run_id=run_id)
+def current_assessment_count(db: Session, *, run_id: int, tenant_id: str) -> int:
+    return _assessment_count(db, run_id=run_id, tenant_id=tenant_id)

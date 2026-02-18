@@ -143,6 +143,12 @@ def test_assessment_pipeline_stores_extraction_outputs_with_manifest_fields(tmp_
         assert assessment.model_name == "gpt-5"
         assert json.loads(assessment.retrieval_params) == {
             "query_mode": "hybrid",
+            "retrieval_policy": {
+                "lexical_weight": 0.6,
+                "tie_break": "chunk_id",
+                "vector_weight": 0.4,
+                "version": "hybrid-v1",
+            },
             "retrieval_model_name": "default",
             "top_k": 3,
         }

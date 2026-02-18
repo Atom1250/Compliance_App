@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from alembic import command
 from alembic.config import Config
 from apps.api.app.db.models import Chunk, Company, Document, Embedding
+from apps.api.app.services.retrieval import RetrievalPolicy, retrieve_chunks
 from apps.api.main import app
 
 AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
@@ -124,3 +125,35 @@ def test_hybrid_retrieval_tie_break_by_chunk_id(monkeypatch, tmp_path: Path) -> 
     assert response.status_code == 200
     results = response.json()["results"]
     assert [item["chunk_id"] for item in results] == ["aaa", "bbb"]
+
+
+def test_hybrid_retrieval_policy_version_pin_is_deterministic(tmp_path: Path) -> None:
+    db_url = _prepare_db(tmp_path)
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        policy = RetrievalPolicy(
+            version="hybrid-v1",
+            lexical_weight=0.6,
+            vector_weight=0.4,
+            tie_break="chunk_id",
+        )
+        first = retrieve_chunks(
+            session,
+            query="green bond",
+            query_embedding=[0.7, 0.2, 0.0],
+            top_k=3,
+            tenant_id="default",
+            model_name="default",
+            policy=policy,
+        )
+        second = retrieve_chunks(
+            session,
+            query="green bond",
+            query_embedding=[0.7, 0.2, 0.0],
+            top_k=3,
+            tenant_id="default",
+            model_name="default",
+            policy=policy,
+        )
+    assert [item.chunk_id for item in first] == [item.chunk_id for item in second]
+    assert [item.chunk_id for item in first] == ["aaa", "bbb", "ccc"]

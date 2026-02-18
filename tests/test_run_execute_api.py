@@ -235,6 +235,12 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
         "bundle_version": "2026.01",
         "llm_provider": "deterministic_fallback",
         "query_mode": "hybrid",
+        "retrieval_policy": {
+            "lexical_weight": 0.6,
+            "tie_break": "chunk_id",
+            "vector_weight": 0.4,
+            "version": "hybrid-v1",
+        },
         "retrieval_model_name": "default",
         "top_k": 7,
     }
