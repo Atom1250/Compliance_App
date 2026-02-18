@@ -25,18 +25,21 @@ def append_run_event(
     db: Session,
     *,
     run_id: int,
+    tenant_id: str,
     event_type: str,
     payload: dict[str, Any],
 ) -> RunEvent:
     serialized_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    event = RunEvent(run_id=run_id, event_type=event_type, payload=serialized_payload)
+    event = RunEvent(
+        run_id=run_id, tenant_id=tenant_id, event_type=event_type, payload=serialized_payload
+    )
     db.add(event)
     return event
 
 
-def list_run_events(db: Session, *, run_id: int) -> list[RunEvent]:
+def list_run_events(db: Session, *, run_id: int, tenant_id: str) -> list[RunEvent]:
     return db.scalars(
         select(RunEvent)
-        .where(RunEvent.run_id == run_id)
+        .where(RunEvent.run_id == run_id, RunEvent.tenant_id == tenant_id)
         .order_by(RunEvent.created_at.asc(), RunEvent.id.asc())
     ).all()

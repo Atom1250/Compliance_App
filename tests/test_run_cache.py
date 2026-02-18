@@ -25,6 +25,7 @@ def _prepare_session(tmp_path: Path) -> Session:
 
 def test_compute_run_hash_is_deterministic_and_changes_with_input() -> None:
     inputs_a = RunHashInput(
+        tenant_id="default",
         document_hashes=["b", "a"],
         company_profile={"employees": 100, "listed_status": True, "reporting_year": 2026},
         materiality_inputs={"climate": True},
@@ -33,6 +34,7 @@ def test_compute_run_hash_is_deterministic_and_changes_with_input() -> None:
         prompt_hash="prompt-abc",
     )
     inputs_b = RunHashInput(
+        tenant_id="default",
         document_hashes=["a", "b"],
         company_profile={"employees": 100, "listed_status": True, "reporting_year": 2026},
         materiality_inputs={"climate": True},
@@ -41,6 +43,7 @@ def test_compute_run_hash_is_deterministic_and_changes_with_input() -> None:
         prompt_hash="prompt-abc",
     )
     inputs_c = RunHashInput(
+        tenant_id="other",
         document_hashes=["a", "b"],
         company_profile={"employees": 101, "listed_status": True, "reporting_year": 2026},
         materiality_inputs={"climate": True},
@@ -64,6 +67,7 @@ def test_run_cache_hit_skips_reprocessing_and_returns_identical_output(tmp_path:
         session.commit()
 
         hash_input = RunHashInput(
+            tenant_id="default",
             document_hashes=["doc-hash-1"],
             company_profile={"employees": 100, "listed_status": True, "reporting_year": 2026},
             materiality_inputs={"climate": True},

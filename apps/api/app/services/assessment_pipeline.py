@@ -49,6 +49,7 @@ def execute_assessment_pipeline(
     append_run_event(
         db,
         run_id=run.id,
+        tenant_id=run.tenant_id,
         event_type="assessment.pipeline.started",
         payload={
             "tenant_id": run.tenant_id,
@@ -81,7 +82,12 @@ def execute_assessment_pipeline(
         ).all()
     }
 
-    db.execute(delete(DatapointAssessment).where(DatapointAssessment.run_id == run.id))
+    db.execute(
+        delete(DatapointAssessment).where(
+            DatapointAssessment.run_id == run.id,
+            DatapointAssessment.tenant_id == run.tenant_id,
+        )
+    )
 
     created: list[DatapointAssessment] = []
     retrieval_params_payload = {
@@ -128,6 +134,7 @@ def execute_assessment_pipeline(
 
         assessment = DatapointAssessment(
             run_id=run.id,
+            tenant_id=run.tenant_id,
             datapoint_key=datapoint_key,
             status=verification.status,
             value=extraction.value,
@@ -148,6 +155,7 @@ def execute_assessment_pipeline(
     append_run_event(
         db,
         run_id=run.id,
+        tenant_id=run.tenant_id,
         event_type="assessment.pipeline.completed",
         payload={"tenant_id": run.tenant_id, "assessment_count": len(created)},
     )

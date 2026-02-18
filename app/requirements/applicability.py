@@ -148,7 +148,10 @@ def resolve_required_datapoint_ids(
     if run_id is not None:
         for row in db.scalars(
             select(RunMateriality)
-            .where(RunMateriality.run_id == run_id)
+            .where(
+                RunMateriality.run_id == run_id,
+                RunMateriality.tenant_id == company.tenant_id,
+            )
             .order_by(RunMateriality.topic)
         ).all():
             materiality_by_topic[row.topic] = row.is_material

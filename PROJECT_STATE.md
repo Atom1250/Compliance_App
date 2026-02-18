@@ -27,10 +27,9 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-176
+Next PR ID: PR-177
 
 Planned PRs:
-- PR-176: Tenant isolation hardening audit (planned)
 - PR-177: Deterministic retrieval tuning lock (planned)
 - PR-178: Security and operations baseline (planned)
 - PR-179: CI and autonomy workflow hardening (planned)
@@ -221,6 +220,11 @@ Planned PRs:
   - Updated `POST /runs/{run_id}/execute` to enqueue work and return deterministic lifecycle states (`queued`, `running`, `completed`, `failed`).
   - Added explicit idempotent retry behavior for failed runs via `retry_failed=true`.
   - Added lifecycle/polling integration tests for async completion, cache stability, and failed-run retry behavior.
+- PR-176: Tenant isolation hardening audit completed:
+  - Added `tenant_id` columns/indexes for run-related entities (`run_event`, `run_materiality`, `datapoint_assessment`, `run_cache_entry`, `run_manifest`) with migration backfill.
+  - Enforced tenant-scoped reads/writes across audit trail, materiality updates, manifests, evidence-pack export, and run execution event lookups.
+  - Hardened run-hash cache by incorporating `tenant_id` into hash inputs and cache lookups to avoid cross-tenant reuse.
+  - Updated determinism/contract fixtures and integration paths to reflect tenant-scoped cache and manifest semantics.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

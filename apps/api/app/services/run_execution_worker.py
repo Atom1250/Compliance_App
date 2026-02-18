@@ -90,6 +90,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
         append_run_event(
             db,
             run_id=run.id,
+            tenant_id=run.tenant_id,
             event_type="run.execution.started",
             payload={
                 "tenant_id": run.tenant_id,
@@ -128,7 +129,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
 
             materiality_rows = db.scalars(
                 select(RunMateriality)
-                .where(RunMateriality.run_id == run.id)
+                .where(RunMateriality.run_id == run.id, RunMateriality.tenant_id == run.tenant_id)
                 .order_by(RunMateriality.topic)
             ).all()
             materiality_inputs = {row.topic: row.is_material for row in materiality_rows}
@@ -181,6 +182,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 db,
                 run_id=run.id,
                 hash_input=RunHashInput(
+                    tenant_id=run.tenant_id,
                     document_hashes=document_hashes,
                     company_profile={
                         "employees": company.employees,
@@ -216,6 +218,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             append_run_event(
                 db,
                 run_id=run.id,
+                tenant_id=run.tenant_id,
                 event_type="run.execution.completed",
                 payload={
                     "tenant_id": run.tenant_id,
@@ -236,6 +239,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             append_run_event(
                 db,
                 run_id=run.id,
+                tenant_id=run.tenant_id,
                 event_type="run.execution.failed",
                 payload={"tenant_id": run.tenant_id, "error": str(exc)},
             )

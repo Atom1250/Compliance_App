@@ -131,6 +131,7 @@ def create_run(
     append_run_event(
         db,
         run_id=run.id,
+        tenant_id=auth.tenant_id,
         event_type="run.created",
         payload={"tenant_id": auth.tenant_id, "company_id": company.id, "status": run.status},
     )
@@ -158,6 +159,7 @@ def run_status(
     append_run_event(
         db,
         run_id=run.id,
+        tenant_id=auth.tenant_id,
         event_type="run.status.requested",
         payload={"tenant_id": auth.tenant_id, "status": run.status},
     )
@@ -184,6 +186,7 @@ def run_report(
     append_run_event(
         db,
         run_id=run.id,
+        tenant_id=auth.tenant_id,
         event_type="run.report.requested",
         payload={"tenant_id": auth.tenant_id, "url": url},
     )
@@ -215,7 +218,7 @@ def run_evidence_pack(
     settings = get_settings()
     tenant_dir = Path(settings.evidence_pack_output_root) / auth.tenant_id
     output_zip = tenant_dir / f"run-{run.id}-evidence-pack.zip"
-    export_evidence_pack(db, run_id=run.id, output_zip_path=output_zip)
+    export_evidence_pack(db, run_id=run.id, tenant_id=auth.tenant_id, output_zip_path=output_zip)
     return FileResponse(
         path=output_zip,
         media_type="application/zip",
@@ -233,7 +236,11 @@ def run_manifest(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
 
-    manifest = db.scalar(select(RunManifest).where(RunManifest.run_id == run.id))
+    manifest = db.scalar(
+        select(RunManifest).where(
+            RunManifest.run_id == run.id, RunManifest.tenant_id == auth.tenant_id
+        )
+    )
     if manifest is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="manifest not found")
 
@@ -264,6 +271,7 @@ def execute_run(
         select(RunEvent.event_type)
         .where(
             RunEvent.run_id == run.id,
+            RunEvent.tenant_id == auth.tenant_id,
             RunEvent.event_type.in_(
                 [
                     "run.execution.queued",
@@ -308,6 +316,7 @@ def execute_run(
     append_run_event(
         db,
         run_id=run.id,
+        tenant_id=auth.tenant_id,
         event_type="run.execution.queued",
         payload={
             "tenant_id": auth.tenant_id,
@@ -352,19 +361,31 @@ def upsert_materiality(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
 
-    existing_rows = db.scalars(select(RunMateriality).where(RunMateriality.run_id == run_id)).all()
+    existing_rows = db.scalars(
+        select(RunMateriality).where(
+            RunMateriality.run_id == run_id, RunMateriality.tenant_id == auth.tenant_id
+        )
+    ).all()
     by_topic = {row.topic: row for row in existing_rows}
 
     for entry in sorted(payload.entries, key=lambda item: item.topic):
         existing = by_topic.get(entry.topic)
         if existing is None:
-            db.add(RunMateriality(run_id=run_id, topic=entry.topic, is_material=entry.is_material))
+            db.add(
+                RunMateriality(
+                    run_id=run_id,
+                    tenant_id=auth.tenant_id,
+                    topic=entry.topic,
+                    is_material=entry.is_material,
+                )
+            )
         else:
             existing.is_material = entry.is_material
 
     append_run_event(
         db,
         run_id=run_id,
+        tenant_id=auth.tenant_id,
         event_type="materiality.updated",
         payload={
             "tenant_id": auth.tenant_id,
@@ -383,7 +404,9 @@ def upsert_materiality(
     db.commit()
 
     refreshed = db.scalars(
-        select(RunMateriality).where(RunMateriality.run_id == run_id).order_by(RunMateriality.topic)
+        select(RunMateriality)
+        .where(RunMateriality.run_id == run_id, RunMateriality.tenant_id == auth.tenant_id)
+        .order_by(RunMateriality.topic)
     ).all()
 
     return MaterialityUpsertResponse(
@@ -416,6 +439,7 @@ def required_datapoints_for_run(
     append_run_event(
         db,
         run_id=run_id,
+        tenant_id=auth.tenant_id,
         event_type="required_datapoints.resolved",
         payload={
             "tenant_id": auth.tenant_id,
@@ -445,7 +469,7 @@ def run_events(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
 
-    events = list_run_events(db, run_id=run_id)
+    events = list_run_events(db, run_id=run_id, tenant_id=auth.tenant_id)
     return RunEventsResponse(
         run_id=run_id,
         events=[

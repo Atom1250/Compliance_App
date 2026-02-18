@@ -11,7 +11,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from apps.api.app.db.models import Chunk, DatapointAssessment, DocumentFile
+from apps.api.app.db.models import Chunk, DatapointAssessment, Document, DocumentFile
 
 _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
@@ -44,11 +44,15 @@ def export_evidence_pack(
     db: Session,
     *,
     run_id: int,
+    tenant_id: str,
     output_zip_path: Path,
 ) -> Path:
     assessments = db.scalars(
         select(DatapointAssessment)
-        .where(DatapointAssessment.run_id == run_id)
+        .where(
+            DatapointAssessment.run_id == run_id,
+            DatapointAssessment.tenant_id == tenant_id,
+        )
         .order_by(DatapointAssessment.datapoint_key)
     ).all()
 
@@ -95,7 +99,9 @@ def export_evidence_pack(
 
     document_files = db.scalars(
         select(DocumentFile)
+        .join(Document, Document.id == DocumentFile.document_id)
         .where(DocumentFile.document_id.in_(sorted(referenced_document_ids)))
+        .where(Document.tenant_id == tenant_id)
         .order_by(DocumentFile.sha256_hash)
     ).all()
 

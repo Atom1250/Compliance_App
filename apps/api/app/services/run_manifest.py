@@ -67,10 +67,15 @@ def persist_run_manifest(
     retrieval_params_json = _canonical_json(payload.retrieval_params)
     document_hashes_json = _canonical_json(document_hashes)
 
-    existing = db.scalar(select(RunManifest).where(RunManifest.run_id == payload.run_id))
+    existing = db.scalar(
+        select(RunManifest).where(
+            RunManifest.run_id == payload.run_id, RunManifest.tenant_id == payload.tenant_id
+        )
+    )
     if existing is None:
         manifest = RunManifest(
             run_id=payload.run_id,
+            tenant_id=payload.tenant_id,
             document_hashes=document_hashes_json,
             bundle_id=payload.bundle_id,
             bundle_version=payload.bundle_version,

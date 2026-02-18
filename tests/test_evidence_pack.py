@@ -83,8 +83,8 @@ def test_evidence_pack_zip_manifest_and_integrity_are_deterministic(tmp_path: Pa
 
         zip_a = tmp_path / "pack-a.zip"
         zip_b = tmp_path / "pack-b.zip"
-        export_evidence_pack(session, run_id=run.id, output_zip_path=zip_a)
-        export_evidence_pack(session, run_id=run.id, output_zip_path=zip_b)
+        export_evidence_pack(session, run_id=run.id, tenant_id="default", output_zip_path=zip_a)
+        export_evidence_pack(session, run_id=run.id, tenant_id="default", output_zip_path=zip_b)
 
         assert zip_a.read_bytes() == zip_b.read_bytes()
 

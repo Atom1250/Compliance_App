@@ -16,6 +16,7 @@ from apps.api.app.db.models import DatapointAssessment, RunCacheEntry
 
 @dataclass(frozen=True)
 class RunHashInput:
+    tenant_id: str
     document_hashes: list[str]
     company_profile: dict[str, Any]
     materiality_inputs: dict[str, bool]
@@ -30,6 +31,7 @@ def _canonical_json(payload: dict[str, Any]) -> str:
 
 def compute_run_hash(inputs: RunHashInput) -> str:
     payload = {
+        "tenant_id": inputs.tenant_id,
         "document_hashes": sorted(inputs.document_hashes),
         "company_profile": inputs.company_profile,
         "materiality_inputs": inputs.materiality_inputs,
@@ -59,21 +61,33 @@ def serialize_assessments(assessments: Sequence[DatapointAssessment]) -> str:
     return json.dumps(rows, sort_keys=True, separators=(",", ":"))
 
 
-def get_cached_output(db: Session, *, run_hash: str) -> str | None:
-    entry = db.scalar(select(RunCacheEntry).where(RunCacheEntry.run_hash == run_hash))
+def get_cached_output(db: Session, *, tenant_id: str, run_hash: str) -> str | None:
+    entry = db.scalar(
+        select(RunCacheEntry).where(
+            RunCacheEntry.tenant_id == tenant_id,
+            RunCacheEntry.run_hash == run_hash,
+        )
+    )
     if entry is None:
         return None
     return entry.output_json
 
 
 def store_cached_output(
-    db: Session, *, run_id: int, run_hash: str, output_json: str
+    db: Session, *, run_id: int, tenant_id: str, run_hash: str, output_json: str
 ) -> RunCacheEntry:
-    existing = db.scalar(select(RunCacheEntry).where(RunCacheEntry.run_hash == run_hash))
+    existing = db.scalar(
+        select(RunCacheEntry).where(
+            RunCacheEntry.tenant_id == tenant_id,
+            RunCacheEntry.run_hash == run_hash,
+        )
+    )
     if existing is not None:
         return existing
 
-    entry = RunCacheEntry(run_id=run_id, run_hash=run_hash, output_json=output_json)
+    entry = RunCacheEntry(
+        run_id=run_id, tenant_id=tenant_id, run_hash=run_hash, output_json=output_json
+    )
     db.add(entry)
     db.commit()
     db.refresh(entry)
@@ -88,11 +102,17 @@ def get_or_compute_cached_output(
     compute_assessments: Callable[[], Sequence[DatapointAssessment]],
 ) -> tuple[str, bool]:
     run_hash = compute_run_hash(hash_input)
-    cached = get_cached_output(db, run_hash=run_hash)
+    cached = get_cached_output(db, tenant_id=hash_input.tenant_id, run_hash=run_hash)
     if cached is not None:
         return cached, True
 
     assessments = compute_assessments()
     output_json = serialize_assessments(assessments)
-    store_cached_output(db, run_id=run_id, run_hash=run_hash, output_json=output_json)
+    store_cached_output(
+        db,
+        run_id=run_id,
+        tenant_id=hash_input.tenant_id,
+        run_hash=run_hash,
+        output_json=output_json,
+    )
     return output_json, False

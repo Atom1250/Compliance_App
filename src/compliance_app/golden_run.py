@@ -62,6 +62,7 @@ def generate_golden_snapshot(*, document_text: str) -> dict[str, object]:
 
     run_hash = compute_run_hash(
         RunHashInput(
+            tenant_id="default",
             document_hashes=[content_hash],
             company_profile={"employees": 500, "listed_status": True, "reporting_year": 2026},
             materiality_inputs={"green_finance": True},
