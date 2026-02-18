@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.retrieval import retrieve_chunks
 
@@ -37,13 +38,18 @@ class RetrievalResponse(BaseModel):
 
 
 @router.post("/search", response_model=RetrievalResponse)
-def search(payload: RetrievalRequest, db: Session = Depends(get_db_session)) -> RetrievalResponse:
+def search(
+    payload: RetrievalRequest,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RetrievalResponse:
     """Run deterministic hybrid retrieval and return structured results."""
     results = retrieve_chunks(
         db,
         query=payload.query,
         query_embedding=payload.query_embedding,
         top_k=payload.top_k,
+        tenant_id=auth.tenant_id,
         document_id=payload.document_id,
         model_name=payload.model_name,
     )

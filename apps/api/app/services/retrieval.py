@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from apps.api.app.db.models import Chunk, Embedding
+from apps.api.app.db.models import Chunk, Document, Embedding
 
 LEXICAL_WEIGHT = 0.6
 VECTOR_WEIGHT = 0.4
@@ -73,6 +73,7 @@ def retrieve_chunks(
     query: str,
     query_embedding: list[float] | None,
     top_k: int,
+    tenant_id: str | None = None,
     document_id: int | None = None,
     model_name: str = "default",
 ) -> list[RetrievalResult]:
@@ -80,14 +81,25 @@ def retrieve_chunks(
     if top_k <= 0:
         return []
 
-    stmt = select(Chunk).order_by(Chunk.chunk_id)
+    stmt = select(Chunk).join(Document, Document.id == Chunk.document_id).order_by(Chunk.chunk_id)
+    if tenant_id is not None:
+        stmt = stmt.where(Document.tenant_id == tenant_id)
     if document_id is not None:
         stmt = stmt.where(Chunk.document_id == document_id)
 
     chunks = db.scalars(stmt).all()
     query_terms = _tokenize(query)
 
-    embedding_rows = db.scalars(select(Embedding).where(Embedding.model_name == model_name)).all()
+    chunk_ids = [chunk.id for chunk in chunks]
+    if not chunk_ids:
+        embedding_rows = []
+    else:
+        embedding_rows = db.scalars(
+            select(Embedding).where(
+                Embedding.model_name == model_name,
+                Embedding.chunk_id.in_(chunk_ids),
+            )
+        ).all()
     embeddings_by_chunk_id = {row.chunk_id: row.embedding for row in embedding_rows}
 
     scored: list[RetrievalResult] = []

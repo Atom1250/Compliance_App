@@ -10,6 +10,8 @@ from alembic.config import Config
 from apps.api.app.db.models import Chunk, Company, Document, Embedding
 from apps.api.main import app
 
+AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
+
 
 def _prepare_db(tmp_path: Path) -> str:
     db_path = tmp_path / "retrieval.sqlite"
@@ -95,8 +97,8 @@ def test_hybrid_retrieval_ordering_is_deterministic(monkeypatch, tmp_path: Path)
         "model_name": "default",
     }
 
-    first = client.post("/retrieval/search", json=payload)
-    second = client.post("/retrieval/search", json=payload)
+    first = client.post("/retrieval/search", json=payload, headers=AUTH_HEADERS)
+    second = client.post("/retrieval/search", json=payload, headers=AUTH_HEADERS)
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -117,7 +119,7 @@ def test_hybrid_retrieval_tie_break_by_chunk_id(monkeypatch, tmp_path: Path) -> 
     client = TestClient(app)
 
     payload = {"query": "green", "top_k": 2, "query_embedding": None}
-    response = client.post("/retrieval/search", json=payload)
+    response = client.post("/retrieval/search", json=payload, headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     results = response.json()["results"]

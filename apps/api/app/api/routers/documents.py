@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import Company, Document, DocumentFile
 from apps.api.app.db.session import get_db_session
@@ -25,10 +26,13 @@ async def upload_document(
     company_id: int = Form(...),
     title: str = Form(...),
     file: UploadFile = File(...),
+    auth: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> dict[str, str | int | bool]:
     """Ingest document bytes immutably with hash-based dedupe."""
-    company = db.get(Company, company_id)
+    company = db.scalar(
+        select(Company).where(Company.id == company_id, Company.tenant_id == auth.tenant_id)
+    )
     if company is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="company not found")
 
@@ -37,7 +41,11 @@ async def upload_document(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="empty file")
 
     content_hash = sha256_bytes(content)
-    existing = db.scalar(select(DocumentFile).where(DocumentFile.sha256_hash == content_hash))
+    existing = db.scalar(
+        select(DocumentFile)
+        .join(Document, Document.id == DocumentFile.document_id)
+        .where(DocumentFile.sha256_hash == content_hash, Document.tenant_id == auth.tenant_id)
+    )
     if existing is not None:
         return {
             "document_id": existing.document_id,
@@ -51,7 +59,7 @@ async def upload_document(
     stored_path = ensure_bytes_stored(settings.object_storage_root, content_hash, content)
     storage_uri = f"{settings.object_storage_uri_prefix}{stored_path.resolve()}"
 
-    document = Document(company_id=company_id, title=title)
+    document = Document(company_id=company_id, tenant_id=auth.tenant_id, title=title)
     db.add(document)
     db.flush()
 
@@ -77,9 +85,15 @@ async def upload_document(
 
 
 @router.get("/{document_id}")
-def get_document(document_id: int, db: Session = Depends(get_db_session)) -> dict[str, str | int]:
+def get_document(
+    document_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> dict[str, str | int]:
     """Return document metadata and linked stored file reference."""
-    document = db.get(Document, document_id)
+    document = db.scalar(
+        select(Document).where(Document.id == document_id, Document.tenant_id == auth.tenant_id)
+    )
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
 

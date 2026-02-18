@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.requirements.applicability import resolve_required_datapoint_ids
+from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.db.models import Run, RunMateriality
 from apps.api.app.db.session import get_db_session
 
@@ -42,10 +43,11 @@ class RequiredDatapointsResponse(BaseModel):
 def upsert_materiality(
     run_id: int,
     payload: MaterialityUpsertRequest,
+    auth: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> MaterialityUpsertResponse:
     """Store topic-level materiality decisions for a run."""
-    run = db.get(Run, run_id)
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
 
@@ -77,10 +79,11 @@ def upsert_materiality(
 def required_datapoints_for_run(
     run_id: int,
     payload: RequiredDatapointsRequest,
+    auth: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> RequiredDatapointsResponse:
     """Resolve required datapoints with materiality integration."""
-    run = db.get(Run, run_id)
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
 

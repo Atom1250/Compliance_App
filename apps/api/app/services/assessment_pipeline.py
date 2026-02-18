@@ -85,6 +85,7 @@ def execute_assessment_pipeline(
             query=query,
             query_embedding=None,
             top_k=config.retrieval_top_k,
+            tenant_id=run.tenant_id,
             model_name=config.retrieval_model_name,
         )
         context_chunks = [item.text for item in retrieval_results]

@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-080
+Next PR ID: TBD
 
 Planned PRs:
-- PR-080: API key auth + tenant isolation (planned)
+- TBD: no further PR is currently defined in `docs/PR_CONVEYOR_PLAN.md` after PR-080.
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -137,12 +137,18 @@ Planned PRs:
   - Implemented required pages: company setup, upload docs, run configuration, run status, and report download.
   - Added shared API client integration used across workflow pages with graceful local fallbacks for unavailable endpoints.
   - Added CI-visible scaffold tests validating required pages and shared API-client wiring.
+- PR-080: API key auth + tenant isolation completed:
+  - Added API key authentication dependency using request headers (`X-API-Key`, `X-Tenant-ID`) with tenant-aware key validation.
+  - Added tenant isolation columns and indexes for core entity roots (`company`, `document`, `run`) with migration support.
+  - Enforced tenant-scoped filtering in document, run/materiality, and retrieval API paths.
+  - Added tests validating unauthorized access blocking and cross-tenant data isolation behavior.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
 - Sample documents for deterministic tests: must be small and redistributable.
 - Choice of PDF parsing stack: must be deterministic and testable; avoid fragile OCR in MVP.
 - Manual check still required in GitHub Actions UI to confirm `Codex Run Prompt (Create PR)` appears and dispatches with repository secrets.
+- Tenant key management/rotation process is not yet documented; current baseline relies on environment configuration.
 
 ## 6) Decisions Log (High Level)
 - Start with Option 1: GitHub Actions + Codex GitHub Action for stable autonomy.

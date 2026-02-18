@@ -10,6 +10,8 @@ from app.requirements.importer import import_bundle, load_bundle
 from apps.api.app.db.models import Company, Run
 from apps.api.main import app
 
+AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
+
 
 def _prepare_fixture(tmp_path: Path) -> tuple[str, int]:
     db_path = tmp_path / "materiality.sqlite"
@@ -51,6 +53,7 @@ def test_materiality_toggle_changes_required_datapoints(monkeypatch, tmp_path: P
     baseline = client.post(
         f"/runs/{run_id}/required-datapoints",
         json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_HEADERS,
     )
     assert baseline.status_code == 200
     assert baseline.json()["required_datapoint_ids"] == ["ESRS-E1-1", "ESRS-E1-6"]
@@ -63,12 +66,14 @@ def test_materiality_toggle_changes_required_datapoints(monkeypatch, tmp_path: P
                 {"topic": "emissions", "is_material": True},
             ]
         },
+        headers=AUTH_HEADERS,
     )
     assert update.status_code == 200
 
     after_toggle = client.post(
         f"/runs/{run_id}/required-datapoints",
         json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_HEADERS,
     )
     assert after_toggle.status_code == 200
     assert after_toggle.json()["required_datapoint_ids"] == ["ESRS-E1-6"]
@@ -81,12 +86,14 @@ def test_materiality_toggle_changes_required_datapoints(monkeypatch, tmp_path: P
                 {"topic": "emissions", "is_material": True},
             ]
         },
+        headers=AUTH_HEADERS,
     )
     assert re_toggle.status_code == 200
 
     after_reenable = client.post(
         f"/runs/{run_id}/required-datapoints",
         json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_HEADERS,
     )
     assert after_reenable.status_code == 200
     assert after_reenable.json()["required_datapoint_ids"] == ["ESRS-E1-1", "ESRS-E1-6"]

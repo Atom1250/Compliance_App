@@ -10,6 +10,8 @@ from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import Company, Document, DocumentFile, DocumentPage
 from apps.api.main import app
 
+AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
+
 
 def _prepare_database(tmp_path: Path) -> tuple[str, int]:
     db_path = tmp_path / "upload.sqlite"
@@ -44,6 +46,7 @@ def test_upload_and_retrieval_with_hash_dedup(monkeypatch, tmp_path: Path) -> No
         "/documents/upload",
         data={"company_id": str(company_id), "title": "Annual Report"},
         files={"file": ("report.pdf", file_bytes, "application/pdf")},
+        headers=AUTH_HEADERS,
     )
     assert first_upload.status_code == 200
     first_payload = first_upload.json()
@@ -54,7 +57,7 @@ def test_upload_and_retrieval_with_hash_dedup(monkeypatch, tmp_path: Path) -> No
     stored_path = Path(stored_uri.removeprefix("file://"))
     assert stored_path.read_bytes() == file_bytes
 
-    retrieved = client.get(f"/documents/{first_payload['document_id']}")
+    retrieved = client.get(f"/documents/{first_payload['document_id']}", headers=AUTH_HEADERS)
     assert retrieved.status_code == 200
     retrieved_payload = retrieved.json()
     assert retrieved_payload["sha256_hash"] == first_payload["sha256_hash"]
@@ -64,6 +67,7 @@ def test_upload_and_retrieval_with_hash_dedup(monkeypatch, tmp_path: Path) -> No
         "/documents/upload",
         data={"company_id": str(company_id), "title": "Annual Report Copy"},
         files={"file": ("report-copy.pdf", file_bytes, "application/pdf")},
+        headers=AUTH_HEADERS,
     )
     assert duplicate_upload.status_code == 200
     duplicate_payload = duplicate_upload.json()

@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     object_storage_root: Path = Path(".data/object_store")
     object_storage_uri_prefix: str = "file://"
     pdf_export_enabled: bool = False
+    security_enabled: bool = True
+    auth_api_keys: str = "dev-key"
+    auth_tenant_keys: str = "default:dev-key"
 
     model_config = SettingsConfigDict(env_prefix="COMPLIANCE_APP_", extra="ignore")
 
