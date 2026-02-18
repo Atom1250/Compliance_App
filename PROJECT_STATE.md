@@ -27,10 +27,9 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-175
+Next PR ID: PR-176
 
 Planned PRs:
-- PR-175: Background job runner for run execution (planned)
 - PR-176: Tenant isolation hardening audit (planned)
 - PR-177: Deterministic retrieval tuning lock (planned)
 - PR-178: Security and operations baseline (planned)
@@ -217,6 +216,11 @@ Planned PRs:
   - Added explicit status/error handling and retry affordances across company setup, upload, run config, run status, and report pages.
   - Added evidence-pack route usage in frontend workflow (`/runs/{run_id}/evidence-pack`).
   - Updated UI scaffold tests to assert API route wiring and explicit retry/error rendering markers.
+- PR-175: Background job runner for run execution completed:
+  - Added asynchronous run execution worker service to process execution outside the request path.
+  - Updated `POST /runs/{run_id}/execute` to enqueue work and return deterministic lifecycle states (`queued`, `running`, `completed`, `failed`).
+  - Added explicit idempotent retry behavior for failed runs via `retry_failed=true`.
+  - Added lifecycle/polling integration tests for async completion, cache stability, and failed-run retry behavior.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

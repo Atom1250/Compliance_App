@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -76,6 +77,22 @@ def _prepare_fixture(tmp_path: Path) -> tuple[str, int]:
         return db_url, run.id
 
 
+def _wait_for_terminal_status(
+    db_url: str, *, run_id: int, timeout_seconds: float = 3.0
+) -> str:
+    engine = create_engine(db_url)
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        with Session(engine) as session:
+            run = session.get(Run, run_id)
+            assert run is not None
+            status = run.status
+        if status in {"completed", "failed"}:
+            return status
+        time.sleep(0.05)
+    raise AssertionError("run did not reach terminal status in time")
+
+
 def test_run_execute_happy_path_stores_assessments(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
@@ -93,17 +110,16 @@ def test_run_execute_happy_path_stores_assessments(monkeypatch, tmp_path: Path) 
     assert response.status_code == 200
     payload = response.json()
     assert payload["run_id"] == run_id
-    assert payload["status"] == "completed"
-    assert payload["assessment_count"] == 2
+    assert payload["status"] == "queued"
+    assert payload["assessment_count"] == 0
 
-    status_response = client.get(f"/runs/{run_id}/status", headers=AUTH_DEFAULT)
-    assert status_response.status_code == 200
-    assert status_response.json()["status"] == "completed"
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "completed"
 
     events = client.get(f"/runs/{run_id}/events", headers=AUTH_DEFAULT)
     assert events.status_code == 200
     event_types = [item["event_type"] for item in events.json()["events"]]
-    assert "run.execution.started" in event_types
+    assert "run.execution.queued" in event_types
     assert "run.execution.completed" in event_types
 
     engine = create_engine(db_url)
@@ -154,12 +170,12 @@ def test_run_execute_accepts_local_lm_studio_provider(monkeypatch, tmp_path: Pat
 
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
-    from apps.api.app.api.routers import materiality as materiality_router_module
     from apps.api.app.core.config import get_settings
+    from apps.api.app.services import run_execution_worker as worker_module
 
     get_settings.cache_clear()
     monkeypatch.setattr(
-        materiality_router_module,
+        worker_module,
         "build_extraction_client_from_settings",
         lambda _settings: ExtractionClient(
             transport=_MockTransport(),
@@ -178,7 +194,9 @@ def test_run_execute_accepts_local_lm_studio_provider(monkeypatch, tmp_path: Pat
         headers=AUTH_DEFAULT,
     )
     assert response.status_code == 200
-    assert response.json()["status"] == "completed"
+    assert response.json()["status"] == "queued"
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "completed"
 
 
 def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) -> None:
@@ -202,6 +220,8 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
         headers=AUTH_DEFAULT,
     )
     assert execute_response.status_code == 200
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "completed"
 
     manifest_response = client.get(f"/runs/{run_id}/manifest", headers=AUTH_DEFAULT)
     assert manifest_response.status_code == 200
@@ -238,6 +258,8 @@ def test_run_manifest_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
         headers=AUTH_DEFAULT,
     )
     assert execute_response.status_code == 200
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "completed"
 
     forbidden = client.get(f"/runs/{run_id}/manifest", headers=AUTH_OTHER)
     assert forbidden.status_code == 404
@@ -249,18 +271,18 @@ def test_run_execute_cache_hit_skips_pipeline_and_preserves_cached_output(
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
 
-    from apps.api.app.api.routers import materiality as materiality_router_module
     from apps.api.app.core.config import get_settings
+    from apps.api.app.services import run_execution_worker as worker_module
 
     get_settings.cache_clear()
     call_count = {"count": 0}
-    original_execute = materiality_router_module.execute_assessment_pipeline
+    original_execute = worker_module.execute_assessment_pipeline
 
     def counting_execute(*args, **kwargs):
         call_count["count"] += 1
         return original_execute(*args, **kwargs)
 
-    monkeypatch.setattr(materiality_router_module, "execute_assessment_pipeline", counting_execute)
+    monkeypatch.setattr(worker_module, "execute_assessment_pipeline", counting_execute)
     client = TestClient(app)
 
     payload = {
@@ -272,6 +294,8 @@ def test_run_execute_cache_hit_skips_pipeline_and_preserves_cached_output(
     }
     first = client.post(f"/runs/{run_id}/execute", json=payload, headers=AUTH_DEFAULT)
     assert first.status_code == 200
+    first_terminal = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert first_terminal == "completed"
 
     engine = create_engine(db_url)
     with Session(engine) as session:
@@ -282,10 +306,49 @@ def test_run_execute_cache_hit_skips_pipeline_and_preserves_cached_output(
 
     second = client.post(f"/runs/{run_id}/execute", json=payload, headers=AUTH_DEFAULT)
     assert second.status_code == 200
-    assert first.json() == second.json()
+    assert second.json()["status"] == "completed"
     assert call_count["count"] == 1
 
     with Session(engine) as session:
         entries = session.scalars(select(RunCacheEntry)).all()
         assert len(entries) == 1
         assert entries[0].output_json == first_cached_output
+
+
+def test_run_execute_retry_failed_is_idempotent(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    failing = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "missing-version"},
+        headers=AUTH_DEFAULT,
+    )
+    assert failing.status_code == 200
+    assert _wait_for_terminal_status(db_url, run_id=run_id) == "failed"
+
+    no_retry = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert no_retry.status_code == 200
+    assert no_retry.json()["status"] == "failed"
+
+    with_retry = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": "esrs_mini",
+            "bundle_version": "2026.01",
+            "retry_failed": True,
+        },
+        headers=AUTH_DEFAULT,
+    )
+    assert with_retry.status_code == 200
+    assert with_retry.json()["status"] == "queued"
+    assert _wait_for_terminal_status(db_url, run_id=run_id) == "completed"
