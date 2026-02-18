@@ -27,10 +27,9 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-174
+Next PR ID: PR-175
 
 Planned PRs:
-- PR-174: Frontend workflow API hardening (planned)
 - PR-175: Background job runner for run execution (planned)
 - PR-176: Tenant isolation hardening audit (planned)
 - PR-177: Deterministic retrieval tuning lock (planned)
@@ -213,6 +212,11 @@ Planned PRs:
   - Added stable artifact naming (`run-{run_id}-evidence-pack.zip`) with configured output root support.
   - Enforced run-status gating for evidence export (completed runs only) and tenant isolation.
   - Added integration tests for happy-path ZIP response, tenant denial, and non-completed run rejection.
+- PR-174: Frontend workflow API hardening completed:
+  - Removed opaque demo fallbacks from shared API client run/company/report flow to enforce explicit backend lifecycle behavior.
+  - Added explicit status/error handling and retry affordances across company setup, upload, run config, run status, and report pages.
+  - Added evidence-pack route usage in frontend workflow (`/runs/{run_id}/evidence-pack`).
+  - Updated UI scaffold tests to assert API route wiring and explicit retry/error rendering markers.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

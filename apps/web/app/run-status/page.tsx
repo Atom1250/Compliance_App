@@ -10,6 +10,7 @@ export default function RunStatusPage() {
   const searchParams = useSearchParams();
   const [runId, setRunId] = useState(0);
   const [status, setStatus] = useState("queued");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const fromQuery = Number(searchParams.get("runId") ?? "0");
@@ -17,21 +18,36 @@ export default function RunStatusPage() {
     setRunId(fromQuery || fromStorage);
   }, [searchParams]);
 
+  async function refreshStatus() {
+    if (!runId) {
+      setError("Run ID is missing.");
+      return;
+    }
+    setError("");
+    try {
+      const response = await fetchRunStatus(runId);
+      setStatus(response.status);
+    } catch (caught) {
+      setError(`Status fetch failed: ${String(caught)}`);
+    }
+  }
+
   useEffect(() => {
     let isMounted = true;
 
     async function refresh() {
-      if (!runId) {
-        return;
-      }
       try {
+        if (!runId) {
+          return;
+        }
         const response = await fetchRunStatus(runId);
         if (isMounted) {
+          setError("");
           setStatus(response.status);
         }
-      } catch {
+      } catch (caught) {
         if (isMounted) {
-          setStatus("completed");
+          setError(`Status fetch failed: ${String(caught)}`);
         }
       }
     }
@@ -51,6 +67,10 @@ export default function RunStatusPage() {
       <div className="panel">
         <p>Run ID: {runId || "N/A"}</p>
         <p>Current Status: {status}</p>
+        {error ? <p>{error}</p> : null}
+        <button type="button" onClick={refreshStatus}>
+          Retry Status Check
+        </button>
       </div>
       <p>Continue to <Link href={`/report?runId=${runId}`}>Report Download</Link>.</p>
     </main>

@@ -16,6 +16,36 @@ export default function RunConfigPage() {
   );
   const [llmHealth, setLlmHealth] = useState<LLMHealthResponse | null>(null);
   const [llmHealthStatus, setLlmHealthStatus] = useState("Checking local LLM config...");
+  const [runError, setRunError] = useState("");
+  const [isStarting, setIsStarting] = useState(false);
+
+  async function startRun() {
+    const companyId = Number(localStorage.getItem("company_id") ?? "0");
+    if (!companyId) {
+      setRunError("Company ID is missing. Complete Company Setup first.");
+      return;
+    }
+    setRunError("");
+    setIsStarting(true);
+    try {
+      const configured = await configureRun({
+        companyId,
+        bundleId,
+        bundleVersion,
+        greenFinanceEnabled,
+        llmProvider
+      });
+      if (!configured?.runId) {
+        throw new Error("Missing run id in API response.");
+      }
+      localStorage.setItem("run_id", String(configured.runId));
+      router.push(`/run-status?runId=${configured.runId}`);
+    } catch (caught) {
+      setRunError(`Run start failed: ${String(caught)}`);
+    } finally {
+      setIsStarting(false);
+    }
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -50,21 +80,7 @@ export default function RunConfigPage() {
       <form
         onSubmit={async (event) => {
           event.preventDefault();
-          const companyId = Number(localStorage.getItem("company_id") ?? "0");
-          if (!companyId) {
-            return;
-          }
-          const configured = await configureRun({
-            companyId,
-            bundleId,
-            bundleVersion,
-            greenFinanceEnabled,
-            llmProvider
-          });
-          if (configured?.runId) {
-            localStorage.setItem("run_id", String(configured.runId));
-            router.push(`/run-status?runId=${configured.runId}`);
-          }
+          await startRun();
         }}
       >
         <label>
@@ -127,8 +143,18 @@ export default function RunConfigPage() {
             Run LLM Probe
           </button>
         </div>
-        <button type="submit">Start Run</button>
+        <button type="submit" disabled={isStarting}>
+          {isStarting ? "Starting..." : "Start Run"}
+        </button>
       </form>
+      {runError ? (
+        <div className="panel">
+          <p>{runError}</p>
+          <button type="button" onClick={startRun} disabled={isStarting}>
+            Retry Start Run
+          </button>
+        </div>
+      ) : null}
     </main>
   );
 }

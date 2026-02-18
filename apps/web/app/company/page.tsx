@@ -9,6 +9,33 @@ export default function CompanySetupPage() {
   const [name, setName] = useState("Atom Climate Holdings");
   const [reportingYear, setReportingYear] = useState("2026");
   const [companyId, setCompanyId] = useState<number | null>(null);
+  const [status, setStatus] = useState("Idle");
+  const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function saveCompany() {
+    setIsSaving(true);
+    setError("");
+    setStatus("Saving company...");
+    try {
+      const created = await createCompany({
+        name,
+        reportingYear: Number(reportingYear),
+        listedStatus: true
+      });
+      if (!created?.id) {
+        throw new Error("Missing company id in API response.");
+      }
+      localStorage.setItem("company_id", String(created.id));
+      setCompanyId(created.id);
+      setStatus(`Company ${created.id} saved.`);
+    } catch (caught) {
+      setError(`Company setup failed: ${String(caught)}`);
+      setStatus("Save failed.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <main>
@@ -19,15 +46,7 @@ export default function CompanySetupPage() {
       <form
         onSubmit={async (event) => {
           event.preventDefault();
-          const created = await createCompany({
-            name,
-            reportingYear: Number(reportingYear),
-            listedStatus: true
-          });
-          if (created?.id) {
-            localStorage.setItem("company_id", String(created.id));
-            setCompanyId(created.id);
-          }
+          await saveCompany();
         }}
       >
         <label>
@@ -43,8 +62,19 @@ export default function CompanySetupPage() {
             required
           />
         </label>
-        <button type="submit">Save Company</button>
+        <button type="submit" disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save Company"}
+        </button>
       </form>
+      <p>{status}</p>
+      {error ? (
+        <div className="panel">
+          <p>{error}</p>
+          <button type="button" onClick={saveCompany} disabled={isSaving}>
+            Retry Save
+          </button>
+        </div>
+      ) : null}
       {companyId ? (
         <p>
           Company created with id <strong>{companyId}</strong>. Continue to <Link href="/upload">Upload</Link>.

@@ -27,13 +27,18 @@ export type LLMHealthResponse = {
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
+const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID ?? "";
 
-function deterministicId(seed: string): number {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (API_KEY) {
+    headers["X-API-Key"] = API_KEY;
   }
-  return (hash % 900000) + 100000;
+  if (TENANT_ID) {
+    headers["X-Tenant-ID"] = TENANT_ID;
+  }
+  return headers;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -41,6 +46,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(),
       ...(init?.headers ?? {})
     }
   });
@@ -54,24 +60,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function createCompany(payload: CompanySetupPayload): Promise<{ id: number } | null> {
-  try {
-    const response = await request<{
-      id: number;
-    }>("/companies", {
-      method: "POST",
-      body: JSON.stringify({
-        name: payload.name,
-        employees: payload.employees,
-        turnover: payload.turnover,
-        listed_status: payload.listedStatus,
-        reporting_year: payload.reportingYear
-      })
-    });
-    return { id: response.id };
-  } catch {
-    const id = deterministicId(`${payload.name}:${payload.reportingYear ?? 0}`);
-    return { id };
-  }
+  const response = await request<{
+    id: number;
+  }>("/companies", {
+    method: "POST",
+    body: JSON.stringify({
+      name: payload.name,
+      employees: payload.employees,
+      turnover: payload.turnover,
+      listed_status: payload.listedStatus,
+      reporting_year: payload.reportingYear
+    })
+  });
+  return { id: response.id };
 }
 
 export async function uploadDocument(payload: UploadPayload): Promise<{ documentId: number } | null> {
@@ -81,6 +82,7 @@ export async function uploadDocument(payload: UploadPayload): Promise<{ document
 
   const response = await fetch(`${API_BASE_URL}/documents/upload`, {
     method: "POST",
+    headers: authHeaders(),
     body: form
   });
 
@@ -94,39 +96,26 @@ export async function uploadDocument(payload: UploadPayload): Promise<{ document
 }
 
 export async function configureRun(payload: RunConfigPayload): Promise<{ runId: number } | null> {
-  try {
-    const created = await request<{ run_id: number; status: string }>("/runs", {
+  const created = await request<{ run_id: number; status: string }>("/runs", {
+    method: "POST",
+    body: JSON.stringify({
+      company_id: payload.companyId
+    })
+  });
+
+  await request<{ run_id: number; status: string; assessment_count: number }>(
+    `/runs/${created.run_id}/execute`,
+    {
       method: "POST",
       body: JSON.stringify({
-        company_id: payload.companyId
+        bundle_id: payload.bundleId,
+        bundle_version: payload.bundleVersion,
+        llm_provider: payload.llmProvider
       })
-    });
+    }
+  );
 
-    await request<{ run_id: number; status: string; assessment_count: number }>(
-      `/runs/${created.run_id}/execute`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          bundle_id: payload.bundleId,
-          bundle_version: payload.bundleVersion,
-          llm_provider: payload.llmProvider
-        })
-      }
-    );
-
-    return { runId: created.run_id };
-  } catch {
-    const runId = deterministicId(
-      [
-        payload.companyId,
-        payload.bundleId,
-        payload.bundleVersion,
-        payload.greenFinanceEnabled,
-        payload.llmProvider
-      ].join(":")
-    );
-    return { runId };
-  }
+  return { runId: created.run_id };
 }
 
 export async function fetchRunStatus(runId: number): Promise<{ status: string }> {
@@ -135,6 +124,10 @@ export async function fetchRunStatus(runId: number): Promise<{ status: string }>
 
 export async function fetchReportDownload(runId: number): Promise<{ url: string }> {
   return request<{ url: string }>(`/runs/${runId}/report`);
+}
+
+export function buildEvidencePackDownloadUrl(runId: number): string {
+  return `${API_BASE_URL}/runs/${runId}/evidence-pack`;
 }
 
 export async function fetchLLMHealth(probe = false): Promise<LLMHealthResponse> {
