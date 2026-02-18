@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-032
+Next PR ID: PR-040
 
 Planned PRs:
-- PR-032: Materiality questionnaire integration (planned)
+- PR-040: LLM client + schema enforcement (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -82,6 +82,11 @@ Planned PRs:
   - Implemented deterministic applicability engine to evaluate bundle rules against explicit company profile values.
   - Added deterministic output behavior with stable ordering for required datapoint IDs.
   - Added fixture-based unit tests validating expected datapoint applicability results.
+- PR-032: Materiality questionnaire integration completed:
+  - Added questionnaire endpoints for per-run topic materiality storage and required datapoint resolution.
+  - Added persistent run-level topic decisions via `run_materiality` storage and DB migration support.
+  - Integrated materiality filtering into applicability evaluation with deterministic ordering.
+  - Added fixture-based tests confirming toggling materiality changes required datapoints.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

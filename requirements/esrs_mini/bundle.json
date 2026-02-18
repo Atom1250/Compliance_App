@@ -6,12 +6,14 @@
     {
       "datapoint_key": "ESRS-E1-1",
       "title": "Transition plan disclosure",
-      "disclosure_reference": "ESRS E1-1"
+      "disclosure_reference": "ESRS E1-1",
+      "materiality_topic": "climate"
     },
     {
       "datapoint_key": "ESRS-E1-6",
       "title": "Gross GHG emissions",
-      "disclosure_reference": "ESRS E1-6"
+      "disclosure_reference": "ESRS E1-6",
+      "materiality_topic": "emissions"
     }
   ],
   "applicability_rules": [

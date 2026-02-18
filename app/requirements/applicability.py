@@ -8,7 +8,13 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from apps.api.app.db.models import ApplicabilityRule, Company, RequirementBundle
+from apps.api.app.db.models import (
+    ApplicabilityRule,
+    Company,
+    DatapointDefinition,
+    RequirementBundle,
+    RunMateriality,
+)
 
 
 @dataclass(frozen=True)
@@ -100,6 +106,7 @@ def resolve_required_datapoint_ids(
     company_id: int,
     bundle_id: str,
     bundle_version: str,
+    run_id: int | None = None,
 ) -> list[str]:
     """Return deterministically ordered required datapoint IDs."""
     company = db.get(Company, company_id)
@@ -128,9 +135,33 @@ def resolve_required_datapoint_ids(
         .order_by(ApplicabilityRule.rule_id, ApplicabilityRule.datapoint_key)
     ).all()
 
+    datapoint_topics = {
+        row.datapoint_key: row.materiality_topic
+        for row in db.scalars(
+            select(DatapointDefinition)
+            .where(DatapointDefinition.requirement_bundle_id == bundle.id)
+            .order_by(DatapointDefinition.datapoint_key)
+        ).all()
+    }
+
+    materiality_by_topic: dict[str, bool] = {}
+    if run_id is not None:
+        for row in db.scalars(
+            select(RunMateriality)
+            .where(RunMateriality.run_id == run_id)
+            .order_by(RunMateriality.topic)
+        ).all():
+            materiality_by_topic[row.topic] = row.is_material
+
     required: list[str] = []
     for rule in rules:
-        if evaluate_rule(rule.expression, profile):
-            required.append(rule.datapoint_key)
+        if not evaluate_rule(rule.expression, profile):
+            continue
+
+        topic = datapoint_topics.get(rule.datapoint_key, "general")
+        if topic in materiality_by_topic and not materiality_by_topic[topic]:
+            continue
+
+        required.append(rule.datapoint_key)
 
     return sorted(set(required))

@@ -98,6 +98,7 @@ class DatapointDefinition(Base):
     datapoint_key: Mapped[str] = mapped_column(String(128), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     disclosure_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    materiality_topic: Mapped[str] = mapped_column(String(64), nullable=False, default="general")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -130,4 +131,14 @@ class RunEvent(Base):
     run_id: Mapped[int] = mapped_column(ForeignKey("run.id"), nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RunMateriality(Base):
+    __tablename__ = "run_materiality"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("run.id"), nullable=False, index=True)
+    topic: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_material: Mapped[bool] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

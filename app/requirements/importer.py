@@ -44,6 +44,7 @@ def import_bundle(db: Session, bundle: RequirementsBundle) -> RequirementBundle:
                 datapoint_key=datapoint.datapoint_key,
                 title=datapoint.title,
                 disclosure_reference=datapoint.disclosure_reference,
+                materiality_topic=datapoint.materiality_topic,
             )
         )
 

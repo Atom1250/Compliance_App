@@ -9,6 +9,7 @@ class DatapointDefinition(BaseModel):
     datapoint_key: str = Field(min_length=1)
     title: str = Field(min_length=1)
     disclosure_reference: str = Field(min_length=1)
+    materiality_topic: str = Field(default="general", min_length=1)
 
 
 class ApplicabilityRule(BaseModel):
