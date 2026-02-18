@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-042
+Next PR ID: PR-043
 
 Planned PRs:
-- PR-042: Verification pass (planned)
+- PR-043: Run hashing + cache (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -97,6 +97,11 @@ Planned PRs:
   - Added `datapoint_assessment` storage schema with run/datapoint uniqueness and manifest metadata fields.
   - Persisted extraction provenance per assessment (`model_name`, `prompt_hash`, deterministic `retrieval_params`).
   - Added mocked integration test validating stored assessment outputs and deterministic manifest fields.
+- PR-042: Verification pass completed:
+  - Added deterministic post-extraction verification checks for cited numeric values, units, and year/period signals.
+  - Implemented predictable downgrade rules (`Present -> Partial`, `Partial -> Absent`) when verification fails.
+  - Integrated verification into the assessment pipeline prior to persistence.
+  - Added crafted edge-case tests for numeric mismatch, missing evidence chunks, and year consistency failures.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

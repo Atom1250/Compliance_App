@@ -13,6 +13,7 @@ from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.db.models import DatapointAssessment, DatapointDefinition, RequirementBundle, Run
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.retrieval import retrieve_chunks
+from apps.api.app.services.verification import verify_assessment
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,13 @@ def execute_assessment_pipeline(
             datapoint_key=datapoint_key,
             context_chunks=context_chunks,
         )
+        verification = verify_assessment(
+            status=extraction.status.value,
+            value=extraction.value,
+            evidence_chunk_ids=extraction.evidence_chunk_ids,
+            rationale=extraction.rationale,
+            retrieval_results=retrieval_results,
+        )
         prompt = extraction_client.build_prompt(
             datapoint_key=datapoint_key,
             context_chunks=context_chunks,
@@ -101,14 +109,14 @@ def execute_assessment_pipeline(
         assessment = DatapointAssessment(
             run_id=run.id,
             datapoint_key=datapoint_key,
-            status=extraction.status.value,
+            status=verification.status,
             value=extraction.value,
             evidence_chunk_ids=json.dumps(
                 extraction.evidence_chunk_ids,
                 sort_keys=True,
                 separators=(",", ":"),
             ),
-            rationale=extraction.rationale,
+            rationale=verification.rationale,
             model_name=extraction_client.model_name,
             prompt_hash=prompt_hash,
             retrieval_params=retrieval_params_json,
