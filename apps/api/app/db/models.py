@@ -15,6 +15,10 @@ class Company(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    employees: Mapped[int | None] = mapped_column(nullable=True)
+    turnover: Mapped[float | None] = mapped_column(nullable=True)
+    listed_status: Mapped[bool | None] = mapped_column(nullable=True)
+    reporting_year: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

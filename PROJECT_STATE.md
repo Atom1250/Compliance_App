@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-031
+Next PR ID: PR-032
 
 Planned PRs:
-- PR-031: Company scope + applicability logic (planned)
+- PR-032: Materiality questionnaire integration (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -77,6 +77,11 @@ Planned PRs:
   - Added requirements DB tables (`requirement_bundle`, `datapoint_def`, `applicability_rule`) via migration.
   - Implemented validated importer CLI (`python -m app.requirements import`) and import service.
   - Added tests for import success, idempotency, and version pin behavior.
+- PR-031: Company scope + applicability logic completed:
+  - Added company profile fields (`employees`, `turnover`, `listed_status`, `reporting_year`) with DB migration support.
+  - Implemented deterministic applicability engine to evaluate bundle rules against explicit company profile values.
+  - Added deterministic output behavior with stable ordering for required datapoint IDs.
+  - Added fixture-based unit tests validating expected datapoint applicability results.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
