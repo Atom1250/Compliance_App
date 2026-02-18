@@ -1,0 +1,45 @@
+{
+  "bundle_id": "green_finance_icma_eugb",
+  "version": "2026.01",
+  "standard": "GREEN_FINANCE",
+  "datapoints": [
+    {
+      "datapoint_key": "GF-OBL-01",
+      "title": "Use of Proceeds Framework",
+      "disclosure_reference": "ICMA GBP Use of Proceeds",
+      "materiality_topic": "green_finance"
+    },
+    {
+      "datapoint_key": "GF-OBL-02",
+      "title": "Annual Allocation Reporting",
+      "disclosure_reference": "EuGB Allocation Report",
+      "materiality_topic": "green_finance"
+    }
+  ],
+  "applicability_rules": [
+    {
+      "rule_id": "rule-gf-all-1",
+      "datapoint_key": "GF-OBL-01",
+      "expression": "company.reporting_year >= 2025"
+    },
+    {
+      "rule_id": "rule-gf-all-2",
+      "datapoint_key": "GF-OBL-02",
+      "expression": "company.reporting_year >= 2025"
+    }
+  ],
+  "obligations": [
+    {
+      "obligation_id": "GF-OBL-01",
+      "obligation": "Publish eligible green project categories and allocation framework",
+      "required_artifacts": ["green_bond_framework"],
+      "required_data_elements": ["eligible_project_categories", "allocation_approach"]
+    },
+    {
+      "obligation_id": "GF-OBL-02",
+      "obligation": "Publish annual allocation report for bond proceeds",
+      "required_artifacts": ["allocation_report"],
+      "required_data_elements": ["allocation_table", "unallocated_balance"]
+    }
+  ]
+}

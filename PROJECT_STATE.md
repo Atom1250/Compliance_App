@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-060
+Next PR ID: PR-061
 
 Planned PRs:
-- PR-060: Green finance requirements bundle (planned)
+- PR-061: Green finance extraction pipeline (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -122,6 +122,11 @@ Planned PRs:
   - Added explicit feature flag behavior so PDF generation is skipped when disabled.
   - Added graceful dependency-missing error handling for environments without PDF renderer libraries.
   - Added unit tests for disabled mode, enabled export path, and dependency-missing behavior.
+- PR-060: Green finance requirements bundle completed:
+  - Added a versioned green finance requirements bundle for ICMA GBP + EuGB alignment.
+  - Added obligation metadata (required artifacts and required data elements) for matrix rendering.
+  - Implemented deterministic obligations matrix generation with output fields: obligation, required, produced, evidence, gap.
+  - Added tests for bundle loading, enabled-mode matrix generation, and disabled-mode suppression.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
