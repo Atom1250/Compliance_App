@@ -66,3 +66,12 @@ def test_create_app_fails_fast_on_invalid_tenant_mapping(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="expected tenant:key"):
         create_app()
+
+
+def test_create_app_fails_fast_on_invalid_rate_limit_window(monkeypatch) -> None:
+    monkeypatch.setenv("COMPLIANCE_APP_REQUEST_RATE_LIMIT_WINDOW_SECONDS", "0")
+    get_settings.cache_clear()
+    _resolve_key_maps.cache_clear()
+
+    with pytest.raises(ValueError, match="rate limit window must be > 0"):
+        create_app()

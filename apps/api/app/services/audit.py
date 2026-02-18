@@ -9,13 +9,14 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from apps.api.app.core.ops import redact_sensitive_fields
 from apps.api.app.db.models import RunEvent
 
 _audit_logger = logging.getLogger("compliance.audit")
 
 
 def log_structured_event(event_type: str, **fields: Any) -> str:
-    payload = {"event_type": event_type, **fields}
+    payload = redact_sensitive_fields({"event_type": event_type, **fields})
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     _audit_logger.info(serialized)
     return serialized

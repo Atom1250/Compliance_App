@@ -27,10 +27,9 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-178
+Next PR ID: PR-179
 
 Planned PRs:
-- PR-178: Security and operations baseline (planned)
 - PR-179: CI and autonomy workflow hardening (planned)
 - PR-180: UAT pack + golden end-to-end harness (planned)
 
@@ -229,6 +228,11 @@ Planned PRs:
   - Wired retrieval policy metadata into assessment pipeline/run execution retrieval params and persisted it in run manifests.
   - Included retrieval policy version in run-hash inputs to pin cache reproducibility by retrieval policy.
   - Added tests for retrieval policy determinism and policy-version pin behavior in run-hash stability checks.
+- PR-178: Security and operations baseline completed:
+  - Added request-operations middleware that attaches `X-Request-ID` to responses and emits deterministic `429` responses for throttled sensitive routes.
+  - Added structured redaction policy for sensitive logging fields (`api_key`, `authorization`, `*_key`, etc.) in audit event serialization.
+  - Added startup-time runtime validation for rate-limit parameters and LLM base URL format.
+  - Added tests for log redaction behavior, runtime config fail-fast, and sensitive-route throttling semantics.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

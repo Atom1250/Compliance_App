@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     security_enabled: bool = True
     auth_api_keys: str = "dev-key"
     auth_tenant_keys: str = "default:dev-key"
+    request_rate_limit_enabled: bool = True
+    request_rate_limit_window_seconds: int = 60
+    request_rate_limit_max_requests: int = 30
 
     model_config = SettingsConfigDict(env_prefix="COMPLIANCE_APP_", extra="ignore")
 

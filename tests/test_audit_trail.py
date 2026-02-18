@@ -47,6 +47,18 @@ def test_structured_log_payload_is_deterministic() -> None:
     assert payload == '{"event_type":"run.tested","run_id":7,"tenant_id":"default"}'
 
 
+def test_structured_log_payload_redacts_sensitive_fields() -> None:
+    payload = log_structured_event(
+        "auth.tested",
+        tenant_id="default",
+        api_key="super-secret",
+        nested={"llm_api_key": "top-secret", "safe": "ok"},
+    )
+    assert '"api_key":"***REDACTED***"' in payload
+    assert '"llm_api_key":"***REDACTED***"' in payload
+    assert '"safe":"ok"' in payload
+
+
 def test_run_event_history_is_complete_and_ordered(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
