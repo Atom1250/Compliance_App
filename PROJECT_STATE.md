@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-030
+Next PR ID: PR-031
 
 Planned PRs:
-- PR-030: Requirements bundle system (planned)
+- PR-031: Company scope + applicability logic (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -72,6 +72,11 @@ Planned PRs:
   - Implemented stable tie-break ordering by `chunk_id` when combined scores are equal.
   - Added structured retrieval API endpoint (`POST /retrieval/search`) returning typed retrieval result records.
   - Added ordering determinism tests validating repeatable ranking and tie-break behavior.
+- PR-030: Requirements bundle system completed:
+  - Added `requirements/` bundle structure with sample `requirements/esrs_mini/bundle.json`.
+  - Added requirements DB tables (`requirement_bundle`, `datapoint_def`, `applicability_rule`) via migration.
+  - Implemented validated importer CLI (`python -m app.requirements import`) and import service.
+  - Added tests for import success, idempotency, and version pin behavior.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

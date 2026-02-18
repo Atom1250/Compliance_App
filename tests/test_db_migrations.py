@@ -6,13 +6,16 @@ from alembic import command
 from alembic.config import Config
 
 REQUIRED_TABLES = {
+    "applicability_rule",
     "alembic_version",
     "chunk",
     "company",
+    "datapoint_def",
     "document",
     "document_file",
     "document_page",
     "embedding",
+    "requirement_bundle",
     "run",
     "run_event",
 }

@@ -74,6 +74,42 @@ class Embedding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class RequirementBundle(Base):
+    __tablename__ = "requirement_bundle"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    bundle_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    standard: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DatapointDefinition(Base):
+    __tablename__ = "datapoint_def"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    requirement_bundle_id: Mapped[int] = mapped_column(
+        ForeignKey("requirement_bundle.id"), nullable=False, index=True
+    )
+    datapoint_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    disclosure_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ApplicabilityRule(Base):
+    __tablename__ = "applicability_rule"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    requirement_bundle_id: Mapped[int] = mapped_column(
+        ForeignKey("requirement_bundle.id"), nullable=False, index=True
+    )
+    rule_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    datapoint_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    expression: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class Run(Base):
     __tablename__ = "run"
 
