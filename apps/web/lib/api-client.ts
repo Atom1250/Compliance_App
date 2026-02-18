@@ -16,6 +16,14 @@ export type RunConfigPayload = {
   bundleId: string;
   bundleVersion: string;
   greenFinanceEnabled: boolean;
+  llmProvider: "deterministic_fallback" | "local_lm_studio";
+};
+
+export type LLMHealthResponse = {
+  base_url: string;
+  model: string;
+  reachable: boolean | null;
+  detail: string;
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -86,10 +94,39 @@ export async function uploadDocument(payload: UploadPayload): Promise<{ document
 }
 
 export async function configureRun(payload: RunConfigPayload): Promise<{ runId: number } | null> {
-  const runId = deterministicId(
-    `${payload.companyId}:${payload.bundleId}:${payload.bundleVersion}:${payload.greenFinanceEnabled}`
-  );
-  return { runId };
+  try {
+    const created = await request<{ run_id: number; status: string }>("/runs", {
+      method: "POST",
+      body: JSON.stringify({
+        company_id: payload.companyId
+      })
+    });
+
+    await request<{ run_id: number; status: string; assessment_count: number }>(
+      `/runs/${created.run_id}/execute`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          bundle_id: payload.bundleId,
+          bundle_version: payload.bundleVersion,
+          llm_provider: payload.llmProvider
+        })
+      }
+    );
+
+    return { runId: created.run_id };
+  } catch {
+    const runId = deterministicId(
+      [
+        payload.companyId,
+        payload.bundleId,
+        payload.bundleVersion,
+        payload.greenFinanceEnabled,
+        payload.llmProvider
+      ].join(":")
+    );
+    return { runId };
+  }
 }
 
 export async function fetchRunStatus(runId: number): Promise<{ status: string }> {
@@ -98,4 +135,9 @@ export async function fetchRunStatus(runId: number): Promise<{ status: string }>
 
 export async function fetchReportDownload(runId: number): Promise<{ url: string }> {
   return request<{ url: string }>(`/runs/${runId}/report`);
+}
+
+export async function fetchLLMHealth(probe = false): Promise<LLMHealthResponse> {
+  const query = probe ? "?probe=true" : "";
+  return request<LLMHealthResponse>(`/llm-health${query}`);
 }

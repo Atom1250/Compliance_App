@@ -30,7 +30,7 @@ We are building a compliance analysis application for EU clients:
 Next PR ID: TBD
 
 Planned PRs:
-- TBD: no further PR currently defined after PR-150.
+- (No additional PRs currently planned in `docs/PR_CONVEYOR_PLAN.md`)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -182,6 +182,11 @@ Planned PRs:
   - Added optional probe mode (`probe=true`) to actively test LM Studio-compatible connectivity.
   - Added deterministic probe result response fields (`reachable`, `detail`) for operator diagnostics.
   - Added endpoint tests for non-probe config response and mocked probe-path behavior.
+- PR-160: Frontend LLM controls + health visibility completed:
+  - Updated run configuration UI to select execution provider (`deterministic_fallback` or `local_lm_studio`).
+  - Wired run configuration flow to call `POST /runs` then `POST /runs/{run_id}/execute` with `llm_provider`.
+  - Added frontend LLM health panel that reads `/llm-health` and supports active `probe=true` checks.
+  - Added scaffold tests validating provider wiring, `/llm-health` route usage, and probe UI controls.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

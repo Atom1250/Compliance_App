@@ -22,8 +22,15 @@ def test_pages_use_shared_api_client() -> None:
     assert "export async function configureRun" in api_client
     assert "export async function fetchRunStatus" in api_client
     assert "export async function fetchReportDownload" in api_client
+    assert "export async function fetchLLMHealth" in api_client
+    assert "/llm-health" in api_client
+    assert "llm_provider" in api_client
 
+    run_config_page = (WEB_ROOT / "app/run-config/page.tsx").read_text()
     run_status_page = (WEB_ROOT / "app/run-status/page.tsx").read_text()
     report_page = (WEB_ROOT / "app/report/page.tsx").read_text()
+    assert "Execution Provider" in run_config_page
+    assert "fetchLLMHealth" in run_config_page
+    assert "Run LLM Probe" in run_config_page
     assert "fetchRunStatus" in run_status_page
     assert "fetchReportDownload" in report_page

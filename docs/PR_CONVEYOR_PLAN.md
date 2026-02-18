@@ -438,4 +438,18 @@ Definition of Done
 Operators can verify local LLM configuration and optionally probe runtime reachability via API.
 Tests
 Endpoint tests for non-probe response and probe-path behavior with mocked probe result.
+PR-160 — Frontend LLM Controls + Health Visibility
+Objective
+Expose local LLM provider controls and health visibility in the operational UI.
+Scope
+Update run configuration UI:
+Allow selecting execution provider (`deterministic_fallback` / `local_lm_studio`).
+Pass selected provider to run execute API.
+Add UI health panel:
+Read `/llm-health` config state.
+Support active probe request and display reachable/detail values.
+Definition of Done
+Operators can configure local LLM execution mode from UI and validate LM Studio health before execution.
+Tests
+UI scaffold tests validate provider wiring and LLM health panel route usage.
 END OF ROADMAP
