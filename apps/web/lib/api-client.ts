@@ -46,8 +46,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function createCompany(payload: CompanySetupPayload): Promise<{ id: number } | null> {
-  const id = deterministicId(`${payload.name}:${payload.reportingYear ?? 0}`);
-  return { id };
+  try {
+    const response = await request<{
+      id: number;
+    }>("/companies", {
+      method: "POST",
+      body: JSON.stringify({
+        name: payload.name,
+        employees: payload.employees,
+        turnover: payload.turnover,
+        listed_status: payload.listedStatus,
+        reporting_year: payload.reportingYear
+      })
+    });
+    return { id: response.id };
+  } catch {
+    const id = deterministicId(`${payload.name}:${payload.reportingYear ?? 0}`);
+    return { id };
+  }
 }
 
 export async function uploadDocument(payload: UploadPayload): Promise<{ documentId: number } | null> {

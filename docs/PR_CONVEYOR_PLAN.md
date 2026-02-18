@@ -385,4 +385,17 @@ Definition of Done
 Lifecycle endpoints provide deterministic responses and tenant-scoped access controls.
 Tests
 Integration tests for create/status/report happy path and cross-tenant denial.
+PR-120 — Company Management API
+Objective
+Support operational workflow with tenant-scoped company setup endpoints.
+Scope
+Add company lifecycle endpoints:
+POST /companies (create company profile)
+GET /companies (list tenant companies in deterministic order)
+Enforce tenant isolation for company operations.
+Record structured audit events for create/list operations.
+Definition of Done
+Company setup can be completed via API with tenant-safe behavior and deterministic list ordering.
+Tests
+Integration tests for create/list happy path and cross-tenant isolation.
 END OF ROADMAP
