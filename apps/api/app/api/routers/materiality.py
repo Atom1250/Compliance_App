@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.auth import AuthContext, require_auth_context
-from apps.api.app.db.models import Run, RunMateriality
+from apps.api.app.db.models import Company, Run, RunMateriality
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
 
@@ -51,6 +51,109 @@ class RunEventItem(BaseModel):
 class RunEventsResponse(BaseModel):
     run_id: int
     events: list[RunEventItem]
+
+
+class RunCreateRequest(BaseModel):
+    company_id: int = Field(ge=1)
+
+
+class RunCreateResponse(BaseModel):
+    run_id: int
+    status: str
+
+
+class RunStatusResponse(BaseModel):
+    run_id: int
+    status: str
+
+
+class RunReportResponse(BaseModel):
+    run_id: int
+    url: str
+
+
+@router.post("", response_model=RunCreateResponse)
+def create_run(
+    payload: RunCreateRequest,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunCreateResponse:
+    company = db.scalar(
+        select(Company).where(Company.id == payload.company_id, Company.tenant_id == auth.tenant_id)
+    )
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="company not found")
+
+    run = Run(company_id=company.id, tenant_id=auth.tenant_id, status="queued")
+    db.add(run)
+    db.flush()
+    append_run_event(
+        db,
+        run_id=run.id,
+        event_type="run.created",
+        payload={"tenant_id": auth.tenant_id, "company_id": company.id, "status": run.status},
+    )
+    log_structured_event(
+        "run.created",
+        run_id=run.id,
+        tenant_id=auth.tenant_id,
+        company_id=company.id,
+        status=run.status,
+    )
+    db.commit()
+    db.refresh(run)
+    return RunCreateResponse(run_id=run.id, status=run.status)
+
+
+@router.get("/{run_id}/status", response_model=RunStatusResponse)
+def run_status(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunStatusResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    append_run_event(
+        db,
+        run_id=run.id,
+        event_type="run.status.requested",
+        payload={"tenant_id": auth.tenant_id, "status": run.status},
+    )
+    log_structured_event(
+        "run.status.requested",
+        run_id=run.id,
+        tenant_id=auth.tenant_id,
+        status=run.status,
+    )
+    db.commit()
+    return RunStatusResponse(run_id=run.id, status=run.status)
+
+
+@router.get("/{run_id}/report", response_model=RunReportResponse)
+def run_report(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunReportResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    url = f"/reports/run-{run.id}.html"
+    append_run_event(
+        db,
+        run_id=run.id,
+        event_type="run.report.requested",
+        payload={"tenant_id": auth.tenant_id, "url": url},
+    )
+    log_structured_event(
+        "run.report.requested",
+        run_id=run.id,
+        tenant_id=auth.tenant_id,
+        url=url,
+    )
+    db.commit()
+    return RunReportResponse(run_id=run.id, url=url)
 
 
 @router.post("/{run_id}/materiality", response_model=MaterialityUpsertResponse)

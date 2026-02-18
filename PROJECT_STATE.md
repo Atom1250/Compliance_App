@@ -30,7 +30,7 @@ We are building a compliance analysis application for EU clients:
 Next PR ID: TBD
 
 Planned PRs:
-- TBD: no further PR currently defined after PR-100.
+- TBD: no further PR currently defined after PR-110.
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -157,13 +157,17 @@ Planned PRs:
   - Added strict tenant key configuration validation utility with explicit malformed entry detection.
   - Added fail-fast startup validation to reject invalid tenant key mappings before serving requests.
   - Added unit tests for valid/invalid key config parsing and startup validation behavior.
+- PR-110: Run lifecycle API endpoints completed:
+  - Added tenant-scoped run lifecycle routes: `POST /runs`, `GET /runs/{run_id}/status`, and `GET /runs/{run_id}/report`.
+  - Added deterministic run report URL generation (`/reports/run-{run_id}.html`) for workflow download linking.
+  - Added structured audit events for lifecycle actions (`run.created`, `run.status.requested`, `run.report.requested`).
+  - Added integration tests for lifecycle happy path, cross-tenant access denial, and complete event history capture.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
 - Sample documents for deterministic tests: must be small and redistributable.
 - Choice of PDF parsing stack: must be deterministic and testable; avoid fragile OCR in MVP.
 - Manual check still required in GitHub Actions UI to confirm `Codex Run Prompt (Create PR)` appears and dispatches with repository secrets.
-- Tenant key management/rotation process is not yet documented; current baseline relies on environment configuration.
 
 ## 6) Decisions Log (High Level)
 - Start with Option 1: GitHub Actions + Codex GitHub Action for stable autonomy.

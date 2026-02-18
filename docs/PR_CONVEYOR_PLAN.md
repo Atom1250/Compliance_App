@@ -371,4 +371,18 @@ Definition of Done
 Tenant key lifecycle is documented and configuration validation prevents malformed key maps.
 Tests
 Unit tests for valid/invalid tenant key configuration parsing and validation.
+PR-110 — Run Lifecycle API Endpoints
+Objective
+Complete API support for run creation and workflow status/report retrieval.
+Scope
+Add run lifecycle endpoints:
+POST /runs (create queued run for tenant-scoped company)
+GET /runs/{run_id}/status
+GET /runs/{run_id}/report
+Enforce tenant isolation on all run lifecycle routes.
+Record structured audit events for lifecycle actions.
+Definition of Done
+Lifecycle endpoints provide deterministic responses and tenant-scoped access controls.
+Tests
+Integration tests for create/status/report happy path and cross-tenant denial.
 END OF ROADMAP
