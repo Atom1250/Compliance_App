@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-070
+Next PR ID: PR-080
 
 Planned PRs:
-- PR-070: Minimal Next.js UI (planned)
+- PR-080: API key auth + tenant isolation (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -132,6 +132,11 @@ Planned PRs:
   - Implemented retrieval + schema-enforced extraction flow for green finance obligations via the green finance requirements bundle.
   - Added reporting matrix generation directly from extracted assessments with evidence gating aligned to ESRS rules.
   - Added integration tests for enabled pipeline execution (stored assessments + reported matrix) and disabled-mode no-op behavior.
+- PR-070: Minimal Next.js UI completed:
+  - Added a minimal Next.js app scaffold under `apps/web` with a deterministic operational flow.
+  - Implemented required pages: company setup, upload docs, run configuration, run status, and report download.
+  - Added shared API client integration used across workflow pages with graceful local fallbacks for unavailable endpoints.
+  - Added CI-visible scaffold tests validating required pages and shared API-client wiring.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
