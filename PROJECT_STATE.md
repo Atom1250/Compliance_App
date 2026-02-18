@@ -27,10 +27,9 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-173
+Next PR ID: PR-174
 
 Planned PRs:
-- PR-173: Evidence pack download endpoint (planned)
 - PR-174: Frontend workflow API hardening (planned)
 - PR-175: Background job runner for run execution (planned)
 - PR-176: Tenant isolation hardening audit (planned)
@@ -209,6 +208,11 @@ Planned PRs:
   - On identical inputs, execute now reuses cached normalized assessment output and skips recomputation.
   - Kept execute response contract stable across cache-miss/cache-hit paths (`run_id`, `status`, `assessment_count`).
   - Added integration test coverage for cache hit/miss behavior and byte-identical cached output reuse.
+- PR-173: Evidence pack download endpoint completed:
+  - Added tenant-scoped `GET /runs/{run_id}/evidence-pack` endpoint wired to deterministic ZIP export.
+  - Added stable artifact naming (`run-{run_id}-evidence-pack.zip`) with configured output root support.
+  - Enforced run-status gating for evidence export (completed runs only) and tenant isolation.
+  - Added integration tests for happy-path ZIP response, tenant denial, and non-completed run rejection.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

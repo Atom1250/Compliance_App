@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,6 +30,7 @@ from apps.api.app.services.assessment_pipeline import (
     execute_assessment_pipeline,
 )
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
+from apps.api.app.services.evidence_pack import export_evidence_pack
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
 from apps.api.app.services.run_cache import RunHashInput, get_or_compute_cached_output
@@ -225,6 +228,32 @@ def run_report(
     )
     db.commit()
     return RunReportResponse(run_id=run.id, url=url)
+
+
+@router.get("/{run_id}/evidence-pack")
+def run_evidence_pack(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> FileResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    if run.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="evidence pack available only for completed runs",
+        )
+
+    settings = get_settings()
+    tenant_dir = Path(settings.evidence_pack_output_root) / auth.tenant_id
+    output_zip = tenant_dir / f"run-{run.id}-evidence-pack.zip"
+    export_evidence_pack(db, run_id=run.id, output_zip_path=output_zip)
+    return FileResponse(
+        path=output_zip,
+        media_type="application/zip",
+        filename=f"run-{run.id}-evidence-pack.zip",
+    )
 
 
 @router.get("/{run_id}/manifest", response_model=RunManifestResponse)

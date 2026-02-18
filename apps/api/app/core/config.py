@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://compliance:compliance@localhost:5432/compliance_app"
     object_storage_root: Path = Path(".data/object_store")
     object_storage_uri_prefix: str = "file://"
+    evidence_pack_output_root: Path = Path("outputs/evidence_packs")
     pdf_export_enabled: bool = False
     llm_base_url: str = "http://127.0.0.1:1234"
     llm_api_key: str = "lm-studio"
