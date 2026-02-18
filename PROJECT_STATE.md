@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-100
+Next PR ID: TBD
 
 Planned PRs:
-- PR-100: Tenant key management + rotation runbook (planned)
+- TBD: no further PR currently defined after PR-100.
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -152,6 +152,11 @@ Planned PRs:
   - Added run-event audit service to append and list ordered run history entries.
   - Added tenant-scoped run-events API endpoint (`GET /runs/{run_id}/events`) and persisted run events from materiality/required-datapoints workflows.
   - Added audit trail tests covering event ordering/completeness and tenant isolation.
+- PR-100: Tenant key management + rotation runbook completed:
+  - Added tenant key lifecycle runbook covering generation, rotation cadence, revocation, and verification checklist.
+  - Added strict tenant key configuration validation utility with explicit malformed entry detection.
+  - Added fail-fast startup validation to reject invalid tenant key mappings before serving requests.
+  - Added unit tests for valid/invalid key config parsing and startup validation behavior.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
