@@ -1,6 +1,6 @@
 # META PROMPT — Auto-Select Next PR from Roadmap
 
-You are Codex operating in this repository. Your job is to execute exactly ONE PR step from the roadmap and prepare the changes so the GitHub workflow can commit/push and open a PR.
+You are Codex operating in this repository. Your job is to execute exactly ONE PR step from the roadmap, validate it, and sync the result to GitHub.
 
 ## 0) Read These Files First (mandatory)
 - AGENTS.md
@@ -61,18 +61,29 @@ If you change an architectural decision (DB strategy, worker framework, parsing 
 
 If no architectural decision changed, do not create a new ADR.
 
-## 6) Make Changes Ready for PR Creation
-- Ensure repository is in a clean working state with changes staged-ready (workflow will commit).
+## 6) Sync to GitHub After Validation (mandatory)
+- Only proceed if both commands succeeded:
+  - `make lint`
+  - `make test`
+- Commit only files in scope of NEXT_PR with a clear commit message (e.g., `PR-XXX: <short summary>`).
+- Push the branch to GitHub (`origin`).
+- Ensure repository is clean after commit/push.
 - Do not add generated artifacts (node_modules, build outputs, zips, PDFs, __pycache__, .env).
 - If you add sample testdata, keep it small and redistributable.
 
-## 7) Output Requirements (for the workflow logs)
+## 7) Ask Approval Before Next PR (mandatory)
+After finishing NEXT_PR and syncing to GitHub, explicitly ask the user:
+- whether they approve proceeding to the next PR in sequence
+- that the next run will follow this same process
+
+## 8) Output Requirements (for the workflow logs/user reply)
 At the end, output:
 1) NEXT_PR implemented
 2) Key files changed (list)
 3) Tests run and results
-4) New Next PR ID value
-5) Any risks/blockers
+4) Commit SHA and push target (branch/remote)
+5) New Next PR ID value
+6) Any risks/blockers
+7) Approval question for running the next PR
 
-Do NOT claim you opened a PR (the workflow does that).
-
+Do NOT claim you opened a PR unless you actually did.
