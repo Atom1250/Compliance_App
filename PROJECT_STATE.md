@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: TBD
+Next PR ID: PR-100
 
 Planned PRs:
-- TBD: roadmap currently exhausted after PR-082 and PR-090.
+- PR-100: Tenant key management + rotation runbook (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.

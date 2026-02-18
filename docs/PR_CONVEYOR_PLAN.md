@@ -354,4 +354,21 @@ Snapshot expected outputs.
 CI fails on output drift.
 Definition of Done
 Identical run → identical output snapshot.
+PHASE K — Operations Hardening
+PR-100 — Tenant Key Management + Rotation Runbook
+Objective
+Operationalize tenant API key lifecycle with auditable rotation.
+Scope
+Add tenant key management runbook:
+Key generation
+Rotation cadence
+Revocation procedure
+Document required environment variable format and examples.
+Add validation utility:
+Checks auth key config format at startup.
+Fails fast on invalid tenant:key mappings.
+Definition of Done
+Tenant key lifecycle is documented and configuration validation prevents malformed key maps.
+Tests
+Unit tests for valid/invalid tenant key configuration parsing and validation.
 END OF ROADMAP
