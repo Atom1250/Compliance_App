@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-051
+Next PR ID: PR-052
 
 Planned PRs:
-- PR-051: Evidence pack ZIP export (planned)
+- PR-052: Optional PDF export (planned)
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -112,6 +112,11 @@ Planned PRs:
   - Added inline citation references in datapoint rows using evidence chunk IDs.
   - Added timestamp normalization utility for stable snapshot testing.
   - Added snapshot-style and repeatability tests to verify byte-stable normalized HTML output for identical inputs.
+- PR-051: Evidence pack ZIP export completed:
+  - Added deterministic ZIP exporter producing `manifest.json`, `assessments.jsonl`, `evidence.jsonl`, and referenced document binaries.
+  - Added stable entry ordering and fixed ZIP metadata timestamps to ensure reproducible archives for identical inputs.
+  - Added document integrity validation by re-hashing referenced document bytes against stored `sha256_hash`.
+  - Added manifest integrity test validating file structure and SHA-256 checks for all packed artifacts.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
