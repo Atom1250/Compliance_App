@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -11,6 +13,7 @@ from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.db.models import Run, RunMateriality
 from apps.api.app.db.session import get_db_session
+from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
 
 router = APIRouter(prefix="/runs", tags=["materiality"])
 
@@ -39,6 +42,17 @@ class RequiredDatapointsResponse(BaseModel):
     required_datapoint_ids: list[str]
 
 
+class RunEventItem(BaseModel):
+    event_type: str
+    payload: dict[str, object]
+    created_at: str
+
+
+class RunEventsResponse(BaseModel):
+    run_id: int
+    events: list[RunEventItem]
+
+
 @router.post("/{run_id}/materiality", response_model=MaterialityUpsertResponse)
 def upsert_materiality(
     run_id: int,
@@ -60,6 +74,24 @@ def upsert_materiality(
             db.add(RunMateriality(run_id=run_id, topic=entry.topic, is_material=entry.is_material))
         else:
             existing.is_material = entry.is_material
+
+    append_run_event(
+        db,
+        run_id=run_id,
+        event_type="materiality.updated",
+        payload={
+            "tenant_id": auth.tenant_id,
+            "topics": [
+                entry.topic for entry in sorted(payload.entries, key=lambda item: item.topic)
+            ],
+        },
+    )
+    log_structured_event(
+        "materiality.updated",
+        run_id=run_id,
+        tenant_id=auth.tenant_id,
+        topic_count=len(payload.entries),
+    )
 
     db.commit()
 
@@ -94,5 +126,47 @@ def required_datapoints_for_run(
         bundle_version=payload.bundle_version,
         run_id=run.id,
     )
+    append_run_event(
+        db,
+        run_id=run_id,
+        event_type="required_datapoints.resolved",
+        payload={
+            "tenant_id": auth.tenant_id,
+            "bundle_id": payload.bundle_id,
+            "bundle_version": payload.bundle_version,
+            "required_count": len(required),
+        },
+    )
+    log_structured_event(
+        "required_datapoints.resolved",
+        run_id=run_id,
+        tenant_id=auth.tenant_id,
+        required_count=len(required),
+    )
+    db.commit()
 
     return RequiredDatapointsResponse(run_id=run.id, required_datapoint_ids=required)
+
+
+@router.get("/{run_id}/events", response_model=RunEventsResponse)
+def run_events(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunEventsResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+
+    events = list_run_events(db, run_id=run_id)
+    return RunEventsResponse(
+        run_id=run_id,
+        events=[
+            RunEventItem(
+                event_type=event.event_type,
+                payload=json.loads(event.payload),
+                created_at=event.created_at.isoformat(),
+            )
+            for event in events
+        ],
+    )

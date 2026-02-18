@@ -1,0 +1,42 @@
+"""Structured logging and run-event audit trail helpers."""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from apps.api.app.db.models import RunEvent
+
+_audit_logger = logging.getLogger("compliance.audit")
+
+
+def log_structured_event(event_type: str, **fields: Any) -> str:
+    payload = {"event_type": event_type, **fields}
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    _audit_logger.info(serialized)
+    return serialized
+
+
+def append_run_event(
+    db: Session,
+    *,
+    run_id: int,
+    event_type: str,
+    payload: dict[str, Any],
+) -> RunEvent:
+    serialized_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    event = RunEvent(run_id=run_id, event_type=event_type, payload=serialized_payload)
+    db.add(event)
+    return event
+
+
+def list_run_events(db: Session, *, run_id: int) -> list[RunEvent]:
+    return db.scalars(
+        select(RunEvent)
+        .where(RunEvent.run_id == run_id)
+        .order_by(RunEvent.created_at.asc(), RunEvent.id.asc())
+    ).all()

@@ -27,10 +27,10 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: PR-082
+Next PR ID: TBD
 
 Planned PRs:
-- PR-082: Structured logging + audit trail (planned)
+- TBD: roadmap currently exhausted after PR-082 and PR-090.
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -147,6 +147,11 @@ Planned PRs:
   - Added golden snapshot harness producing deterministic output contract fields (hashes, chunk IDs, ranking, report snapshot).
   - Added committed snapshot artifact under `tests/golden/` and drift test that fails CI when output changes.
   - Added repeatability test confirming identical golden-run outputs across repeated execution.
+- PR-082: Structured logging + audit trail completed:
+  - Added structured JSON logging helper for deterministic audit log payloads.
+  - Added run-event audit service to append and list ordered run history entries.
+  - Added tenant-scoped run-events API endpoint (`GET /runs/{run_id}/events`) and persisted run events from materiality/required-datapoints workflows.
+  - Added audit trail tests covering event ordering/completeness and tenant isolation.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).

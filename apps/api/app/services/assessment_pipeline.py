@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.db.models import DatapointAssessment, DatapointDefinition, RequirementBundle, Run
+from apps.api.app.services.audit import append_run_event, log_structured_event
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.retrieval import retrieve_chunks
 from apps.api.app.services.verification import verify_assessment
@@ -44,6 +45,24 @@ def execute_assessment_pipeline(
     )
     if bundle is None:
         raise ValueError(f"Bundle not found: {config.bundle_id}@{config.bundle_version}")
+
+    append_run_event(
+        db,
+        run_id=run.id,
+        event_type="assessment.pipeline.started",
+        payload={
+            "tenant_id": run.tenant_id,
+            "bundle_id": config.bundle_id,
+            "bundle_version": config.bundle_version,
+        },
+    )
+    log_structured_event(
+        "assessment.pipeline.started",
+        run_id=run.id,
+        tenant_id=run.tenant_id,
+        bundle_id=config.bundle_id,
+        bundle_version=config.bundle_version,
+    )
 
     required_datapoints = resolve_required_datapoint_ids(
         db,
@@ -125,6 +144,19 @@ def execute_assessment_pipeline(
         db.add(assessment)
         created.append(assessment)
 
+    db.commit()
+    append_run_event(
+        db,
+        run_id=run.id,
+        event_type="assessment.pipeline.completed",
+        payload={"tenant_id": run.tenant_id, "assessment_count": len(created)},
+    )
+    log_structured_event(
+        "assessment.pipeline.completed",
+        run_id=run.id,
+        tenant_id=run.tenant_id,
+        assessment_count=len(created),
+    )
     db.commit()
     for item in created:
         db.refresh(item)
