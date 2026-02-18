@@ -100,7 +100,7 @@ def auto_discover_documents(
 
     candidates = search_tavily_documents(
         company_name=company.name,
-        reporting_year=company.reporting_year,
+        reporting_year=company.reporting_year_end or company.reporting_year,
         api_key=settings.tavily_api_key,
         base_url=settings.tavily_base_url,
         timeout_seconds=settings.tavily_timeout_seconds,

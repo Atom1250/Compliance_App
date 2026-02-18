@@ -248,6 +248,7 @@ Planned PRs:
 - Sample documents for deterministic tests: must be small and redistributable.
 - Choice of PDF parsing stack: must be deterministic and testable; avoid fragile OCR in MVP.
 - Manual check still required in GitHub Actions UI to confirm `Codex Run Prompt (Create PR)` appears and dispatches with repository secrets.
+- Discovery quality hardening needed: enforce file-type/domain filters in Tavily auto-discovery (PDF-first, report-document focused) to avoid indexing non-report listing pages.
 
 ## 6) Decisions Log (High Level)
 - Start with Option 1: GitHub Actions + Codex GitHub Action for stable autonomy.

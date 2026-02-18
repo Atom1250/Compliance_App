@@ -15,6 +15,7 @@ Initial project scaffold.
 - Override ports if needed: `make dev WEB_PORT=3100 API_PORT=8100`
 - `make dev` uses local SQLite by default (`sqlite:///outputs/dev/compliance_app.sqlite`) and runs migrations automatically.
 - `make dev`, `make dev-api`, and `make dev-web` auto-load `.env` when present.
+- `make dev` and `make dev-api` also auto-import requirements bundles (`esrs_mini`, `green_finance_mini`) so run execution can start without manual DB seeding.
 
 ## UAT Harness
 
@@ -46,6 +47,33 @@ Optional tuning:
 - `COMPLIANCE_APP_TAVILY_TIMEOUT_SECONDS` (default `20`)
 - `COMPLIANCE_APP_TAVILY_DOWNLOAD_TIMEOUT_SECONDS` (default `30`)
 - `COMPLIANCE_APP_TAVILY_MAX_DOCUMENT_BYTES` (default `10000000`)
+
+## LLM Provider Comparison
+
+Run configuration now supports:
+- `deterministic_fallback`
+- `local_lm_studio`
+- `openai_cloud`
+- `esrs_mini@2026.01` (current baseline)
+- `esrs_mini@2024.01` (legacy/pre-2026 historical testing)
+
+Company setup supports reporting year ranges (`start/end`), and applicability uses
+`reporting_year_end` as the effective year for rule evaluation.
+
+Cloud provider env vars:
+- `COMPLIANCE_APP_OPENAI_BASE_URL` (default `https://api.openai.com/v1`)
+- `COMPLIANCE_APP_OPENAI_API_KEY`
+- `COMPLIANCE_APP_OPENAI_MODEL` (default `gpt-4o-mini`)
+
+## Run Diagnostics
+
+Use the run diagnostics script to identify where a run fails or goes empty:
+
+- `python scripts/diagnose_run.py --database-url sqlite:///outputs/dev/compliance_app.sqlite --run-id <RUN_ID>`
+
+If older runs/documents are missing chunks, backfill them without resetting the DB:
+
+- `python scripts/backfill_chunks.py --database-url sqlite:///outputs/dev/compliance_app.sqlite`
 
 ## Database
 

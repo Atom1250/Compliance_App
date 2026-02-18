@@ -1,9 +1,11 @@
+import httpx
 import pytest
 
 from apps.api.app.services.llm_extraction import (
     ExtractionClient,
     ExtractionResult,
     ExtractionStatus,
+    OpenAICompatibleTransport,
 )
 
 
@@ -84,3 +86,44 @@ def test_evidence_gating_rejects_present_without_evidence() -> None:
 
     with pytest.raises(Exception):
         client.extract(datapoint_key="ESRS-E1-6", context_chunks=["chunk text"])
+
+
+def test_openai_transport_falls_back_to_chat_completions(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def _mock_post(url: str, **kwargs):
+        calls.append(url)
+        if url.endswith("/responses"):
+            return httpx.Response(
+                400,
+                json={"error": {"message": "bad request"}},
+                request=httpx.Request("POST", url),
+            )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"status":"Absent","value":null,"evidence_chunk_ids":[],'  # noqa: E501
+                                '"rationale":"fallback path"}'
+                            )
+                        }
+                    }
+                ]
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", _mock_post)
+    transport = OpenAICompatibleTransport(base_url="https://api.openai.com/v1", api_key="test")
+    payload = transport.create_response(
+        model="gpt-4o-mini",
+        input_text="hello",
+        temperature=0.0,
+        json_schema={"type": "object"},
+    )
+    assert calls[0].endswith("/responses")
+    assert calls[1].endswith("/chat/completions")
+    assert payload["output"][0]["content"][0]["type"] == "output_text"

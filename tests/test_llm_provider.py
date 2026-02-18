@@ -11,3 +11,23 @@ def test_lm_studio_provider_uses_configured_model_and_base_url() -> None:
 
     client = build_extraction_client_from_settings(settings)
     assert client.model_name == "ministral-3-8b-instruct-2512-mlx"
+
+
+def test_openai_cloud_provider_uses_cloud_model() -> None:
+    settings = Settings(
+        openai_base_url="https://api.openai.com/v1",
+        openai_api_key="test-key",
+        openai_model="gpt-4o-mini",
+    )
+
+    client = build_extraction_client_from_settings(settings, provider="openai_cloud")
+    assert client.model_name == "gpt-4o-mini"
+
+
+def test_openai_cloud_provider_requires_api_key() -> None:
+    settings = Settings(openai_api_key="")
+    try:
+        build_extraction_client_from_settings(settings, provider="openai_cloud")
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "openai_api_key is required" in str(exc)

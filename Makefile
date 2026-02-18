@@ -9,7 +9,7 @@ DEV_API_KEY ?= dev-key
 DEV_TENANT_ID ?= default
 DEV_DATABASE_URL ?= sqlite:///outputs/dev/compliance_app.sqlite
 
-.PHONY: setup setup-refresh lint test uat ui-setup dev dev-api dev-web
+.PHONY: setup setup-refresh seed-requirements lint test uat ui-setup dev dev-api dev-web
 
 setup:
 	@if [ ! -x "$(PYTHON)" ]; then \
@@ -21,6 +21,16 @@ setup:
 setup-refresh:
 	$(PYTHON) -m pip install --upgrade pip
 	$(PYTHON) -m pip install -e '.[dev]'
+
+seed-requirements: setup
+	@/bin/zsh -lc 'set -e; \
+	if [ -f .env ]; then set -a; source .env; set +a; fi; \
+	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} \
+	$(PYTHON) -m app.requirements import --bundle requirements/esrs_mini/bundle.json >/dev/null; \
+	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} \
+	$(PYTHON) -m app.requirements import --bundle requirements/esrs_mini_legacy/bundle.json >/dev/null; \
+	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} \
+	$(PYTHON) -m app.requirements import --bundle requirements/green_finance_icma_eugb/bundle.json >/dev/null'
 
 lint: setup
 	$(PYTHON) -m ruff check src apps tests
@@ -41,6 +51,12 @@ dev-api: setup
 	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} \
 	$(PYTHON) -m alembic upgrade head; \
 	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} \
+	$(PYTHON) -m app.requirements import --bundle requirements/esrs_mini/bundle.json >/dev/null; \
+	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} \
+	$(PYTHON) -m app.requirements import --bundle requirements/esrs_mini_legacy/bundle.json >/dev/null; \
+	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} \
+	$(PYTHON) -m app.requirements import --bundle requirements/green_finance_icma_eugb/bundle.json >/dev/null; \
+	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} \
 	$(PYTHON) -m uvicorn apps.api.main:app --host $(API_HOST) --port $(API_PORT) --reload'
 
 dev-web:
@@ -58,6 +74,9 @@ dev: setup
 	if [ -f .env ]; then set -a; source .env; set +a; fi; \
 	mkdir -p outputs/dev; \
 	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} $(PYTHON) -m alembic upgrade head >/tmp/compliance-api.log 2>&1; \
+	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} $(PYTHON) -m app.requirements import --bundle requirements/esrs_mini/bundle.json >>/tmp/compliance-api.log 2>&1; \
+	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} $(PYTHON) -m app.requirements import --bundle requirements/esrs_mini_legacy/bundle.json >>/tmp/compliance-api.log 2>&1; \
+	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} $(PYTHON) -m app.requirements import --bundle requirements/green_finance_icma_eugb/bundle.json >>/tmp/compliance-api.log 2>&1; \
 	COMPLIANCE_APP_DATABASE_URL=$${COMPLIANCE_APP_DATABASE_URL:-$(DEV_DATABASE_URL)} \
 	$(PYTHON) -m uvicorn apps.api.main:app --host $(API_HOST) --port $(API_PORT) --reload >>/tmp/compliance-api.log 2>&1 & \
 	api_pid=$$!; \

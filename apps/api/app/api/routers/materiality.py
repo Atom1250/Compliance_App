@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
     Company,
+    DatapointAssessment,
     Run,
     RunEvent,
     RunManifest,
@@ -24,6 +26,7 @@ from apps.api.app.db.models import (
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
 from apps.api.app.services.evidence_pack import export_evidence_pack
+from apps.api.app.services.reporting import generate_html_report
 from apps.api.app.services.run_execution_worker import (
     RunExecutionPayload,
     current_assessment_count,
@@ -82,11 +85,6 @@ class RunStatusResponse(BaseModel):
     status: str
 
 
-class RunReportResponse(BaseModel):
-    run_id: int
-    url: str
-
-
 class RunManifestResponse(BaseModel):
     run_id: int
     document_hashes: list[str]
@@ -96,6 +94,15 @@ class RunManifestResponse(BaseModel):
     model_name: str
     prompt_hash: str
     git_sha: str
+
+
+class EvidencePackPreviewResponse(BaseModel):
+    run_id: int
+    entries: list[str]
+    pack_file_count: int
+    document_count: int
+    has_assessments: bool
+    has_evidence: bool
 
 
 class RunExecuteRequest(BaseModel):
@@ -173,31 +180,80 @@ def run_status(
     return RunStatusResponse(run_id=run.id, status=run.status)
 
 
-@router.get("/{run_id}/report", response_model=RunReportResponse)
+def _load_completed_run(
+    db: Session,
+    *,
+    run_id: int,
+    tenant_id: str,
+    resource_name: str,
+) -> Run:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    if run.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{resource_name} available only for completed runs",
+        )
+    return run
+
+
+def _render_report_html(db: Session, *, run: Run, tenant_id: str) -> str:
+    assessments = db.scalars(
+        select(DatapointAssessment)
+        .where(
+            DatapointAssessment.run_id == run.id,
+            DatapointAssessment.tenant_id == tenant_id,
+        )
+        .order_by(DatapointAssessment.datapoint_key)
+    ).all()
+    return generate_html_report(run_id=run.id, assessments=assessments)
+
+
+@router.get("/{run_id}/report")
 def run_report(
     run_id: int,
     auth: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
-) -> RunReportResponse:
-    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
-    url = f"/reports/run-{run.id}.html"
+) -> HTMLResponse:
+    run = _load_completed_run(
+        db,
+        run_id=run_id,
+        tenant_id=auth.tenant_id,
+        resource_name="report",
+    )
+    html = _render_report_html(db, run=run, tenant_id=auth.tenant_id)
     append_run_event(
         db,
         run_id=run.id,
         tenant_id=auth.tenant_id,
         event_type="run.report.requested",
-        payload={"tenant_id": auth.tenant_id, "url": url},
+        payload={"tenant_id": auth.tenant_id, "path": f"/runs/{run.id}/report"},
     )
     log_structured_event(
         "run.report.requested",
         run_id=run.id,
         tenant_id=auth.tenant_id,
-        url=url,
+        path=f"/runs/{run.id}/report",
     )
     db.commit()
-    return RunReportResponse(run_id=run.id, url=url)
+    return HTMLResponse(content=html)
+
+
+@router.get("/{run_id}/report-html")
+def run_report_html(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> HTMLResponse:
+    run = _load_completed_run(
+        db,
+        run_id=run_id,
+        tenant_id=auth.tenant_id,
+        resource_name="report",
+    )
+    html = _render_report_html(db, run=run, tenant_id=auth.tenant_id)
+    return HTMLResponse(content=html)
 
 
 @router.get("/{run_id}/evidence-pack")
@@ -206,14 +262,12 @@ def run_evidence_pack(
     auth: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> FileResponse:
-    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
-    if run.status != "completed":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="evidence pack available only for completed runs",
-        )
+    run = _load_completed_run(
+        db,
+        run_id=run_id,
+        tenant_id=auth.tenant_id,
+        resource_name="evidence pack",
+    )
 
     settings = get_settings()
     tenant_dir = Path(settings.evidence_pack_output_root) / auth.tenant_id
@@ -223,6 +277,38 @@ def run_evidence_pack(
         path=output_zip,
         media_type="application/zip",
         filename=f"run-{run.id}-evidence-pack.zip",
+    )
+
+
+@router.get("/{run_id}/evidence-pack-preview", response_model=EvidencePackPreviewResponse)
+def run_evidence_pack_preview(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> EvidencePackPreviewResponse:
+    run = _load_completed_run(
+        db,
+        run_id=run_id,
+        tenant_id=auth.tenant_id,
+        resource_name="evidence pack",
+    )
+
+    settings = get_settings()
+    tenant_dir = Path(settings.evidence_pack_output_root) / auth.tenant_id
+    output_zip = tenant_dir / f"run-{run.id}-evidence-pack.zip"
+    export_evidence_pack(db, run_id=run.id, tenant_id=auth.tenant_id, output_zip_path=output_zip)
+
+    with zipfile.ZipFile(output_zip, "r") as zf:
+        entries = zf.namelist()
+        manifest = json.loads(zf.read("manifest.json"))
+
+    return EvidencePackPreviewResponse(
+        run_id=run.id,
+        entries=entries,
+        pack_file_count=len(manifest.get("pack_files", [])),
+        document_count=len(manifest.get("documents", [])),
+        has_assessments="assessments.jsonl" in entries,
+        has_evidence="evidence.jsonl" in entries,
     )
 
 

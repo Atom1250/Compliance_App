@@ -7,20 +7,30 @@ import { createCompany } from "../../lib/api-client";
 
 export default function CompanySetupPage() {
   const [name, setName] = useState("Atom Climate Holdings");
-  const [reportingYear, setReportingYear] = useState("2026");
+  const [reportingYearStart, setReportingYearStart] = useState("2024");
+  const [reportingYearEnd, setReportingYearEnd] = useState("2026");
   const [companyId, setCompanyId] = useState<number | null>(null);
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   async function saveCompany() {
+    const startYear = Number(reportingYearStart);
+    const endYear = Number(reportingYearEnd);
+    if (!Number.isFinite(startYear) || !Number.isFinite(endYear) || startYear > endYear) {
+      setStatus("Save failed.");
+      setError("Reporting year range is invalid. Ensure start year is less than or equal to end year.");
+      return;
+    }
     setIsSaving(true);
     setError("");
     setStatus("Saving company...");
     try {
       const created = await createCompany({
         name,
-        reportingYear: Number(reportingYear),
+        reportingYear: endYear,
+        reportingYearStart: startYear,
+        reportingYearEnd: endYear,
         listedStatus: true
       });
       if (!created?.id) {
@@ -28,7 +38,9 @@ export default function CompanySetupPage() {
       }
       localStorage.setItem("company_id", String(created.id));
       localStorage.setItem("company_name", name);
-      localStorage.setItem("company_reporting_year", reportingYear);
+      localStorage.setItem("company_reporting_year", reportingYearEnd);
+      localStorage.setItem("company_reporting_year_start", reportingYearStart);
+      localStorage.setItem("company_reporting_year_end", reportingYearEnd);
       setCompanyId(created.id);
       setStatus(`Company ${created.id} saved.`);
     } catch (caught) {
@@ -56,11 +68,20 @@ export default function CompanySetupPage() {
           <input value={name} onChange={(event) => setName(event.target.value)} required />
         </label>
         <label>
-          Reporting Year
+          Reporting Year Start
           <input
             type="number"
-            value={reportingYear}
-            onChange={(event) => setReportingYear(event.target.value)}
+            value={reportingYearStart}
+            onChange={(event) => setReportingYearStart(event.target.value)}
+            required
+          />
+        </label>
+        <label>
+          Reporting Year End
+          <input
+            type="number"
+            value={reportingYearEnd}
+            onChange={(event) => setReportingYearEnd(event.target.value)}
             required
           />
         </label>

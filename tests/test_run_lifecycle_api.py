@@ -1,12 +1,12 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from alembic import command
 from alembic.config import Config
-from apps.api.app.db.models import Company
+from apps.api.app.db.models import Company, Run
 from apps.api.main import app
 
 AUTH_DEFAULT = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
@@ -48,8 +48,12 @@ def test_run_lifecycle_endpoints_happy_path(monkeypatch, tmp_path: Path) -> None
     assert status_response.json() == {"run_id": run_id, "status": "queued"}
 
     report_response = client.get(f"/runs/{run_id}/report", headers=AUTH_DEFAULT)
-    assert report_response.status_code == 200
-    assert report_response.json() == {"run_id": run_id, "url": f"/reports/run-{run_id}.html"}
+    assert report_response.status_code == 409
+    assert report_response.json()["detail"] == "report available only for completed runs"
+
+    report_html_response = client.get(f"/runs/{run_id}/report-html", headers=AUTH_DEFAULT)
+    assert report_html_response.status_code == 409
+    assert report_html_response.json()["detail"] == "report available only for completed runs"
 
 
 
@@ -72,6 +76,9 @@ def test_run_lifecycle_endpoints_are_tenant_scoped(monkeypatch, tmp_path: Path) 
     forbidden_report = client.get(f"/runs/{run_id}/report", headers=AUTH_OTHER)
     assert forbidden_report.status_code == 404
 
+    forbidden_report_html = client.get(f"/runs/{run_id}/report-html", headers=AUTH_OTHER)
+    assert forbidden_report_html.status_code == 404
+
 
 
 def test_run_lifecycle_events_are_recorded(monkeypatch, tmp_path: Path) -> None:
@@ -87,7 +94,15 @@ def test_run_lifecycle_events_are_recorded(monkeypatch, tmp_path: Path) -> None:
     run_id = created.json()["run_id"]
 
     client.get(f"/runs/{run_id}/status", headers=AUTH_DEFAULT)
-    client.get(f"/runs/{run_id}/report", headers=AUTH_DEFAULT)
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        run = session.scalar(select(Run).where(Run.id == run_id))
+        assert run is not None
+        run.status = "completed"
+        session.commit()
+
+    report_response = client.get(f"/runs/{run_id}/report", headers=AUTH_DEFAULT)
+    assert report_response.status_code == 200
 
     events = client.get(f"/runs/{run_id}/events", headers=AUTH_DEFAULT)
     assert events.status_code == 200

@@ -122,6 +122,10 @@ def test_run_execute_happy_path_stores_assessments(monkeypatch, tmp_path: Path) 
     assert "run.execution.queued" in event_types
     assert "run.execution.completed" in event_types
 
+    report_html = client.get(f"/runs/{run_id}/report-html", headers=AUTH_DEFAULT)
+    assert report_html.status_code == 200
+    assert "Compliance Report for Run" in report_html.text
+
     engine = create_engine(db_url)
     with Session(engine) as session:
         stored = session.scalars(
@@ -177,7 +181,7 @@ def test_run_execute_accepts_local_lm_studio_provider(monkeypatch, tmp_path: Pat
     monkeypatch.setattr(
         worker_module,
         "build_extraction_client_from_settings",
-        lambda _settings: ExtractionClient(
+        lambda _settings, **_kwargs: ExtractionClient(
             transport=_MockTransport(),
             model="ministral-3-8b-instruct-2512-mlx",
         ),

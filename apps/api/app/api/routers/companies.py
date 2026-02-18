@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,22 @@ class CompanyCreateRequest(BaseModel):
     turnover: float | None = Field(default=None, ge=0)
     listed_status: bool | None = None
     reporting_year: int | None = Field(default=None, ge=1900, le=3000)
+    reporting_year_start: int | None = Field(default=None, ge=1900, le=3000)
+    reporting_year_end: int | None = Field(default=None, ge=1900, le=3000)
+
+    @model_validator(mode="after")
+    def validate_reporting_year_fields(self) -> CompanyCreateRequest:
+        if self.reporting_year is None and (
+            self.reporting_year_start is None or self.reporting_year_end is None
+        ):
+            return self
+        if self.reporting_year_start is None and self.reporting_year_end is None:
+            return self
+        if self.reporting_year_start is None or self.reporting_year_end is None:
+            raise ValueError("reporting_year_start and reporting_year_end must both be provided")
+        if self.reporting_year_start > self.reporting_year_end:
+            raise ValueError("reporting_year_start must be <= reporting_year_end")
+        return self
 
 
 class CompanyItem(BaseModel):
@@ -30,6 +46,8 @@ class CompanyItem(BaseModel):
     turnover: float | None
     listed_status: bool | None
     reporting_year: int | None
+    reporting_year_start: int | None
+    reporting_year_end: int | None
 
 
 class CompanyCreateResponse(CompanyItem):
@@ -46,13 +64,28 @@ def create_company(
     auth: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> CompanyCreateResponse:
+    reporting_year_start = payload.reporting_year_start
+    reporting_year_end = payload.reporting_year_end
+    if (
+        payload.reporting_year is not None
+        and reporting_year_start is None
+        and reporting_year_end is None
+    ):
+        reporting_year_start = payload.reporting_year
+        reporting_year_end = payload.reporting_year
+    effective_reporting_year = payload.reporting_year
+    if effective_reporting_year is None:
+        effective_reporting_year = reporting_year_end
+
     company = Company(
         tenant_id=auth.tenant_id,
         name=payload.name,
         employees=payload.employees,
         turnover=payload.turnover,
         listed_status=payload.listed_status,
-        reporting_year=payload.reporting_year,
+        reporting_year=effective_reporting_year,
+        reporting_year_start=reporting_year_start,
+        reporting_year_end=reporting_year_end,
     )
     db.add(company)
     db.commit()
@@ -72,6 +105,8 @@ def create_company(
         turnover=company.turnover,
         listed_status=company.listed_status,
         reporting_year=company.reporting_year,
+        reporting_year_start=company.reporting_year_start,
+        reporting_year_end=company.reporting_year_end,
     )
 
 
@@ -101,6 +136,8 @@ def list_companies(
                 turnover=row.turnover,
                 listed_status=row.listed_status,
                 reporting_year=row.reporting_year,
+                reporting_year_start=row.reporting_year_start,
+                reporting_year_end=row.reporting_year_end,
             )
             for row in rows
         ]

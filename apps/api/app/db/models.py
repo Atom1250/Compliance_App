@@ -22,6 +22,8 @@ class Company(Base):
     turnover: Mapped[float | None] = mapped_column(nullable=True)
     listed_status: Mapped[bool | None] = mapped_column(nullable=True)
     reporting_year: Mapped[int | None] = mapped_column(nullable=True)
+    reporting_year_start: Mapped[int | None] = mapped_column(nullable=True)
+    reporting_year_end: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

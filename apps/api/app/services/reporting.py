@@ -58,6 +58,7 @@ def generate_html_report(
             f"<td>{html.escape(item.status)}</td>"
             f"<td>{html.escape(item.value or '-')}</td>"
             f"<td>{_citations(item.evidence_chunk_ids)}</td>"
+            f"<td>{html.escape(item.rationale)}</td>"
             "</tr>"
         )
         for item in ordered
@@ -90,7 +91,7 @@ def generate_html_report(
         "<section id=\"datapoint-table\">"
         "<h2>Datapoint Table</h2>"
         "<table>"
-        "<thead><tr><th>Datapoint</th><th>Status</th><th>Value</th><th>Citations</th></tr></thead>"
+        "<thead><tr><th>Datapoint</th><th>Status</th><th>Value</th><th>Citations</th><th>Rationale</th></tr></thead>"
         f"<tbody>{table_rows}</tbody>"
         "</table>"
         "</section>"

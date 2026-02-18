@@ -4,6 +4,8 @@ export type CompanySetupPayload = {
   turnover?: number;
   listedStatus?: boolean;
   reportingYear?: number;
+  reportingYearStart?: number;
+  reportingYearEnd?: number;
 };
 
 export type UploadPayload = {
@@ -16,11 +18,11 @@ export type RunConfigPayload = {
   companyId: number;
   bundleId: string;
   bundleVersion: string;
-  greenFinanceEnabled: boolean;
-  llmProvider: "deterministic_fallback" | "local_lm_studio";
+  llmProvider: "deterministic_fallback" | "local_lm_studio" | "openai_cloud";
 };
 
 export type LLMHealthResponse = {
+  provider: string;
   base_url: string;
   model: string;
   reachable: boolean | null;
@@ -41,6 +43,15 @@ export type AutoDiscoverResponse = {
     source_url: string;
     reason: string;
   }>;
+};
+
+export type EvidencePackPreviewResponse = {
+  run_id: number;
+  entries: string[];
+  pack_file_count: number;
+  document_count: number;
+  has_assessments: boolean;
+  has_evidence: boolean;
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -86,7 +97,9 @@ export async function createCompany(payload: CompanySetupPayload): Promise<{ id:
       employees: payload.employees,
       turnover: payload.turnover,
       listed_status: payload.listedStatus,
-      reporting_year: payload.reportingYear
+      reporting_year: payload.reportingYear,
+      reporting_year_start: payload.reportingYearStart,
+      reporting_year_end: payload.reportingYearEnd
     })
   });
   return { id: response.id };
@@ -153,15 +166,65 @@ export async function fetchRunStatus(runId: number): Promise<{ status: string }>
   return request<{ status: string }>(`/runs/${runId}/status`);
 }
 
-export async function fetchReportDownload(runId: number): Promise<{ url: string }> {
-  return request<{ url: string }>(`/runs/${runId}/report`);
+export async function fetchReportHtml(runId: number): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/runs/${runId}/report`, {
+    method: "GET",
+    headers: authHeaders()
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`API /runs/${runId}/report failed (${response.status}): ${detail}`);
+  }
+  return response.text();
+}
+
+export async function fetchEvidencePackPreview(
+  runId: number
+): Promise<EvidencePackPreviewResponse> {
+  return request<EvidencePackPreviewResponse>(`/runs/${runId}/evidence-pack-preview`);
 }
 
 export function buildEvidencePackDownloadUrl(runId: number): string {
   return `${API_BASE_URL}/runs/${runId}/evidence-pack`;
 }
 
-export async function fetchLLMHealth(probe = false): Promise<LLMHealthResponse> {
-  const query = probe ? "?probe=true" : "";
+async function downloadWithAuth(path: string, filename: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    headers: authHeaders()
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`API ${path} failed (${response.status}): ${detail}`);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadRunReport(runId: number): Promise<void> {
+  await downloadWithAuth(`/runs/${runId}/report`, `run-${runId}-report.html`);
+}
+
+export async function downloadEvidencePack(runId: number): Promise<void> {
+  await downloadWithAuth(`/runs/${runId}/evidence-pack`, `run-${runId}-evidence-pack.zip`);
+}
+
+export async function fetchLLMHealth(
+  provider: "local_lm_studio" | "openai_cloud",
+  probe = false
+): Promise<LLMHealthResponse> {
+  const params = new URLSearchParams({ provider });
+  if (probe) {
+    params.set("probe", "true");
+  }
+  const query = `?${params.toString()}`;
   return request<LLMHealthResponse>(`/llm-health${query}`);
 }

@@ -60,6 +60,9 @@ def search_tavily_documents(
         url = str(item.get("url", "")).strip()
         if not url.startswith(("http://", "https://")):
             continue
+        parsed = urlparse(url)
+        if not parsed.path.lower().endswith(".pdf"):
+            continue
         candidates.append(
             TavilyCandidate(
                 title=str(item.get("title", "")).strip() or "Discovered ESG Document",
@@ -73,7 +76,7 @@ def search_tavily_documents(
 def _filename_from_url(url: str) -> str:
     parsed = urlparse(url)
     basename = parsed.path.rsplit("/", maxsplit=1)[-1].strip()
-    return basename or "discovered-document.bin"
+    return basename or "discovered-document.pdf"
 
 
 def download_discovery_candidate(
@@ -85,6 +88,10 @@ def download_discovery_candidate(
     response = httpx.get(candidate.url, timeout=timeout_seconds, follow_redirects=True)
     response.raise_for_status()
     content = response.content
+    content_type = response.headers.get("content-type", "").lower()
+    looks_like_pdf = content.startswith(b"%PDF-")
+    if "application/pdf" not in content_type and not looks_like_pdf:
+        raise ValueError("downloaded content is not a PDF")
     if not content:
         raise ValueError("empty downloaded document")
     if len(content) > max_document_bytes:

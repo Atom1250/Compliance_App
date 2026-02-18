@@ -80,7 +80,7 @@ export default function UploadPage() {
         </label>
         <label>
           Select File
-          <input name="file" type="file" accept=".pdf,.docx" required />
+          <input name="file" type="file" accept=".pdf,application/pdf" required />
         </label>
         <button type="submit" disabled={isUploading}>
           {isUploading ? "Uploading..." : "Upload"}

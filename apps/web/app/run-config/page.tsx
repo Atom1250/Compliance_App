@@ -10,8 +10,9 @@ export default function RunConfigPage() {
   const router = useRouter();
   const [bundleId, setBundleId] = useState("esrs_mini");
   const [bundleVersion, setBundleVersion] = useState("2026.01");
-  const [greenFinanceEnabled, setGreenFinanceEnabled] = useState(true);
-  const [llmProvider, setLlmProvider] = useState<"deterministic_fallback" | "local_lm_studio">(
+  const [llmProvider, setLlmProvider] = useState<
+    "deterministic_fallback" | "local_lm_studio" | "openai_cloud"
+  >(
     "deterministic_fallback"
   );
   const [llmHealth, setLlmHealth] = useState<LLMHealthResponse | null>(null);
@@ -32,7 +33,6 @@ export default function RunConfigPage() {
         companyId,
         bundleId,
         bundleVersion,
-        greenFinanceEnabled,
         llmProvider
       });
       if (!configured?.runId) {
@@ -52,7 +52,8 @@ export default function RunConfigPage() {
 
     async function loadHealth() {
       try {
-        const response = await fetchLLMHealth(false);
+        const provider = llmProvider === "openai_cloud" ? "openai_cloud" : "local_lm_studio";
+        const response = await fetchLLMHealth(provider, false);
         if (isMounted) {
           setLlmHealth(response);
           setLlmHealthStatus("LLM config loaded.");
@@ -69,6 +70,13 @@ export default function RunConfigPage() {
     return () => {
       isMounted = false;
     };
+  }, [llmProvider]);
+
+  useEffect(() => {
+    const endYear = Number(window.localStorage.getItem("company_reporting_year_end") ?? "0");
+    if (Number.isFinite(endYear) && endYear > 0 && endYear < 2026) {
+      setBundleVersion("2024.01");
+    }
   }, []);
 
   return (
@@ -87,36 +95,29 @@ export default function RunConfigPage() {
           Bundle ID
           <input value={bundleId} onChange={(event) => setBundleId(event.target.value)} required />
         </label>
-        <div className="row">
-          <label>
-            Bundle Version
-            <input
-              value={bundleVersion}
-              onChange={(event) => setBundleVersion(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Green Finance Mode
-            <select
-              value={greenFinanceEnabled ? "enabled" : "disabled"}
-              onChange={(event) => setGreenFinanceEnabled(event.target.value === "enabled")}
-            >
-              <option value="enabled">Enabled</option>
-              <option value="disabled">Disabled</option>
-            </select>
-          </label>
-        </div>
+        <label>
+          Bundle Version
+          <select value={bundleVersion} onChange={(event) => setBundleVersion(event.target.value)}>
+            <option value="2026.01">2026.01 (current CSRD/ESRS)</option>
+            <option value="2024.01">2024.01 (legacy/pre-2026 test)</option>
+          </select>
+        </label>
         <label>
           Execution Provider
           <select
             value={llmProvider}
             onChange={(event) =>
-              setLlmProvider(event.target.value as "deterministic_fallback" | "local_lm_studio")
+              setLlmProvider(
+                event.target.value as
+                  | "deterministic_fallback"
+                  | "local_lm_studio"
+                  | "openai_cloud"
+              )
             }
           >
             <option value="deterministic_fallback">deterministic_fallback</option>
             <option value="local_lm_studio">local_lm_studio</option>
+            <option value="openai_cloud">openai_cloud</option>
           </select>
         </label>
         <div className="panel">
@@ -129,9 +130,10 @@ export default function RunConfigPage() {
           <button
             type="button"
             onClick={async () => {
-              setLlmHealthStatus("Probing local LLM...");
+              const provider = llmProvider === "openai_cloud" ? "openai_cloud" : "local_lm_studio";
+              setLlmHealthStatus(`Probing ${provider}...`);
               try {
-                const probed = await fetchLLMHealth(true);
+                const probed = await fetchLLMHealth(provider, true);
                 setLlmHealth(probed);
                 setLlmHealthStatus("Probe completed.");
               } catch (error) {

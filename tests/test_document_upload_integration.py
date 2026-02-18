@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from alembic import command
 from alembic.config import Config
 from apps.api.app.core.config import get_settings
-from apps.api.app.db.models import Company, Document, DocumentFile, DocumentPage
+from apps.api.app.db.models import Chunk, Company, Document, DocumentFile, DocumentPage
 from apps.api.main import app
 
 AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
@@ -82,7 +82,9 @@ def test_upload_and_retrieval_with_hash_dedup(monkeypatch, tmp_path: Path) -> No
         document_count = session.scalar(select(func.count(Document.id)))
         document_file_count = session.scalar(select(func.count(DocumentFile.id)))
         document_page_count = session.scalar(select(func.count(DocumentPage.id)))
+        chunk_count = session.scalar(select(func.count(Chunk.id)))
 
     assert document_count == 1
     assert document_file_count == 1
     assert document_page_count == 1
+    assert chunk_count == 1

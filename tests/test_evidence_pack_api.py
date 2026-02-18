@@ -121,6 +121,9 @@ def test_evidence_pack_endpoint_is_tenant_scoped(monkeypatch, tmp_path: Path) ->
     response = client.get(f"/runs/{run_id}/evidence-pack", headers=AUTH_OTHER)
     assert response.status_code == 404
 
+    preview_response = client.get(f"/runs/{run_id}/evidence-pack-preview", headers=AUTH_OTHER)
+    assert preview_response.status_code == 404
+
 
 def test_evidence_pack_endpoint_requires_completed_run(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id, _ = _prepare_fixture(tmp_path, status="queued")
@@ -133,3 +136,31 @@ def test_evidence_pack_endpoint_requires_completed_run(monkeypatch, tmp_path: Pa
     client = TestClient(app)
     response = client.get(f"/runs/{run_id}/evidence-pack", headers=AUTH_DEFAULT)
     assert response.status_code == 409
+
+    preview_response = client.get(f"/runs/{run_id}/evidence-pack-preview", headers=AUTH_DEFAULT)
+    assert preview_response.status_code == 409
+
+
+def test_evidence_pack_preview_returns_manifest_summary(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id, doc_hash = _prepare_fixture(tmp_path, status="completed")
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_EVIDENCE_PACK_OUTPUT_ROOT", str(tmp_path / "packs"))
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+    response = client.get(f"/runs/{run_id}/evidence-pack-preview", headers=AUTH_DEFAULT)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"] == run_id
+    assert payload["has_assessments"] is True
+    assert payload["has_evidence"] is True
+    assert payload["document_count"] == 1
+    assert payload["pack_file_count"] == 3
+    assert payload["entries"] == [
+        "assessments.jsonl",
+        f"documents/{doc_hash}.bin",
+        "evidence.jsonl",
+        "manifest.json",
+    ]

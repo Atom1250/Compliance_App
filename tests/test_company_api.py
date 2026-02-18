@@ -30,7 +30,12 @@ def test_company_create_and_list_happy_path(monkeypatch, tmp_path: Path) -> None
 
     first = client.post(
         "/companies",
-        json={"name": "Beta Co", "employees": 120, "reporting_year": 2026},
+        json={
+            "name": "Beta Co",
+            "employees": 120,
+            "reporting_year_start": 2022,
+            "reporting_year_end": 2024,
+        },
         headers=AUTH_DEFAULT,
     )
     second = client.post(
@@ -41,11 +46,37 @@ def test_company_create_and_list_happy_path(monkeypatch, tmp_path: Path) -> None
 
     assert first.status_code == 200
     assert second.status_code == 200
+    first_payload = first.json()
+    assert first_payload["reporting_year"] == 2024
+    assert first_payload["reporting_year_start"] == 2022
+    assert first_payload["reporting_year_end"] == 2024
 
     listed = client.get("/companies", headers=AUTH_DEFAULT)
     assert listed.status_code == 200
     payload = listed.json()
     assert [item["name"] for item in payload["companies"]] == ["Alpha Co", "Beta Co"]
+
+
+def test_company_create_rejects_invalid_reporting_year_range(monkeypatch, tmp_path: Path) -> None:
+    db_url = _prepare_db(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    response = client.post(
+        "/companies",
+        json={
+            "name": "Bad Range Co",
+            "reporting_year_start": 2026,
+            "reporting_year_end": 2024,
+        },
+        headers=AUTH_DEFAULT,
+    )
+
+    assert response.status_code == 422
 
 
 def test_company_list_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:

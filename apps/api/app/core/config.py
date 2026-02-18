@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     llm_base_url: str = "http://127.0.0.1:1234"
     llm_api_key: str = "lm-studio"
     llm_model: str = "ministral-3-8b-instruct-2512-mlx"
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
     git_sha: str = "unknown"
     security_enabled: bool = True
     auth_api_keys: str = "dev-key"

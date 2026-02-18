@@ -91,8 +91,58 @@ class OpenAICompatibleTransport:
             json=payload,
             timeout=self._timeout_seconds,
         )
-        response.raise_for_status()
-        return response.json()
+        if response.status_code < 400:
+            return response.json()
+
+        # Some OpenAI models/accounts reject `/responses` payload variants.
+        # Fall back to `/chat/completions` with JSON schema response format.
+        chat_payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": input_text}],
+            "temperature": temperature,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "extraction_result",
+                    "schema": json_schema,
+                },
+            },
+        }
+        chat_response = httpx.post(
+            f"{self._base_url}/chat/completions",
+            headers=headers,
+            json=chat_payload,
+            timeout=self._timeout_seconds,
+        )
+        if chat_response.status_code < 400:
+            chat_json = chat_response.json()
+            content_text = (
+                chat_json.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+            if isinstance(content_text, list):
+                content_text = "".join(
+                    str(item.get("text", "")) for item in content_text if isinstance(item, dict)
+                )
+            return {
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": str(content_text)}],
+                    }
+                ]
+            }
+
+        detail = (
+            f"/responses {response.status_code}: {response.text}; "
+            f"/chat/completions {chat_response.status_code}: {chat_response.text}"
+        )
+        raise httpx.HTTPStatusError(
+            f"LLM request failed: {detail}",
+            request=chat_response.request,
+            response=chat_response,
+        )
 
 
 class ExtractionClient:

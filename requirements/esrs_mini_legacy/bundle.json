@@ -1,0 +1,31 @@
+{
+  "bundle_id": "esrs_mini",
+  "version": "2024.01",
+  "standard": "ESRS",
+  "datapoints": [
+    {
+      "datapoint_key": "ESRS-E1-1",
+      "title": "Transition plan disclosure",
+      "disclosure_reference": "ESRS E1-1",
+      "materiality_topic": "climate"
+    },
+    {
+      "datapoint_key": "ESRS-E1-6",
+      "title": "Gross GHG emissions",
+      "disclosure_reference": "ESRS E1-6",
+      "materiality_topic": "emissions"
+    }
+  ],
+  "applicability_rules": [
+    {
+      "rule_id": "rule-esrs-e1-legacy",
+      "datapoint_key": "ESRS-E1-1",
+      "expression": "company.reporting_year_end >= 2022"
+    },
+    {
+      "rule_id": "rule-esrs-ghg-legacy",
+      "datapoint_key": "ESRS-E1-6",
+      "expression": "company.reporting_year_end >= 2022"
+    }
+  ]
+}

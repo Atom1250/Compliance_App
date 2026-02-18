@@ -114,8 +114,8 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
         try:
             settings = get_settings()
             extraction_client = (
-                build_extraction_client_from_settings(settings)
-                if payload.llm_provider == "local_lm_studio"
+                build_extraction_client_from_settings(settings, provider=payload.llm_provider)
+                if payload.llm_provider in {"local_lm_studio", "openai_cloud"}
                 else ExtractionClient(
                     transport=_DeterministicAbsentTransport(),
                     model="deterministic-local-v1",
@@ -194,6 +194,8 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                         "employees": company.employees,
                         "listed_status": company.listed_status,
                         "reporting_year": company.reporting_year,
+                        "reporting_year_start": company.reporting_year_start,
+                        "reporting_year_end": company.reporting_year_end,
                         "turnover": company.turnover,
                     },
                     materiality_inputs=materiality_inputs,

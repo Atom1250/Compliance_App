@@ -54,6 +54,7 @@ def _seed_requirements_bundle(db_url: str) -> None:
     engine = create_engine(db_url)
     with Session(engine) as session:
         import_bundle(session, load_bundle(Path("requirements/esrs_mini/bundle.json")))
+        import_bundle(session, load_bundle(Path("requirements/esrs_mini_legacy/bundle.json")))
         session.commit()
 
 
@@ -165,10 +166,9 @@ def run_uat_harness(*, work_dir: Path) -> dict[str, object]:
         return {
             "flow": {
                 "terminal_status": status,
-                "report_path_template": "/reports/run-{run_id}.html",
-                "report_url_matches_template": (
-                    report.json()["url"] == f"/reports/run-{run_id}.html"
-                ),
+                "report_path_template": "/runs/{run_id}/report",
+                "report_url_matches_template": report.request.url.path == f"/runs/{run_id}/report",
+                "report_is_html": report.headers.get("content-type", "").startswith("text/html"),
             },
             "manifest": {
                 "bundle_id": manifest_payload["bundle_id"],

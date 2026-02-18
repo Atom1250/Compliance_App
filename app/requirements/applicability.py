@@ -23,12 +23,21 @@ class CompanyProfile:
     turnover: float | None
     listed_status: bool | None
     reporting_year: int | None
+    reporting_year_start: int | None
+    reporting_year_end: int | None
 
 
 _ALLOWED_COMPARE_OPS = (ast.Eq, ast.NotEq, ast.Gt, ast.GtE, ast.Lt, ast.LtE)
 _ALLOWED_BOOL_OPS = (ast.And, ast.Or)
 _ALLOWED_BIN_OPS = (ast.Add, ast.Sub, ast.Mult, ast.Div)
-_ALLOWED_FIELDS = {"employees", "turnover", "listed_status", "reporting_year"}
+_ALLOWED_FIELDS = {
+    "employees",
+    "turnover",
+    "listed_status",
+    "reporting_year",
+    "reporting_year_start",
+    "reporting_year_end",
+}
 
 
 def _safe_eval(node: ast.AST, profile: CompanyProfile):
@@ -127,6 +136,8 @@ def resolve_required_datapoint_ids(
         turnover=company.turnover,
         listed_status=company.listed_status,
         reporting_year=company.reporting_year,
+        reporting_year_start=company.reporting_year_start,
+        reporting_year_end=company.reporting_year_end,
     )
 
     rules = db.scalars(

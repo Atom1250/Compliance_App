@@ -72,3 +72,31 @@ def test_applicability_rule_evaluation_filters_out_non_applicable(tmp_path: Path
         )
 
     assert required == []
+
+
+def test_applicability_legacy_bundle_uses_reporting_year_end(tmp_path: Path) -> None:
+    bundle = load_bundle(Path("requirements/esrs_mini_legacy/bundle.json"))
+
+    with _prepare_session(tmp_path) as session:
+        import_bundle(session, bundle)
+
+        company = Company(
+            name="Historical Co",
+            employees=120,
+            turnover=5_000_000.0,
+            listed_status=True,
+            reporting_year=2024,
+            reporting_year_start=2022,
+            reporting_year_end=2024,
+        )
+        session.add(company)
+        session.commit()
+
+        required = resolve_required_datapoint_ids(
+            session,
+            company_id=company.id,
+            bundle_id="esrs_mini",
+            bundle_version="2024.01",
+        )
+
+    assert required == ["ESRS-E1-1", "ESRS-E1-6"]

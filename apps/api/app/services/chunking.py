@@ -86,6 +86,7 @@ def persist_chunks_for_document(
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> None:
     """Persist deterministic chunks for all stored pages in a document."""
+    db.flush()
     pages = (
         db.query(DocumentPage)
         .filter(DocumentPage.document_id == document_id)
