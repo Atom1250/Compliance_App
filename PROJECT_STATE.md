@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-033
+Next PR ID: PR-034
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -166,6 +166,11 @@ Next PR ID: PR-033
 - Added tenant-scoping and completed-run guardrail tests for report preview endpoint behavior.
 - Added tests in `tests/test_report_preview_api.py`.
 - Added PR execution log: `docs/prs/PR-032.md`.
+- PR-033 completed (D3: evidence pack preview API).
+- Extended `GET /runs/{run_id}/evidence-pack-preview` contract with deterministic `pack_files` path/checksum metadata.
+- Added preview validation that ZIP entries and manifest file list match, with checksum verification for each previewed artifact.
+- Added/updated tests in `tests/test_evidence_pack_api.py` validating preview metadata and preview-to-ZIP manifest consistency.
+- Added PR execution log: `docs/prs/PR-033.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

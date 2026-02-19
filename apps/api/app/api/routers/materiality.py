@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import zipfile
 from pathlib import Path
@@ -113,8 +114,13 @@ class RunManifestResponse(BaseModel):
 
 
 class EvidencePackPreviewResponse(BaseModel):
+    class PackFileItem(BaseModel):
+        path: str
+        sha256: str
+
     run_id: int
     entries: list[str]
+    pack_files: list[PackFileItem]
     pack_file_count: int
     document_count: int
     has_assessments: bool
@@ -429,11 +435,33 @@ def run_evidence_pack_preview(
     with zipfile.ZipFile(output_zip, "r") as zf:
         entries = zf.namelist()
         manifest = json.loads(zf.read("manifest.json"))
+        manifest_pack_files = sorted(
+            [
+                {"path": str(item["path"]), "sha256": str(item["sha256"])}
+                for item in manifest.get("pack_files", [])
+            ],
+            key=lambda item: item["path"],
+        )
+        preview_paths = {item["path"] for item in manifest_pack_files}
+        zip_paths = {name for name in entries if name != "manifest.json"}
+        if preview_paths != zip_paths:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="evidence pack preview manifest mismatch",
+            )
+        for item in manifest_pack_files:
+            digest = hashlib.sha256(zf.read(item["path"])).hexdigest()
+            if digest != item["sha256"]:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"evidence pack checksum mismatch for {item['path']}",
+                )
 
     return EvidencePackPreviewResponse(
         run_id=run.id,
         entries=entries,
-        pack_file_count=len(manifest.get("pack_files", [])),
+        pack_files=manifest_pack_files,
+        pack_file_count=len(manifest_pack_files),
         document_count=len(manifest.get("documents", [])),
         has_assessments="assessments.jsonl" in entries,
         has_evidence="evidence.jsonl" in entries,
