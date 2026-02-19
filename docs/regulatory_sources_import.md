@@ -8,36 +8,39 @@ It is separate from requirements/obligation bundles:
 
 Use this importer to seed and maintain the source register with deterministic, idempotent behavior.
 
-## CLI
-
-Run with module CLI:
-
-```bash
-python -m apps.api.app.scripts.import_regulatory_sources --file ./path/to/register.xlsx
-```
+## Recommended Ingestion (CSV-first)
 
 EU-only import:
 
 ```bash
 python -m apps.api.app.scripts.import_regulatory_sources \
-  --file ./path/to/register.xlsx \
+  --file regulatory_source_document_SOURCE_SHEETS_EU_only.csv \
   --jurisdiction EU
 ```
 
-Dry-run validation (no DB writes):
+Full import:
 
 ```bash
 python -m apps.api.app.scripts.import_regulatory_sources \
-  --file ./path/to/register.csv \
-  --dry-run \
-  --issues-out ./outputs/regulatory_import_issues.csv
+  --file regulatory_source_document_SOURCE_SHEETS_full.csv
 ```
 
-Explicit sheets (XLSX):
+Dry-run + issues report:
 
 ```bash
 python -m apps.api.app.scripts.import_regulatory_sources \
-  --file ./path/to/register.xlsx \
+  --file regulatory_source_document_SOURCE_SHEETS_full.csv \
+  --dry-run \
+  --issues-out regulatory_import_issues.csv
+```
+
+## Optional Convenience (XLSX)
+
+XLSX remains supported, but CSV is preferred for deterministic ingestion:
+
+```bash
+python -m apps.api.app.scripts.import_regulatory_sources \
+  --file regulatory_source_document_SOURCE_SHEETS.xlsx \
   --sheets Master_Documents,ESRS_Standards,EU_Taxonomy_Acts
 ```
 

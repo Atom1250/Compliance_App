@@ -25,7 +25,27 @@ def _parse_sheets(sheet_args: list[str], sheets_csv: str | None) -> tuple[str, .
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Recommended (CSV)\n"
+            "  EU-only:\n"
+            "    python -m apps.api.app.scripts.import_regulatory_sources "
+            "--file regulatory_source_document_SOURCE_SHEETS_EU_only.csv --jurisdiction EU\n"
+            "  Full:\n"
+            "    python -m apps.api.app.scripts.import_regulatory_sources "
+            "--file regulatory_source_document_SOURCE_SHEETS_full.csv\n\n"
+            "Dry-run\n"
+            "    python -m apps.api.app.scripts.import_regulatory_sources "
+            "--file regulatory_source_document_SOURCE_SHEETS_full.csv "
+            "--dry-run --issues-out regulatory_import_issues.csv\n\n"
+            "Optional (XLSX)\n"
+            "    python -m apps.api.app.scripts.import_regulatory_sources "
+            "--file regulatory_source_document_SOURCE_SHEETS.xlsx "
+            "--sheets Master_Documents,ESRS_Standards,EU_Taxonomy_Acts"
+        ),
+    )
     parser.add_argument("--file", required=True, help="Path to .csv or .xlsx source register")
     parser.add_argument(
         "--sheet",
@@ -62,6 +82,11 @@ def main(argv: list[str] | None = None) -> int:
     if not file_path.exists():
         print(f"error: file not found: {file_path}", file=sys.stderr)
         return 2
+    if file_path.suffix.lower() in {".xlsx", ".xlsm"}:
+        print(
+            "Note: CSV is recommended for deterministic ingestion; "
+            "XLSX support is provided for convenience."
+        )
 
     session_factory = get_session_factory()
     with session_factory() as db:
