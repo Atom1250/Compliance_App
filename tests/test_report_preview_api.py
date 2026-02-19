@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from alembic.config import Config
-from apps.api.app.db.models import Company, DatapointAssessment, Run
+from apps.api.app.db.models import Company, DatapointAssessment, Run, RunManifest
 from apps.api.main import app
 
 AUTH_DEFAULT = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
@@ -77,6 +77,19 @@ def _prepare_fixture(tmp_path: Path, *, status: str = "completed") -> tuple[str,
             ),
         ]
         session.add_all(assessments)
+        session.add(
+            RunManifest(
+                run_id=run.id,
+                tenant_id="default",
+                document_hashes="[]",
+                bundle_id="esrs_mini",
+                bundle_version="2026.01",
+                retrieval_params='{"query_mode":"hybrid","top_k":5}',
+                model_name="deterministic-local-v1",
+                prompt_hash="a" * 64,
+                git_sha="deadbeef",
+            )
+        )
         session.commit()
         return db_url, run.id
 

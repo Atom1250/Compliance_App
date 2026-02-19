@@ -113,6 +113,15 @@ class RunManifestResponse(BaseModel):
     git_sha: str
 
 
+class RunExportReadinessResponse(BaseModel):
+    run_id: int
+    status: str
+    report_ready: bool
+    evidence_pack_ready: bool
+    checks: dict[str, bool]
+    blocking_reasons: list[str]
+
+
 class EvidencePackPreviewResponse(BaseModel):
     class PackFileItem(BaseModel):
         path: str
@@ -239,6 +248,93 @@ def run_status(
     return RunStatusResponse(run_id=run.id, status=run.status)
 
 
+def _load_run(
+    db: Session,
+    *,
+    run_id: int,
+    tenant_id: str,
+) -> Run:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    return run
+
+
+def _compute_export_readiness(
+    db: Session,
+    *,
+    run: Run,
+    tenant_id: str,
+) -> RunExportReadinessResponse:
+    has_manifest = (
+        db.scalar(
+            select(RunManifest.id).where(
+                RunManifest.run_id == run.id,
+                RunManifest.tenant_id == tenant_id,
+            )
+        )
+        is not None
+    )
+    has_assessments = (
+        db.scalar(
+            select(DatapointAssessment.id).where(
+                DatapointAssessment.run_id == run.id,
+                DatapointAssessment.tenant_id == tenant_id,
+            )
+        )
+        is not None
+    )
+    checks = {
+        "run_completed": run.status == "completed",
+        "has_manifest": has_manifest,
+        "has_assessments": has_assessments,
+    }
+    blocking_reasons: list[str] = []
+    if not checks["run_completed"]:
+        blocking_reasons.append(f"run_not_completed:{run.status}")
+    if not checks["has_assessments"]:
+        blocking_reasons.append("assessments_missing")
+    if not checks["has_manifest"]:
+        blocking_reasons.append("manifest_missing_for_report")
+    blocking_reasons = sorted(set(blocking_reasons))
+    return RunExportReadinessResponse(
+        run_id=run.id,
+        status=run.status,
+        report_ready=(
+            checks["run_completed"] and checks["has_assessments"] and checks["has_manifest"]
+        ),
+        evidence_pack_ready=checks["run_completed"] and checks["has_assessments"],
+        checks=checks,
+        blocking_reasons=blocking_reasons,
+    )
+
+
+def _require_export_ready(
+    *,
+    readiness: RunExportReadinessResponse,
+    resource: str,
+) -> None:
+    is_ready = readiness.report_ready if resource == "report" else readiness.evidence_pack_ready
+    if is_ready:
+        return
+    code = "report_not_ready" if resource == "report" else "evidence_pack_not_ready"
+    reasons = []
+    for reason in readiness.blocking_reasons:
+        if resource == "report":
+            reasons.append(reason)
+            continue
+        if reason == "manifest_missing_for_report":
+            continue
+        reasons.append(reason)
+    reasons = sorted(set(reasons))
+    if not reasons:
+        reasons = ["unknown_not_ready"]
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": code, "reasons": reasons},
+    )
+
+
 def _load_completed_run(
     db: Session,
     *,
@@ -246,13 +342,24 @@ def _load_completed_run(
     tenant_id: str,
     resource_name: str,
 ) -> Run:
-    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == tenant_id))
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
-    if run.status != "completed":
+    run = _load_run(db, run_id=run_id, tenant_id=tenant_id)
+    readiness = _compute_export_readiness(db, run=run, tenant_id=tenant_id)
+    resource = "report" if resource_name == "report" else "evidence_pack"
+    try:
+        _require_export_ready(readiness=readiness, resource=resource)
+    except HTTPException:
+        # Preserve existing compatibility text for non-completed runs.
+        if run.status != "completed":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{resource_name} available only for completed runs",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"{resource_name} available only for completed runs",
+            detail={
+                "code": f"{resource}_not_ready",
+                "reasons": readiness.blocking_reasons,
+            },
         )
     return run
 
@@ -388,6 +495,16 @@ def run_report_preview(
         resource_name="report",
     )
     return _render_report_preview(db, run=run, tenant_id=auth.tenant_id)
+
+
+@router.get("/{run_id}/export-readiness", response_model=RunExportReadinessResponse)
+def run_export_readiness(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunExportReadinessResponse:
+    run = _load_run(db, run_id=run_id, tenant_id=auth.tenant_id)
+    return _compute_export_readiness(db, run=run, tenant_id=auth.tenant_id)
 
 
 @router.get("/{run_id}/evidence-pack")

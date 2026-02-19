@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-037
+Next PR ID: PR-038
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -186,6 +186,11 @@ Next PR ID: PR-037
 - `Present/Partial` assessments without `evidence_chunk_ids` now downgrade to `Absent` with explicit rationale annotation.
 - Added downgrade-path tests in `tests/test_verification.py` covering `Present` and `Partial` missing-evidence cases.
 - Added PR execution log: `docs/prs/PR-036.md`.
+- PR-037 completed (E2: export lifecycle contract hardening).
+- Added deterministic export readiness endpoint `GET /runs/{run_id}/export-readiness` with explicit readiness checks and blocking reasons.
+- Standardized report/evidence lifecycle gating with shared readiness logic, preserving 404 tenant scoping and predictable 409 not-ready contract semantics.
+- Added lifecycle integration tests in `tests/test_export_lifecycle_api.py` and updated report lifecycle fixtures to satisfy manifest readiness checks.
+- Added PR execution log: `docs/prs/PR-037.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
