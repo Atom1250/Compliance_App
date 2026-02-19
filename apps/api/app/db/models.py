@@ -227,3 +227,17 @@ class RegulatoryBundle(Base):
     checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RunRegistryArtifact(Base):
+    __tablename__ = "run_registry_artifact"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("run.id"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default", index=True
+    )
+    artifact_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_json: Mapped[str] = mapped_column(Text, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

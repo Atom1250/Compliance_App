@@ -21,6 +21,7 @@ REQUIRED_TABLES = {
     "run",
     "run_cache_entry",
     "run_manifest",
+    "run_registry_artifact",
     "run_materiality",
     "run_event",
 }

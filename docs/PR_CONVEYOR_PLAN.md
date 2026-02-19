@@ -360,3 +360,26 @@ Tests:
 - `make lint`
 - `make test`
 
+---
+
+## PR-020 — B6: Persist Run-Scoped Registry Artifacts (Determinism Lock)
+Objective:
+Store compiled registry plan + coverage matrix as run-scoped artifacts during execution, then serve evidence/report exports from persisted artifacts (not live recompilation).
+
+Scope:
+- Add run-scoped storage for registry artifacts (compiled plan JSON + coverage matrix JSON)
+- Persist artifacts during run execution when `compiler_mode=registry`
+- Update evidence pack export to read persisted artifacts (fallback: omit artifacts if missing)
+- Keep behavior unchanged for legacy mode
+- Add deterministic tests for:
+  - persisted artifact content stability across repeated exports
+  - export behavior does not depend on current registry DB state after run completion
+
+Definition of Done:
+- Registry run outputs are reproducible from run-scoped persisted artifacts
+- Evidence pack no longer recompiles registry plan at export time
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`

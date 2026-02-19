@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from alembic.config import Config
-from app.regulatory.canonical import sha256_checksum
 from apps.api.app.db.models import (
     Chunk,
     Company,
@@ -17,7 +16,7 @@ from apps.api.app.db.models import (
     DocumentFile,
     RegulatoryBundle,
     Run,
-    RunManifest,
+    RunRegistryArtifact,
 )
 from apps.api.app.services.evidence_pack import export_evidence_pack
 
@@ -123,10 +122,6 @@ def test_evidence_pack_zip_manifest_and_integrity_are_deterministic(tmp_path: Pa
 
 
 def test_evidence_pack_includes_registry_artifacts_in_registry_mode(tmp_path: Path) -> None:
-    sample_bundle_path = Path("app/regulatory/bundles/eu_csrd_sample.json")
-    sample_payload = json.loads(sample_bundle_path.read_text())
-    sample_checksum = sha256_checksum(sample_payload)
-
     with _prepare_session(tmp_path) as session:
         company = Company(name="Registry Evidence Co", reporting_year=2026)
         session.add(company)
@@ -137,39 +132,60 @@ def test_evidence_pack_includes_registry_artifacts_in_registry_mode(tmp_path: Pa
         session.flush()
 
         session.add(
-            RegulatoryBundle(
-                bundle_id="eu_csrd_sample",
-                version="2026.01",
-                jurisdiction="EU",
-                regime="CSRD_ESRS",
-                checksum=sample_checksum,
-                payload=sample_payload,
-            )
-        )
-        session.add(
-            RunManifest(
+            RunRegistryArtifact(
                 run_id=run.id,
                 tenant_id="default",
-                document_hashes="[]",
-                bundle_id="eu_csrd_sample",
-                bundle_version="2026.01",
-                retrieval_params='{"compiler_mode":"registry"}',
-                model_name="deterministic-local-v1",
-                prompt_hash="p" * 64,
-                git_sha="g" * 40,
+                artifact_key="compiled_plan",
+                content_json=json.dumps(
+                    {
+                        "bundle_id": "eu_csrd_sample",
+                        "version": "2026.01",
+                        "jurisdiction": "EU",
+                        "regime": "CSRD_ESRS",
+                        "obligations": [
+                            {
+                                "obligation_id": "ESRS-E1-1",
+                                "title": "Transition plan disclosure",
+                                "standard_reference": "ESRS E1-1",
+                                "elements": [
+                                    {
+                                        "element_id": "E1-1-narrative",
+                                        "label": "Transition plan narrative",
+                                        "required": True,
+                                    }
+                                ],
+                            }
+                        ],
+                        "checksum": "x" * 64,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                checksum="a" * 64,
             )
         )
         session.add(
-            DatapointAssessment(
+            RunRegistryArtifact(
                 run_id=run.id,
-                datapoint_key="ESRS-E1-1::E1-1-narrative",
-                status="Present",
-                value="yes",
-                evidence_chunk_ids='["chunk-1"]',
-                rationale="Disclosed.",
-                model_name="gpt-5",
-                prompt_hash="prompt-hash",
-                retrieval_params='{"query_mode":"hybrid","top_k":3}',
+                tenant_id="default",
+                artifact_key="coverage_matrix",
+                content_json=json.dumps(
+                    [
+                        {
+                            "absent": 0,
+                            "coverage_pct": 100.0,
+                            "na": 0,
+                            "obligation_id": "ESRS-E1-1",
+                            "partial": 0,
+                            "present": 1,
+                            "status": "Present",
+                            "total_elements": 1,
+                        }
+                    ],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                checksum="b" * 64,
             )
         )
         session.commit()
@@ -197,3 +213,71 @@ def test_evidence_pack_includes_registry_artifacts_in_registry_mode(tmp_path: Pa
                     "total_elements": 1,
                 }
             ]
+
+
+def test_registry_pack_is_independent_of_current_registry_db_state(tmp_path: Path) -> None:
+    with _prepare_session(tmp_path) as session:
+        company = Company(name="Registry Drift Co", reporting_year=2026)
+        session.add(company)
+        session.flush()
+        run = Run(company_id=company.id, status="completed", compiler_mode="registry")
+        session.add(run)
+        session.flush()
+        session.add(
+            RunRegistryArtifact(
+                run_id=run.id,
+                tenant_id="default",
+                artifact_key="compiled_plan",
+                content_json='{"bundle_id":"persisted","checksum":"c"}',
+                checksum="c" * 64,
+            )
+        )
+        session.add(
+            RunRegistryArtifact(
+                run_id=run.id,
+                tenant_id="default",
+                artifact_key="coverage_matrix",
+                content_json='[{"obligation_id":"persisted","coverage_pct":50.0}]',
+                checksum="d" * 64,
+            )
+        )
+        session.add(
+            RegulatoryBundle(
+                bundle_id="persisted",
+                version="2026.01",
+                jurisdiction="EU",
+                regime="CSRD_ESRS",
+                checksum="e" * 64,
+                payload={"bundle_id": "persisted", "version": "2026.01"},
+            )
+        )
+        session.commit()
+
+        zip_a = tmp_path / "registry-a.zip"
+        zip_b = tmp_path / "registry-b.zip"
+        export_evidence_pack(session, run_id=run.id, tenant_id="default", output_zip_path=zip_a)
+
+        # Simulate post-run registry bundle drift; export should remain run-scoped.
+        bundle = session.query(RegulatoryBundle).one()
+        bundle.payload = {"bundle_id": "changed", "version": "9999.99"}
+        bundle.checksum = "f" * 64
+        session.commit()
+
+        export_evidence_pack(session, run_id=run.id, tenant_id="default", output_zip_path=zip_b)
+        assert zip_a.read_bytes() == zip_b.read_bytes()
+
+
+def test_registry_pack_omits_registry_files_when_artifacts_missing(tmp_path: Path) -> None:
+    with _prepare_session(tmp_path) as session:
+        company = Company(name="Registry Missing Artifacts Co")
+        session.add(company)
+        session.flush()
+        run = Run(company_id=company.id, status="completed", compiler_mode="registry")
+        session.add(run)
+        session.commit()
+
+        zip_path = tmp_path / "registry-missing.zip"
+        export_evidence_pack(session, run_id=run.id, tenant_id="default", output_zip_path=zip_path)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            assert "registry/compiled_plan.json" not in zf.namelist()
+            assert "registry/coverage_matrix.json" not in zf.namelist()

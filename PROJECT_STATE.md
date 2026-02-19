@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-020 (TBD in docs/PR_CONVEYOR_PLAN.md)
+Next PR ID: PR-021 (TBD in docs/PR_CONVEYOR_PLAN.md)
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -101,6 +101,11 @@ Next PR ID: PR-020 (TBD in docs/PR_CONVEYOR_PLAN.md)
 - Added end-to-end determinism test in `tests/test_regulatory_registry_end_to_end.py` covering filesystem sync idempotency and repeated compile stability.
 - Verified seeded bundles compile with deterministic ordering and non-empty obligations for a stable company context.
 - Added PR execution log: `docs/prs/PR-019.md`.
+- PR-020 completed (B6: persisted run-scoped registry artifacts for deterministic exports).
+- Added migration `0015_run_registry_artifact` and ORM model `RunRegistryArtifact`.
+- Registry-mode run execution now persists compiled plan + coverage matrix as run-scoped artifacts.
+- Evidence pack now reads registry artifacts from run-scoped storage (no compile-time dependency on current registry bundle rows).
+- Added/updated tests in `tests/test_run_execute_api.py`, `tests/test_evidence_pack.py`, and `tests/test_db_migrations.py`; execution log added at `docs/prs/PR-020.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -116,7 +121,7 @@ Next PR ID: PR-020 (TBD in docs/PR_CONVEYOR_PLAN.md)
 - [ ] Confirm where feature flags/config lives and naming conventions.
 - [ ] Confirm test DB strategy (sqlite? postgres? docker service?).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
-- [ ] `docs/PR_CONVEYOR_PLAN.md` currently ends at PR-019; PR-020+ scope must be defined before further auto-select execution.
+- [ ] `docs/PR_CONVEYOR_PLAN.md` currently defines PRs through PR-020 only; PR-021+ scope needs to be drafted before next auto-select run.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`
