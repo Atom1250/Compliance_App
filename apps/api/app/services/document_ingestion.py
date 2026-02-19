@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import Document, DocumentFile
 from apps.api.app.services.chunking import persist_chunks_for_document
+from apps.api.app.services.company_documents import ensure_company_document_link
 from apps.api.app.services.document_extraction import (
     extract_pages_for_document,
     persist_document_pages,
@@ -33,6 +34,13 @@ def ingest_document_bytes(
         .where(DocumentFile.sha256_hash == content_hash, Document.tenant_id == tenant_id)
     )
     if existing is not None:
+        ensure_company_document_link(
+            db,
+            company_id=company_id,
+            document_id=existing.document_id,
+            tenant_id=tenant_id,
+        )
+        db.commit()
         return {
             "document_id": existing.document_id,
             "document_file_id": existing.id,
@@ -48,6 +56,12 @@ def ingest_document_bytes(
     document = Document(company_id=company_id, tenant_id=tenant_id, title=title)
     db.add(document)
     db.flush()
+    ensure_company_document_link(
+        db,
+        company_id=company_id,
+        document_id=document.id,
+        tenant_id=tenant_id,
+    )
 
     document_file = DocumentFile(
         document_id=document.id,

@@ -11,10 +11,13 @@ import {
   fetchEvidencePackPreview,
   fetchReportHtml
 } from "../../lib/api-client";
+import { stateLabel, StepState, transitionOrStay } from "../../lib/flow-state";
 
 export default function ReportPage() {
   const searchParams = useSearchParams();
   const [runId, setRunId] = useState(0);
+  const [stepState, setStepState] = useState<StepState>("idle");
+  const [statusLabel, setStatusLabel] = useState(stateLabel("idle"));
   const [reportHtml, setReportHtml] = useState<string>("");
   const [evidencePreview, setEvidencePreview] = useState<EvidencePackPreviewResponse | null>(null);
   const [error, setError] = useState("");
@@ -33,16 +36,23 @@ export default function ReportPage() {
       </nav>
       <div className="panel">
         <p>Run ID: {runId || "N/A"}</p>
+        <p>Step Key: {stepState}</p>
         <button
           type="button"
           onClick={async () => {
             try {
+              setStepState((state) => transitionOrStay(state, "submitting"));
+              setStatusLabel(stateLabel("submitting"));
               setError("");
               const html = await fetchReportHtml(runId);
               setReportHtml(html);
+              setStepState((state) => transitionOrStay(state, "success"));
+              setStatusLabel("Completed: report preview loaded.");
             } catch (caught) {
               setReportHtml("");
-              setError(`Report preview failed: ${String(caught)}`);
+              setError(`Report preview failed: ${String(caught)}. Confirm run is completed and retry.`);
+              setStepState((state) => transitionOrStay(state, "error"));
+              setStatusLabel(stateLabel("error"));
             }
           }}
         >
@@ -52,12 +62,18 @@ export default function ReportPage() {
           type="button"
           onClick={async () => {
             try {
+              setStepState((state) => transitionOrStay(state, "submitting"));
+              setStatusLabel(stateLabel("submitting"));
               setError("");
               const preview = await fetchEvidencePackPreview(runId);
               setEvidencePreview(preview);
+              setStepState((state) => transitionOrStay(state, "success"));
+              setStatusLabel("Completed: evidence preview loaded.");
             } catch (caught) {
               setEvidencePreview(null);
-              setError(`Evidence preview failed: ${String(caught)}`);
+              setError(`Evidence preview failed: ${String(caught)}. Confirm run is completed and retry.`);
+              setStepState((state) => transitionOrStay(state, "error"));
+              setStatusLabel(stateLabel("error"));
             }
           }}
         >
@@ -67,10 +83,16 @@ export default function ReportPage() {
           type="button"
           onClick={async () => {
             try {
+              setStepState((state) => transitionOrStay(state, "submitting"));
+              setStatusLabel(stateLabel("submitting"));
               setError("");
               await downloadRunReport(runId);
+              setStepState((state) => transitionOrStay(state, "success"));
+              setStatusLabel("Completed: report downloaded.");
             } catch (caught) {
-              setError(`Report download failed: ${String(caught)}`);
+              setError(`Report download failed: ${String(caught)}. Verify browser download permissions.`);
+              setStepState((state) => transitionOrStay(state, "error"));
+              setStatusLabel(stateLabel("error"));
             }
           }}
         >
@@ -80,10 +102,16 @@ export default function ReportPage() {
           type="button"
           onClick={async () => {
             try {
+              setStepState((state) => transitionOrStay(state, "submitting"));
+              setStatusLabel(stateLabel("submitting"));
               setError("");
               await downloadEvidencePack(runId);
+              setStepState((state) => transitionOrStay(state, "success"));
+              setStatusLabel("Completed: evidence pack downloaded.");
             } catch (caught) {
-              setError(`Evidence pack download failed: ${String(caught)}`);
+              setError(`Evidence pack download failed: ${String(caught)}. Verify browser download permissions.`);
+              setStepState((state) => transitionOrStay(state, "error"));
+              setStatusLabel(stateLabel("error"));
             }
           }}
         >
@@ -98,6 +126,7 @@ export default function ReportPage() {
           </div>
         ) : null}
       </div>
+      <p>Step State: {statusLabel}</p>
       {reportHtml ? (
         <section className="panel">
           <h2>Report Preview</h2>

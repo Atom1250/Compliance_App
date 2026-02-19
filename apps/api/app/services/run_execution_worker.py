@@ -7,15 +7,17 @@ import json
 import threading
 from dataclasses import dataclass
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.regulatory.datapoint_generation import generate_registry_datapoints
+from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
     Company,
     DatapointAssessment,
-    Document,
-    DocumentFile,
+    RegulatoryBundle,
     Run,
     RunMateriality,
 )
@@ -25,11 +27,15 @@ from apps.api.app.services.assessment_pipeline import (
     execute_assessment_pipeline,
 )
 from apps.api.app.services.audit import append_run_event, log_structured_event
+from apps.api.app.services.company_documents import list_company_document_hashes
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
+from apps.api.app.services.regulatory_registry import compile_from_db
 from apps.api.app.services.retrieval import get_retrieval_policy, retrieval_policy_to_dict
 from apps.api.app.services.run_cache import RunHashInput, get_or_compute_cached_output
+from apps.api.app.services.run_input_snapshot import persist_run_input_snapshot
 from apps.api.app.services.run_manifest import RunManifestPayload, persist_run_manifest
+from apps.api.app.services.run_registry_artifacts import persist_registry_outputs_for_run
 
 
 @dataclass(frozen=True)
@@ -81,6 +87,26 @@ def _assessment_count(db: Session, *, run_id: int, tenant_id: str) -> int:
         )
         or 0
     )
+
+
+def _classify_failure(exc: Exception) -> tuple[str, bool]:
+    if isinstance(exc, TimeoutError | httpx.TimeoutException | httpx.ConnectError):
+        return "provider_transient", True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code if exc.response is not None else 0
+        if 500 <= status_code <= 599:
+            return "provider_transient", True
+        return "provider_request_invalid", False
+    message = str(exc)
+    if "openai_api_key is required" in message:
+        return "config_error", False
+    if "Bundle not found:" in message:
+        return "bundle_not_found", False
+    if "llm_schema_parse_error" in message:
+        return "schema_parse_error", False
+    if "llm_schema_validation_error" in message:
+        return "schema_validation_error", False
+    return "internal_error", False
 
 
 def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
@@ -138,27 +164,40 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             ).all()
             materiality_inputs = {row.topic: row.is_material for row in materiality_rows}
 
-            document_hashes = db.scalars(
-                select(DocumentFile.sha256_hash)
-                .join(Document, Document.id == DocumentFile.document_id)
-                .where(Document.company_id == run.company_id, Document.tenant_id == run.tenant_id)
-                .order_by(DocumentFile.sha256_hash)
-            ).all()
-            document_hashes = sorted(set(document_hashes))
+            document_hashes = list_company_document_hashes(
+                db, company_id=run.company_id, tenant_id=run.tenant_id
+            )
             retrieval_policy = get_retrieval_policy()
 
             retrieval_params = {
                 "bundle_id": payload.bundle_id,
                 "bundle_version": payload.bundle_version,
+                "compiler_mode": run.compiler_mode,
                 "llm_provider": payload.llm_provider,
                 "query_mode": "hybrid",
                 "retrieval_model_name": payload.retrieval_model_name,
                 "retrieval_policy": retrieval_policy_to_dict(retrieval_policy),
                 "top_k": payload.retrieval_top_k,
             }
+            registry_checksums: list[str] = []
+            if settings.feature_registry_compiler and run.compiler_mode == "registry":
+                registry_rows = db.scalars(
+                    select(RegulatoryBundle.checksum)
+                    .where(
+                        RegulatoryBundle.bundle_id == payload.bundle_id,
+                        RegulatoryBundle.version == payload.bundle_version,
+                    )
+                    .order_by(RegulatoryBundle.checksum)
+                ).all()
+                registry_checksums = sorted(set(registry_rows))
+                retrieval_params["registry"] = {
+                    "bundle_checksums": registry_checksums,
+                    "mode": "registry",
+                }
             prompt_seed = {
                 "bundle_id": payload.bundle_id,
                 "bundle_version": payload.bundle_version,
+                "compiler_mode": run.compiler_mode,
                 "llm_provider": payload.llm_provider,
                 "model_name": extraction_client.model_name,
                 "retrieval_params": retrieval_params,
@@ -166,6 +205,59 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             prompt_hash = hashlib.sha256(
                 json.dumps(prompt_seed, sort_keys=True, separators=(",", ":")).encode()
             ).hexdigest()
+
+            if settings.feature_registry_compiler and run.compiler_mode == "registry":
+                compiled_for_snapshot = compile_from_db(
+                    db,
+                    bundle_id=payload.bundle_id,
+                    version=payload.bundle_version,
+                    context={
+                        "company": {
+                            "employees": company.employees,
+                            "listed_status": company.listed_status,
+                            "reporting_year": company.reporting_year,
+                            "reporting_year_start": company.reporting_year_start,
+                            "reporting_year_end": company.reporting_year_end,
+                            "turnover": company.turnover,
+                        }
+                    },
+                )
+                required_datapoint_universe = sorted(
+                    item.datapoint_key
+                    for item in generate_registry_datapoints(compiled_for_snapshot)
+                )
+            else:
+                required_datapoint_universe = resolve_required_datapoint_ids(
+                    db,
+                    company_id=run.company_id,
+                    bundle_id=payload.bundle_id,
+                    bundle_version=payload.bundle_version,
+                    run_id=run.id,
+                )
+            persist_run_input_snapshot(
+                db,
+                run_id=run.id,
+                tenant_id=run.tenant_id,
+                payload={
+                    "run_id": run.id,
+                    "tenant_id": run.tenant_id,
+                    "company_id": run.company_id,
+                    "company_profile": {
+                        "employees": company.employees,
+                        "listed_status": company.listed_status,
+                        "reporting_year": company.reporting_year,
+                        "reporting_year_start": company.reporting_year_start,
+                        "reporting_year_end": company.reporting_year_end,
+                        "turnover": company.turnover,
+                    },
+                    "materiality_inputs": materiality_inputs,
+                    "bundle_id": payload.bundle_id,
+                    "bundle_version": payload.bundle_version,
+                    "compiler_mode": run.compiler_mode,
+                    "retrieval": retrieval_params,
+                    "required_datapoint_universe": required_datapoint_universe,
+                },
+            )
 
             computed_assessments: list[DatapointAssessment] | None = None
 
@@ -202,6 +294,8 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     bundle_version=payload.bundle_version,
                     retrieval_params=retrieval_params,
                     prompt_hash=prompt_hash,
+                    compiler_mode=run.compiler_mode,
+                    registry_checksums=registry_checksums,
                 ),
                 compute_assessments=_compute_assessments,
             )
@@ -222,6 +316,39 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 ),
                 assessments=computed_assessments or [],
             )
+            if settings.feature_registry_compiler and run.compiler_mode == "registry":
+                compiled_plan = compile_from_db(
+                    db,
+                    bundle_id=payload.bundle_id,
+                    version=payload.bundle_version,
+                    context={
+                        "company": {
+                            "employees": company.employees,
+                            "listed_status": company.listed_status,
+                            "reporting_year": company.reporting_year,
+                            "reporting_year_start": company.reporting_year_start,
+                            "reporting_year_end": company.reporting_year_end,
+                            "turnover": company.turnover,
+                        }
+                    },
+                )
+                run_assessments = computed_assessments
+                if run_assessments is None:
+                    run_assessments = db.scalars(
+                        select(DatapointAssessment)
+                        .where(
+                            DatapointAssessment.run_id == run.id,
+                            DatapointAssessment.tenant_id == run.tenant_id,
+                        )
+                        .order_by(DatapointAssessment.datapoint_key)
+                    ).all()
+                persist_registry_outputs_for_run(
+                    db,
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    compiled_plan=compiled_plan,
+                    assessments=run_assessments,
+                )
             run.status = "completed"
             append_run_event(
                 db,
@@ -243,19 +370,27 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             )
             db.commit()
         except Exception as exc:  # pragma: no cover - defensive worker path
+            failure_category, retryable = _classify_failure(exc)
             run.status = "failed"
             append_run_event(
                 db,
                 run_id=run.id,
                 tenant_id=run.tenant_id,
                 event_type="run.execution.failed",
-                payload={"tenant_id": run.tenant_id, "error": str(exc)},
+                payload={
+                    "tenant_id": run.tenant_id,
+                    "error": str(exc),
+                    "failure_category": failure_category,
+                    "retryable": retryable,
+                },
             )
             log_structured_event(
                 "run.execution.failed",
                 run_id=run.id,
                 tenant_id=run.tenant_id,
                 error=str(exc),
+                failure_category=failure_category,
+                retryable=retryable,
             )
             db.commit()
 

@@ -4,27 +4,33 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { createCompany } from "../../lib/api-client";
+import { stateLabel, StepState, transitionOrStay } from "../../lib/flow-state";
 
 export default function CompanySetupPage() {
   const [name, setName] = useState("Atom Climate Holdings");
   const [reportingYearStart, setReportingYearStart] = useState("2024");
   const [reportingYearEnd, setReportingYearEnd] = useState("2026");
   const [companyId, setCompanyId] = useState<number | null>(null);
-  const [status, setStatus] = useState("Idle");
+  const [stepState, setStepState] = useState<StepState>("idle");
+  const [status, setStatus] = useState(stateLabel("idle"));
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   async function saveCompany() {
+    setStepState((state) => transitionOrStay(state, "validating"));
+    setStatus(stateLabel("validating"));
     const startYear = Number(reportingYearStart);
     const endYear = Number(reportingYearEnd);
     if (!Number.isFinite(startYear) || !Number.isFinite(endYear) || startYear > endYear) {
-      setStatus("Save failed.");
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
       setError("Reporting year range is invalid. Ensure start year is less than or equal to end year.");
       return;
     }
     setIsSaving(true);
     setError("");
-    setStatus("Saving company...");
+    setStepState((state) => transitionOrStay(state, "submitting"));
+    setStatus(stateLabel("submitting"));
     try {
       const created = await createCompany({
         name,
@@ -42,10 +48,12 @@ export default function CompanySetupPage() {
       localStorage.setItem("company_reporting_year_start", reportingYearStart);
       localStorage.setItem("company_reporting_year_end", reportingYearEnd);
       setCompanyId(created.id);
-      setStatus(`Company ${created.id} saved.`);
+      setStepState((state) => transitionOrStay(state, "success"));
+      setStatus(`Completed: company ${created.id} saved.`);
     } catch (caught) {
-      setError(`Company setup failed: ${String(caught)}`);
-      setStatus("Save failed.");
+      setError(`Company setup failed: ${String(caught)}. Verify API URL/keys and retry.`);
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
     } finally {
       setIsSaving(false);
     }
@@ -90,6 +98,7 @@ export default function CompanySetupPage() {
         </button>
       </form>
       <p>{status}</p>
+      <p>Step Key: {stepState}</p>
       {error ? (
         <div className="panel">
           <p>{error}</p>

@@ -10,7 +10,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from apps.api.app.db.models import DatapointAssessment, Document, DocumentFile, RunManifest
+from apps.api.app.db.models import DatapointAssessment, RunManifest
+from apps.api.app.services.company_documents import list_company_document_hashes
+from apps.api.app.services.reporting import REPORT_TEMPLATE_VERSION
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,7 @@ class RunManifestPayload:
     model_name: str
     prompt_hash: str
     git_sha: str
+    report_template_version: str = REPORT_TEMPLATE_VERSION
 
 
 def _canonical_json(payload: Any) -> str:
@@ -43,13 +46,7 @@ def _document_hashes_for_company(
     tenant_id: str,
     company_id: int,
 ) -> list[str]:
-    rows = db.scalars(
-        select(DocumentFile.sha256_hash)
-        .join(Document, Document.id == DocumentFile.document_id)
-        .where(Document.tenant_id == tenant_id, Document.company_id == company_id)
-        .order_by(DocumentFile.sha256_hash)
-    ).all()
-    return sorted(set(rows))
+    return list_company_document_hashes(db, company_id=company_id, tenant_id=tenant_id)
 
 
 def persist_run_manifest(
@@ -82,6 +79,7 @@ def persist_run_manifest(
             retrieval_params=retrieval_params_json,
             model_name=payload.model_name,
             prompt_hash=prompt_hash,
+            report_template_version=payload.report_template_version,
             git_sha=payload.git_sha,
         )
         db.add(manifest)
@@ -95,6 +93,7 @@ def persist_run_manifest(
     existing.retrieval_params = retrieval_params_json
     existing.model_name = payload.model_name
     existing.prompt_hash = prompt_hash
+    existing.report_template_version = payload.report_template_version
     existing.git_sha = payload.git_sha
     db.commit()
     db.refresh(existing)

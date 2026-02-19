@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
-from apps.api.app.db.models import Company, Document, DocumentFile
+from apps.api.app.db.models import Company, Document, DocumentDiscoveryCandidate, DocumentFile
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.document_ingestion import ingest_document_bytes
 from apps.api.app.services.tavily_discovery import (
@@ -40,6 +40,7 @@ class AutoDiscoverSkipItem(BaseModel):
 class AutoDiscoverResponse(BaseModel):
     company_id: int
     candidates_considered: int
+    raw_candidates: int
     ingested_count: int
     ingested_documents: list[AutoDiscoverItem]
     skipped: list[AutoDiscoverSkipItem]
@@ -47,13 +48,26 @@ class AutoDiscoverResponse(BaseModel):
 
 @router.post("/upload")
 async def upload_document(
-    company_id: int = Form(...),
-    title: str = Form(...),
-    file: UploadFile = File(...),
+    company_id: int | None = Form(default=None),
+    title: str | None = Form(default=None),
+    file: UploadFile | None = File(default=None),
     auth: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> dict[str, str | int | bool]:
     """Ingest document bytes immutably with hash-based dedupe."""
+    errors: list[dict[str, str]] = []
+    if company_id is None:
+        errors.append({"field": "company_id", "message": "field required"})
+    if title is None or not title.strip():
+        errors.append({"field": "title", "message": "field required"})
+    if file is None:
+        errors.append({"field": "file", "message": "field required"})
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_upload_request", "errors": errors},
+        )
+
     company = db.scalar(
         select(Company).where(Company.id == company_id, Company.tenant_id == auth.tenant_id)
     )
@@ -68,7 +82,7 @@ async def upload_document(
         db=db,
         tenant_id=auth.tenant_id,
         company_id=company_id,
-        title=title,
+        title=title.strip(),
         filename=file.filename or "uploaded-document.bin",
         content=content,
     )
@@ -101,17 +115,49 @@ def auto_discover_documents(
     candidates = search_tavily_documents(
         company_name=company.name,
         reporting_year=company.reporting_year_end or company.reporting_year,
+        reporting_year_start=company.reporting_year_start,
+        reporting_year_end=company.reporting_year_end,
         api_key=settings.tavily_api_key,
         base_url=settings.tavily_base_url,
         timeout_seconds=settings.tavily_timeout_seconds,
         max_results=settings.tavily_max_results,
     )
+    raw_candidates = len(candidates)
     ingested: list[AutoDiscoverItem] = []
     skipped: list[AutoDiscoverSkipItem] = []
 
+    def _record_decision(
+        *,
+        source_url: str,
+        title: str,
+        score: float,
+        accepted: bool,
+        reason: str,
+    ) -> None:
+        db.add(
+            DocumentDiscoveryCandidate(
+                company_id=company.id,
+                tenant_id=auth.tenant_id,
+                source_url=source_url,
+                title=title[:255],
+                score=score,
+                accepted=accepted,
+                reason=reason,
+            )
+        )
+
     for candidate in candidates:
         if len(ingested) >= payload.max_documents:
-            break
+            reason = "max_documents_reached"
+            skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=False,
+                reason=reason,
+            )
+            continue
         try:
             downloaded = download_discovery_candidate(
                 candidate=candidate,
@@ -135,17 +181,35 @@ def auto_discover_documents(
                     duplicate=bool(result["duplicate"]),
                 )
             )
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=True,
+                reason="duplicate_ingested" if bool(result["duplicate"]) else "ingested",
+            )
         except Exception as exc:
+            reason = f"{type(exc).__name__}: {exc}"
             skipped.append(
                 AutoDiscoverSkipItem(
                     source_url=candidate.url,
-                    reason=f"{type(exc).__name__}: {exc}",
+                    reason=reason,
                 )
             )
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=False,
+                reason=reason,
+            )
+
+    db.commit()
 
     return AutoDiscoverResponse(
         company_id=company.id,
         candidates_considered=len(candidates),
+        raw_candidates=raw_candidates,
         ingested_count=len(ingested),
         ingested_documents=ingested,
         skipped=skipped,

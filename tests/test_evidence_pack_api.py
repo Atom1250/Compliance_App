@@ -158,9 +158,40 @@ def test_evidence_pack_preview_returns_manifest_summary(monkeypatch, tmp_path: P
     assert payload["has_evidence"] is True
     assert payload["document_count"] == 1
     assert payload["pack_file_count"] == 3
+    assert [item["path"] for item in payload["pack_files"]] == [
+        "assessments.jsonl",
+        f"documents/{doc_hash}.bin",
+        "evidence.jsonl",
+    ]
+    assert all(len(item["sha256"]) == 64 for item in payload["pack_files"])
     assert payload["entries"] == [
         "assessments.jsonl",
         f"documents/{doc_hash}.bin",
         "evidence.jsonl",
         "manifest.json",
     ]
+
+
+def test_evidence_pack_preview_pack_files_match_zip_manifest(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id, _ = _prepare_fixture(tmp_path, status="completed")
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_EVIDENCE_PACK_OUTPUT_ROOT", str(tmp_path / "packs"))
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    preview_response = client.get(f"/runs/{run_id}/evidence-pack-preview", headers=AUTH_DEFAULT)
+    assert preview_response.status_code == 200
+    preview_payload = preview_response.json()
+
+    zip_response = client.get(f"/runs/{run_id}/evidence-pack", headers=AUTH_DEFAULT)
+    assert zip_response.status_code == 200
+    zip_path = tmp_path / "response-preview-compare.zip"
+    zip_path.write_bytes(zip_response.content)
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+        manifest_pack_files = sorted(manifest["pack_files"], key=lambda item: item["path"])
+
+    assert preview_payload["pack_files"] == manifest_pack_files

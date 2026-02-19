@@ -8,7 +8,7 @@ from alembic import command
 from alembic.config import Config
 from apps.api.app.api.routers import documents as documents_router
 from apps.api.app.core.config import get_settings
-from apps.api.app.db.models import Company, Document
+from apps.api.app.db.models import Company, Document, DocumentDiscoveryCandidate
 from apps.api.app.services.tavily_discovery import DownloadedDocument, TavilyCandidate
 from apps.api.main import app
 
@@ -75,12 +75,20 @@ def test_auto_discover_ingests_documents(monkeypatch, tmp_path: Path) -> None:
     payload = response.json()
     assert payload["ingested_count"] == 1
     assert payload["candidates_considered"] == 2
+    assert payload["raw_candidates"] == 2
     assert payload["ingested_documents"][0]["source_url"] == "https://example.com/a.pdf"
 
     engine = create_engine(db_url)
     with Session(engine) as session:
         document_count = session.scalar(select(func.count(Document.id)))
+        decision_rows = session.scalars(
+            select(DocumentDiscoveryCandidate).order_by(DocumentDiscoveryCandidate.id)
+        ).all()
     assert document_count == 1
+    assert len(decision_rows) == 2
+    assert [row.accepted for row in decision_rows] == [True, False]
+    assert decision_rows[0].reason == "ingested"
+    assert decision_rows[1].reason == "max_documents_reached"
 
 
 def test_auto_discover_requires_enabled_tavily(monkeypatch, tmp_path: Path) -> None:
@@ -99,3 +107,61 @@ def test_auto_discover_requires_enabled_tavily(monkeypatch, tmp_path: Path) -> N
 
     assert response.status_code == 400
     assert response.json()["detail"] == "tavily discovery is disabled"
+
+
+def test_auto_discover_persists_download_validation_rejection_reason(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, company_id = _prepare_database(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_OBJECT_STORAGE_ROOT", str(tmp_path / "object_store"))
+    monkeypatch.setenv("COMPLIANCE_APP_TAVILY_ENABLED", "true")
+    monkeypatch.setenv("COMPLIANCE_APP_TAVILY_API_KEY", "test-key")
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        documents_router,
+        "search_tavily_documents",
+        lambda **_: [
+            TavilyCandidate(title="Listing", url="https://example.com/listing", score=0.95),
+            TavilyCandidate(title="Report", url="https://example.com/report.pdf", score=0.9),
+        ],
+    )
+    monkeypatch.setattr(
+        documents_router,
+        "download_discovery_candidate",
+        lambda **kwargs: (
+            (_ for _ in ()).throw(ValueError("downloaded content is not a PDF"))
+            if kwargs["candidate"].url.endswith("/listing")
+            else DownloadedDocument(
+                content=b"%PDF-1.7 mock",
+                filename="report.pdf",
+                title="Report",
+                source_url="https://example.com/report.pdf",
+            )
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/documents/auto-discover",
+        json={"company_id": company_id, "max_documents": 2},
+        headers=AUTH_HEADERS,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ingested_count"] == 1
+    assert any(
+        item["reason"] == "ValueError: downloaded content is not a PDF"
+        for item in payload["skipped"]
+    )
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        decisions = session.scalars(
+            select(DocumentDiscoveryCandidate).order_by(DocumentDiscoveryCandidate.id)
+        ).all()
+    assert [row.reason for row in decisions] == [
+        "ValueError: downloaded content is not a PDF",
+        "ingested",
+    ]

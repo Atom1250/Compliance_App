@@ -1,0 +1,22 @@
+{
+  "bundle_id": "no_transparency_sample",
+  "version": "2026.01",
+  "jurisdiction": "NO",
+  "regime": "NO_TRANSPARENCY",
+  "obligations": [
+    {
+      "obligation_id": "NO-TSL-1",
+      "title": "Transparency act due diligence disclosure",
+      "standard_reference": "NO Transparency Act section 5",
+      "elements": [
+        {
+          "element_id": "due-diligence-summary",
+          "label": "Summary of due diligence assessments",
+          "required": true,
+          "phase_in_rules": []
+        }
+      ]
+    }
+  ]
+}
+

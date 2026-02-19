@@ -88,3 +88,47 @@ def test_upload_and_retrieval_with_hash_dedup(monkeypatch, tmp_path: Path) -> No
     assert document_file_count == 1
     assert document_page_count == 1
     assert chunk_count == 1
+
+
+def test_upload_returns_consistent_422_for_missing_required_fields(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, company_id = _prepare_database(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_OBJECT_STORAGE_ROOT", str(tmp_path / "object_store"))
+    get_settings.cache_clear()
+
+    client = TestClient(app)
+    response = client.post(
+        "/documents/upload",
+        data={"company_id": str(company_id)},
+        files={},
+        headers=AUTH_HEADERS,
+    )
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["detail"]["code"] == "invalid_upload_request"
+    assert payload["detail"]["errors"] == [
+        {"field": "title", "message": "field required"},
+        {"field": "file", "message": "field required"},
+    ]
+
+
+def test_upload_trims_title_and_persists_normalized_value(monkeypatch, tmp_path: Path) -> None:
+    db_url, company_id = _prepare_database(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_OBJECT_STORAGE_ROOT", str(tmp_path / "object_store"))
+    get_settings.cache_clear()
+
+    client = TestClient(app)
+    uploaded = client.post(
+        "/documents/upload",
+        data={"company_id": str(company_id), "title": "  Annual Report  "},
+        files={"file": ("report.pdf", b"deterministic bytes", "application/pdf")},
+        headers=AUTH_HEADERS,
+    )
+    assert uploaded.status_code == 200
+    document_id = uploaded.json()["document_id"]
+    fetched = client.get(f"/documents/{document_id}", headers=AUTH_HEADERS)
+    assert fetched.status_code == 200
+    assert fetched.json()["title"] == "Annual Report"

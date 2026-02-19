@@ -75,3 +75,51 @@ def test_create_app_fails_fast_on_invalid_rate_limit_window(monkeypatch) -> None
 
     with pytest.raises(ValueError, match="rate limit window must be > 0"):
         create_app()
+
+
+def test_create_app_fails_fast_on_unknown_startup_provider_check(monkeypatch) -> None:
+    monkeypatch.setenv("COMPLIANCE_APP_STARTUP_VALIDATE_PROVIDERS", "unknown")
+    get_settings.cache_clear()
+    _resolve_key_maps.cache_clear()
+
+    with pytest.raises(ValueError, match="unknown startup provider checks"):
+        create_app()
+
+
+def test_create_app_fails_fast_on_missing_openai_key_when_check_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("COMPLIANCE_APP_STARTUP_VALIDATE_PROVIDERS", "openai_cloud")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_API_KEY", "")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    get_settings.cache_clear()
+    _resolve_key_maps.cache_clear()
+
+    with pytest.raises(ValueError, match="openai_api_key is required for openai_cloud"):
+        create_app()
+
+
+def test_create_app_fails_fast_on_tavily_check_without_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("COMPLIANCE_APP_STARTUP_VALIDATE_PROVIDERS", "tavily")
+    monkeypatch.setenv("COMPLIANCE_APP_TAVILY_ENABLED", "false")
+    monkeypatch.setenv("COMPLIANCE_APP_TAVILY_API_KEY", "")
+    get_settings.cache_clear()
+    _resolve_key_maps.cache_clear()
+
+    with pytest.raises(ValueError, match="tavily_enabled must be true for tavily"):
+        create_app()
+
+
+def test_create_app_accepts_provider_checks_when_required_keys_present(monkeypatch) -> None:
+    monkeypatch.setenv("COMPLIANCE_APP_STARTUP_VALIDATE_PROVIDERS", "local_lm_studio,openai_cloud")
+    monkeypatch.setenv("COMPLIANCE_APP_LLM_BASE_URL", "http://127.0.0.1:1234")
+    monkeypatch.setenv("COMPLIANCE_APP_LLM_MODEL", "ministral-3-8b-instruct-2512-mlx")
+    monkeypatch.setenv("COMPLIANCE_APP_LLM_API_KEY", "lm-studio")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_API_KEY", "secret")
+    get_settings.cache_clear()
+    _resolve_key_maps.cache_clear()
+
+    app = create_app()
+    assert app.title

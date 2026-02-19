@@ -1,63 +1,129 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { autoDiscoverDocuments, uploadDocument } from "../../lib/api-client";
+import {
+  autoDiscoverDocuments,
+  AutoDiscoverResponse,
+  orchestrateDiscoveryAndRun,
+  uploadDocument
+} from "../../lib/api-client";
+import { stateLabel, StepState, transitionOrStay } from "../../lib/flow-state";
 
 export default function UploadPage() {
-  const [status, setStatus] = useState("Idle");
+  const router = useRouter();
+  const [stepState, setStepState] = useState<StepState>("idle");
+  const [status, setStatus] = useState(stateLabel("idle"));
   const [error, setError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isAutoDiscovering, setIsAutoDiscovering] = useState(false);
+  const [isGuidedRunning, setIsGuidedRunning] = useState(false);
   const [title, setTitle] = useState("Annual ESG Report");
+  const [autoDiscoveryResult, setAutoDiscoveryResult] = useState<AutoDiscoverResponse | null>(null);
 
   async function runUpload(form: FormData) {
+    setStepState((state) => transitionOrStay(state, "validating"));
+    setStatus(stateLabel("validating"));
     const file = form.get("file");
     const companyId = Number(localStorage.getItem("company_id") ?? "0");
     if (!(file instanceof File) || !companyId) {
-      setStatus("Upload blocked.");
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
       setError("Missing file or company id.");
       return;
     }
     setIsUploading(true);
     setError("");
-    setStatus("Uploading...");
+    setStepState((state) => transitionOrStay(state, "submitting"));
+    setStatus(stateLabel("submitting"));
     try {
       const uploaded = await uploadDocument({ companyId, file, title });
       if (!uploaded?.documentId) {
         throw new Error("Missing document id in API response.");
       }
-      setStatus(`Uploaded document ${uploaded.documentId}`);
+      setStepState((state) => transitionOrStay(state, "success"));
+      setStatus(`Completed: uploaded document ${uploaded.documentId}`);
     } catch (caught) {
-      setStatus("Upload failed.");
-      setError(`Upload failed: ${String(caught)}`);
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
+      setError(`Upload failed: ${String(caught)}. Confirm title/file and API connectivity.`);
     } finally {
       setIsUploading(false);
     }
   }
 
   async function runAutoDiscovery() {
+    setStepState((state) => transitionOrStay(state, "validating"));
+    setStatus(stateLabel("validating"));
     const companyId = Number(localStorage.getItem("company_id") ?? "0");
     if (!companyId) {
-      setStatus("Auto-discovery blocked.");
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
       setError("Missing company id.");
       return;
     }
     setIsAutoDiscovering(true);
     setError("");
-    setStatus("Searching for ESG documents...");
+    setStepState((state) => transitionOrStay(state, "submitting"));
+    setStatus(stateLabel("submitting"));
     try {
-      const result = await autoDiscoverDocuments(companyId, 3);
+      const result = await autoDiscoverDocuments(companyId, 8);
+      setAutoDiscoveryResult(result);
+      setStepState((state) => transitionOrStay(state, "success"));
       setStatus(
-        `Auto-discovery complete: ${result.ingested_count} documents ingested ` +
-          `(from ${result.candidates_considered} candidates).`
+        `Completed: auto-discovery ingested ${result.ingested_count} documents ` +
+          `(from ${result.candidates_considered}/${result.raw_candidates} candidates).`
       );
     } catch (caught) {
-      setStatus("Auto-discovery failed.");
-      setError(`Auto-discovery failed: ${String(caught)}`);
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
+      setError(`Auto-discovery failed: ${String(caught)}. Check Tavily key and network settings.`);
     } finally {
       setIsAutoDiscovering(false);
+    }
+  }
+
+  async function runGuidedFlow() {
+    setStepState((state) => transitionOrStay(state, "validating"));
+    setStatus(stateLabel("validating"));
+    const companyId = Number(localStorage.getItem("company_id") ?? "0");
+    if (!companyId) {
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
+      setError("Missing company id.");
+      return;
+    }
+    const reportingYearEnd = Number(localStorage.getItem("company_reporting_year_end") ?? "2026");
+    const bundleVersion = Number.isFinite(reportingYearEnd) && reportingYearEnd < 2026 ? "2024.01" : "2026.01";
+    setIsGuidedRunning(true);
+    setError("");
+    setStepState((state) => transitionOrStay(state, "submitting"));
+    setStatus("Submitting...");
+    try {
+      const result = await orchestrateDiscoveryAndRun({
+        companyId,
+        bundleId: "esrs_mini",
+        bundleVersion,
+        llmProvider: "deterministic_fallback",
+        maxDocuments: 8
+      });
+      if (!result.runId) {
+        throw new Error("Missing run id in guided flow response.");
+      }
+      localStorage.setItem("run_id", String(result.runId));
+      setStepState((state) => transitionOrStay(state, "success"));
+      setStatus(
+        `Completed: stages=${result.stages.join(" -> ")}; ingested=${result.discovery.ingested_count}; run=${result.runId}`
+      );
+      router.push(`/run-status?runId=${result.runId}`);
+    } catch (caught) {
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
+      setError(`Guided flow failed: ${String(caught)}. Check discovery settings and run configuration.`);
+    } finally {
+      setIsGuidedRunning(false);
     }
   }
 
@@ -89,11 +155,34 @@ export default function UploadPage() {
       <button type="button" onClick={runAutoDiscovery} disabled={isAutoDiscovering}>
         {isAutoDiscovering ? "Discovering..." : "Auto-Find ESG Documents"}
       </button>
+      <button type="button" onClick={runGuidedFlow} disabled={isGuidedRunning}>
+        {isGuidedRunning ? "Running Guided Flow..." : "Auto-Find + Start Run"}
+      </button>
       <p>{status}</p>
+      <p>Step Key: {stepState}</p>
       {error ? (
         <div className="panel">
           <p>{error}</p>
           <p>Retry upload after fixing the issue.</p>
+        </div>
+      ) : null}
+      {autoDiscoveryResult ? (
+        <div className="panel">
+          <h2>Discovery Diagnostics</h2>
+          <p>
+            Raw candidates: {autoDiscoveryResult.raw_candidates}; considered:{" "}
+            {autoDiscoveryResult.candidates_considered}; ingested: {autoDiscoveryResult.ingested_count}; skipped:{" "}
+            {autoDiscoveryResult.skipped.length}
+          </p>
+          {autoDiscoveryResult.skipped.length > 0 ? (
+            <ul>
+              {autoDiscoveryResult.skipped.slice(0, 8).map((item) => (
+                <li key={`${item.source_url}-${item.reason}`}>
+                  {item.reason}: {item.source_url}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
       <p>

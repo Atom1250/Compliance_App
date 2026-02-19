@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from apps.api.app.db.base import Base
@@ -24,6 +25,8 @@ class Company(Base):
     reporting_year: Mapped[int | None] = mapped_column(nullable=True)
     reporting_year_start: Mapped[int | None] = mapped_column(nullable=True)
     reporting_year_end: Mapped[int | None] = mapped_column(nullable=True)
+    regulatory_jurisdictions: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    regulatory_regimes: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -36,6 +39,18 @@ class Document(Base):
         String(64), nullable=False, default="default", index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class CompanyDocumentLink(Base):
+    __tablename__ = "company_document_link"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("document.id"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default", index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -83,6 +98,7 @@ class Embedding(Base):
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
     dimensions: Mapped[int] = mapped_column(nullable=False)
     embedding: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -132,6 +148,7 @@ class Run(Base):
         String(64), nullable=False, default="default", index=True
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    compiler_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="legacy")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -209,5 +226,104 @@ class RunManifest(Base):
     retrieval_params: Mapped[str] = mapped_column(Text, nullable=False)
     model_name: Mapped[str] = mapped_column(String(256), nullable=False)
     prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_template_version: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="legacy_v1"
+    )
     git_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RegulatoryBundle(Base):
+    __tablename__ = "regulatory_bundle"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    bundle_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    jurisdiction: Mapped[str] = mapped_column(String(64), nullable=False)
+    regime: Mapped[str] = mapped_column(String(64), nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RunRegistryArtifact(Base):
+    __tablename__ = "run_registry_artifact"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("run.id"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default", index=True
+    )
+    artifact_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_json: Mapped[str] = mapped_column(Text, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RegulatorySourceDocument(Base):
+    __tablename__ = "regulatory_source_document"
+
+    record_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    jurisdiction: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    document_name: Mapped[str] = mapped_column(Text, nullable=False)
+    document_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    framework_level: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    legal_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    issuing_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    supervisory_authority: Mapped[str | None] = mapped_column(Text, nullable=True)
+    official_source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_format: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope_applicability: Mapped[str | None] = mapped_column(Text, nullable=True)
+    effective_date: Mapped[date | None] = mapped_column(nullable=True)
+    last_checked_date: Mapped[date | None] = mapped_column(nullable=True)
+    update_frequency: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version_identifier: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    keywords_tags: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes_for_db_tagging: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_sheets: Mapped[str | None] = mapped_column(Text, nullable=True)
+    row_checksum: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_row_json: Mapped[dict | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class DocumentDiscoveryCandidate(Base):
+    __tablename__ = "document_discovery_candidate"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default", index=True
+    )
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    score: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    accepted: Mapped[bool] = mapped_column(nullable=False, default=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RunInputSnapshot(Base):
+    __tablename__ = "run_input_snapshot"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("run.id"),
+        nullable=False,
+        index=True,
+        unique=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default", index=True
+    )
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

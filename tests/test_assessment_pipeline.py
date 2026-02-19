@@ -16,6 +16,7 @@ from apps.api.app.db.models import (
     Document,
     RequirementBundle,
     Run,
+    RunRegistryArtifact,
 )
 from apps.api.app.services.assessment_pipeline import (
     AssessmentRunConfig,
@@ -164,6 +165,19 @@ def test_assessment_pipeline_stores_extraction_outputs_with_manifest_fields(tmp_
         ).all()
         assert len(persisted) == 1
         assert transport.calls[0]["temperature"] == 0.0
+        retrieval_trace = session.scalar(
+            select(RunRegistryArtifact).where(
+                RunRegistryArtifact.run_id == run.id,
+                RunRegistryArtifact.artifact_key == "retrieval_trace",
+            )
+        )
+        assert retrieval_trace is not None
+        trace_payload = json.loads(retrieval_trace.content_json)
+        assert trace_payload["retrieval_top_k"] == 3
+        assert trace_payload["retrieval_policy"]["tie_break"] == "chunk_id"
+        assert trace_payload["entries"][0]["datapoint_key"] == "ESRS-E1-6"
+        assert trace_payload["entries"][0]["selected_chunk_ids"] == ["chunk-evidence-1"]
+        assert trace_payload["entries"][0]["candidates"][0]["chunk_id"] == "chunk-evidence-1"
 
 
 def test_assessment_pipeline_applies_verification_downgrade(tmp_path: Path) -> None:
@@ -248,3 +262,85 @@ def test_assessment_pipeline_applies_verification_downgrade(tmp_path: Path) -> N
         assessment = stored[0]
         assert assessment.status == "Partial"
         assert "Verification downgraded" in assessment.rationale
+
+
+def test_assessment_pipeline_retrieval_trace_is_stable_for_same_input(tmp_path: Path) -> None:
+    with _prepare_session(tmp_path) as session:
+        company = Company(
+            name="Assessment Co",
+            employees=500,
+            turnover=100_000_000.0,
+            listed_status=True,
+            reporting_year=2026,
+        )
+        session.add(company)
+        session.flush()
+
+        run = Run(company_id=company.id, status="queued")
+        session.add(run)
+        session.flush()
+
+        bundle = RequirementBundle(bundle_id="esrs_mini", version="2026.01", standard="ESRS")
+        session.add(bundle)
+        session.flush()
+
+        datapoint = DatapointDefinition(
+            requirement_bundle_id=bundle.id,
+            datapoint_key="ESRS-E1-6",
+            title="Gross Scope 1 emissions",
+            disclosure_reference="E1-6",
+            materiality_topic="climate",
+        )
+        session.add(datapoint)
+        session.flush()
+        session.add(
+            ApplicabilityRule(
+                requirement_bundle_id=bundle.id,
+                rule_id="rule-1",
+                datapoint_key=datapoint.datapoint_key,
+                expression="company.listed_status == True",
+            )
+        )
+        document = Document(company_id=company.id, title="Annual report")
+        session.add(document)
+        session.flush()
+        session.add(
+            Chunk(
+                document_id=document.id,
+                chunk_id="chunk-evidence-1",
+                page_number=1,
+                start_offset=0,
+                end_offset=64,
+                text="Gross Scope 1 emissions are reported as 42 tCO2e.",
+                content_tsv="gross scope 1 emissions reported 42",
+            )
+        )
+        session.commit()
+
+        extraction_client = ExtractionClient(transport=MockTransport(), model="gpt-5")
+        config = AssessmentRunConfig(
+            run_id=run.id,
+            bundle_id="esrs_mini",
+            bundle_version="2026.01",
+            retrieval_top_k=3,
+            retrieval_model_name="default",
+        )
+        execute_assessment_pipeline(session, extraction_client=extraction_client, config=config)
+        first_trace = session.scalar(
+            select(RunRegistryArtifact).where(
+                RunRegistryArtifact.run_id == run.id,
+                RunRegistryArtifact.artifact_key == "retrieval_trace",
+            )
+        )
+        assert first_trace is not None
+        first_snapshot = first_trace.content_json
+
+        execute_assessment_pipeline(session, extraction_client=extraction_client, config=config)
+        second_trace = session.scalar(
+            select(RunRegistryArtifact).where(
+                RunRegistryArtifact.run_id == run.id,
+                RunRegistryArtifact.artifact_key == "retrieval_trace",
+            )
+        )
+        assert second_trace is not None
+        assert first_snapshot == second_trace.content_json

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import zipfile
 from pathlib import Path
@@ -13,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.requirements.applicability import resolve_required_datapoint_ids
+from app.requirements.routing import resolve_bundle_selection
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
@@ -26,7 +28,7 @@ from apps.api.app.db.models import (
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
 from apps.api.app.services.evidence_pack import export_evidence_pack
-from apps.api.app.services.reporting import generate_html_report
+from apps.api.app.services.reporting import build_report_data, generate_html_report
 from apps.api.app.services.run_execution_worker import (
     RunExecutionPayload,
     current_assessment_count,
@@ -51,8 +53,8 @@ class MaterialityUpsertResponse(BaseModel):
 
 
 class RequiredDatapointsRequest(BaseModel):
-    bundle_id: str = Field(min_length=1)
-    bundle_version: str = Field(min_length=1)
+    bundle_id: str = Field(default="esrs_mini", min_length=1)
+    bundle_version: str | None = Field(default=None, min_length=1)
 
 
 class RequiredDatapointsResponse(BaseModel):
@@ -69,6 +71,21 @@ class RunEventItem(BaseModel):
 class RunEventsResponse(BaseModel):
     run_id: int
     events: list[RunEventItem]
+
+
+class RunDiagnosticsResponse(BaseModel):
+    run_id: int
+    status: str
+    compiler_mode: str
+    manifest_present: bool
+    required_datapoints_count: int | None
+    required_datapoints_error: str | None
+    assessment_count: int
+    assessment_status_counts: dict[str, int]
+    retrieval_hit_count: int
+    latest_failure_reason: str | None
+    stage_outcomes: dict[str, bool]
+    stage_event_counts: dict[str, int]
 
 
 class RunCreateRequest(BaseModel):
@@ -93,12 +110,27 @@ class RunManifestResponse(BaseModel):
     retrieval_params: dict[str, object]
     model_name: str
     prompt_hash: str
+    report_template_version: str
     git_sha: str
 
 
+class RunExportReadinessResponse(BaseModel):
+    run_id: int
+    status: str
+    report_ready: bool
+    evidence_pack_ready: bool
+    checks: dict[str, bool]
+    blocking_reasons: list[str]
+
+
 class EvidencePackPreviewResponse(BaseModel):
+    class PackFileItem(BaseModel):
+        path: str
+        sha256: str
+
     run_id: int
     entries: list[str]
+    pack_files: list[PackFileItem]
     pack_file_count: int
     document_count: int
     has_assessments: bool
@@ -106,8 +138,8 @@ class EvidencePackPreviewResponse(BaseModel):
 
 
 class RunExecuteRequest(BaseModel):
-    bundle_id: str = Field(min_length=1)
-    bundle_version: str = Field(min_length=1)
+    bundle_id: str = Field(default="esrs_mini", min_length=1)
+    bundle_version: str | None = Field(default=None, min_length=1)
     retrieval_top_k: int = Field(default=5, ge=1, le=100)
     retrieval_model_name: str = Field(default="default", min_length=1)
     llm_provider: str = Field(default="deterministic_fallback", min_length=1)
@@ -118,6 +150,43 @@ class RunExecuteResponse(BaseModel):
     run_id: int
     status: str
     assessment_count: int
+
+
+class ReportPreviewSummary(BaseModel):
+    covered: int
+    denominator_datapoints: int
+    excluded_na_count: int
+    coverage_pct: float
+
+
+class ReportPreviewMetrics(BaseModel):
+    present: int
+    partial: int
+    absent: int
+    na: int
+    total_datapoints: int
+
+
+class ReportPreviewGapItem(BaseModel):
+    datapoint_key: str
+    status: str
+
+
+class ReportPreviewRow(BaseModel):
+    datapoint_key: str
+    status: str
+    value: str | None
+    citations: list[str]
+    rationale: str
+
+
+class ReportPreviewResponse(BaseModel):
+    run_id: int
+    html: str
+    summary: ReportPreviewSummary
+    metrics: ReportPreviewMetrics
+    gaps: list[ReportPreviewGapItem]
+    rows: list[ReportPreviewRow]
 
 
 @router.post("", response_model=RunCreateResponse)
@@ -180,6 +249,93 @@ def run_status(
     return RunStatusResponse(run_id=run.id, status=run.status)
 
 
+def _load_run(
+    db: Session,
+    *,
+    run_id: int,
+    tenant_id: str,
+) -> Run:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    return run
+
+
+def _compute_export_readiness(
+    db: Session,
+    *,
+    run: Run,
+    tenant_id: str,
+) -> RunExportReadinessResponse:
+    has_manifest = (
+        db.scalar(
+            select(RunManifest.id).where(
+                RunManifest.run_id == run.id,
+                RunManifest.tenant_id == tenant_id,
+            )
+        )
+        is not None
+    )
+    has_assessments = (
+        db.scalar(
+            select(DatapointAssessment.id).where(
+                DatapointAssessment.run_id == run.id,
+                DatapointAssessment.tenant_id == tenant_id,
+            )
+        )
+        is not None
+    )
+    checks = {
+        "run_completed": run.status == "completed",
+        "has_manifest": has_manifest,
+        "has_assessments": has_assessments,
+    }
+    blocking_reasons: list[str] = []
+    if not checks["run_completed"]:
+        blocking_reasons.append(f"run_not_completed:{run.status}")
+    if not checks["has_assessments"]:
+        blocking_reasons.append("assessments_missing")
+    if not checks["has_manifest"]:
+        blocking_reasons.append("manifest_missing_for_report")
+    blocking_reasons = sorted(set(blocking_reasons))
+    return RunExportReadinessResponse(
+        run_id=run.id,
+        status=run.status,
+        report_ready=(
+            checks["run_completed"] and checks["has_assessments"] and checks["has_manifest"]
+        ),
+        evidence_pack_ready=checks["run_completed"] and checks["has_assessments"],
+        checks=checks,
+        blocking_reasons=blocking_reasons,
+    )
+
+
+def _require_export_ready(
+    *,
+    readiness: RunExportReadinessResponse,
+    resource: str,
+) -> None:
+    is_ready = readiness.report_ready if resource == "report" else readiness.evidence_pack_ready
+    if is_ready:
+        return
+    code = "report_not_ready" if resource == "report" else "evidence_pack_not_ready"
+    reasons = []
+    for reason in readiness.blocking_reasons:
+        if resource == "report":
+            reasons.append(reason)
+            continue
+        if reason == "manifest_missing_for_report":
+            continue
+        reasons.append(reason)
+    reasons = sorted(set(reasons))
+    if not reasons:
+        reasons = ["unknown_not_ready"]
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": code, "reasons": reasons},
+    )
+
+
 def _load_completed_run(
     db: Session,
     *,
@@ -187,13 +343,24 @@ def _load_completed_run(
     tenant_id: str,
     resource_name: str,
 ) -> Run:
-    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == tenant_id))
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
-    if run.status != "completed":
+    run = _load_run(db, run_id=run_id, tenant_id=tenant_id)
+    readiness = _compute_export_readiness(db, run=run, tenant_id=tenant_id)
+    resource = "report" if resource_name == "report" else "evidence_pack"
+    try:
+        _require_export_ready(readiness=readiness, resource=resource)
+    except HTTPException:
+        # Preserve existing compatibility text for non-completed runs.
+        if run.status != "completed":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{resource_name} available only for completed runs",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"{resource_name} available only for completed runs",
+            detail={
+                "code": f"{resource}_not_ready",
+                "reasons": readiness.blocking_reasons,
+            },
         )
     return run
 
@@ -207,7 +374,67 @@ def _render_report_html(db: Session, *, run: Run, tenant_id: str) -> str:
         )
         .order_by(DatapointAssessment.datapoint_key)
     ).all()
-    return generate_html_report(run_id=run.id, assessments=assessments)
+    settings = get_settings()
+    return generate_html_report(
+        run_id=run.id,
+        assessments=assessments,
+        include_registry_report_matrix=settings.feature_registry_report_matrix,
+    )
+
+
+def _render_report_preview(
+    db: Session,
+    *,
+    run: Run,
+    tenant_id: str,
+) -> ReportPreviewResponse:
+    assessments = db.scalars(
+        select(DatapointAssessment)
+        .where(
+            DatapointAssessment.run_id == run.id,
+            DatapointAssessment.tenant_id == tenant_id,
+        )
+        .order_by(DatapointAssessment.datapoint_key)
+    ).all()
+    settings = get_settings()
+    html = generate_html_report(
+        run_id=run.id,
+        assessments=assessments,
+        include_registry_report_matrix=settings.feature_registry_report_matrix,
+    )
+    report = build_report_data(run_id=run.id, assessments=assessments)
+    return ReportPreviewResponse(
+        run_id=run.id,
+        html=html,
+        summary=ReportPreviewSummary(
+            covered=report.covered,
+            denominator_datapoints=report.denominator_datapoints,
+            excluded_na_count=report.excluded_na_count,
+            coverage_pct=report.coverage_pct,
+        ),
+        metrics=ReportPreviewMetrics(
+            present=report.present,
+            partial=report.partial,
+            absent=report.absent,
+            na=report.na,
+            total_datapoints=report.total_datapoints,
+        ),
+        gaps=[
+            ReportPreviewGapItem(datapoint_key=row.datapoint_key, status=row.status)
+            for row in report.rows
+            if row.status in {"Absent", "Partial"}
+        ],
+        rows=[
+            ReportPreviewRow(
+                datapoint_key=row.datapoint_key,
+                status=row.status,
+                value=row.value,
+                citations=sorted(json.loads(row.evidence_chunk_ids)),
+                rationale=row.rationale,
+            )
+            for row in report.rows
+        ],
+    )
 
 
 @router.get("/{run_id}/report")
@@ -256,6 +483,31 @@ def run_report_html(
     return HTMLResponse(content=html)
 
 
+@router.get("/{run_id}/report-preview", response_model=ReportPreviewResponse)
+def run_report_preview(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> ReportPreviewResponse:
+    run = _load_completed_run(
+        db,
+        run_id=run_id,
+        tenant_id=auth.tenant_id,
+        resource_name="report",
+    )
+    return _render_report_preview(db, run=run, tenant_id=auth.tenant_id)
+
+
+@router.get("/{run_id}/export-readiness", response_model=RunExportReadinessResponse)
+def run_export_readiness(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunExportReadinessResponse:
+    run = _load_run(db, run_id=run_id, tenant_id=auth.tenant_id)
+    return _compute_export_readiness(db, run=run, tenant_id=auth.tenant_id)
+
+
 @router.get("/{run_id}/evidence-pack")
 def run_evidence_pack(
     run_id: int,
@@ -301,11 +553,33 @@ def run_evidence_pack_preview(
     with zipfile.ZipFile(output_zip, "r") as zf:
         entries = zf.namelist()
         manifest = json.loads(zf.read("manifest.json"))
+        manifest_pack_files = sorted(
+            [
+                {"path": str(item["path"]), "sha256": str(item["sha256"])}
+                for item in manifest.get("pack_files", [])
+            ],
+            key=lambda item: item["path"],
+        )
+        preview_paths = {item["path"] for item in manifest_pack_files}
+        zip_paths = {name for name in entries if name != "manifest.json"}
+        if preview_paths != zip_paths:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="evidence pack preview manifest mismatch",
+            )
+        for item in manifest_pack_files:
+            digest = hashlib.sha256(zf.read(item["path"])).hexdigest()
+            if digest != item["sha256"]:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"evidence pack checksum mismatch for {item['path']}",
+                )
 
     return EvidencePackPreviewResponse(
         run_id=run.id,
         entries=entries,
-        pack_file_count=len(manifest.get("pack_files", [])),
+        pack_files=manifest_pack_files,
+        pack_file_count=len(manifest_pack_files),
         document_count=len(manifest.get("documents", [])),
         has_assessments="assessments.jsonl" in entries,
         has_evidence="evidence.jsonl" in entries,
@@ -338,7 +612,116 @@ def run_manifest(
         retrieval_params=json.loads(manifest.retrieval_params),
         model_name=manifest.model_name,
         prompt_hash=manifest.prompt_hash,
+        report_template_version=manifest.report_template_version,
         git_sha=manifest.git_sha,
+    )
+
+
+@router.get("/{run_id}/diagnostics", response_model=RunDiagnosticsResponse)
+def run_diagnostics(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunDiagnosticsResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+
+    manifest = db.scalar(
+        select(RunManifest).where(
+            RunManifest.run_id == run.id, RunManifest.tenant_id == auth.tenant_id
+        )
+    )
+    manifest_present = manifest is not None
+
+    required_datapoints_count: int | None = None
+    required_datapoints_error: str | None = None
+    if manifest is not None:
+        try:
+            required = resolve_required_datapoint_ids(
+                db,
+                company_id=run.company_id,
+                bundle_id=manifest.bundle_id,
+                bundle_version=manifest.bundle_version,
+                run_id=run.id,
+            )
+            required_datapoints_count = len(required)
+        except Exception as exc:  # pragma: no cover - defensive endpoint path
+            required_datapoints_error = str(exc)
+
+    assessments = db.scalars(
+        select(DatapointAssessment)
+        .where(
+            DatapointAssessment.run_id == run.id,
+            DatapointAssessment.tenant_id == auth.tenant_id,
+        )
+        .order_by(DatapointAssessment.datapoint_key)
+    ).all()
+    assessment_status_counts = {
+        status_name: sum(1 for row in assessments if row.status == status_name)
+        for status_name in ["Present", "Partial", "Absent", "NA"]
+    }
+    assessment_count = len(assessments)
+    retrieval_hit_count = len(
+        {
+            chunk_id
+            for row in assessments
+            for chunk_id in json.loads(row.evidence_chunk_ids)
+        }
+    )
+
+    events = list_run_events(db, run_id=run.id, tenant_id=auth.tenant_id)
+    stage_events = [
+        "run.created",
+        "run.execution.queued",
+        "run.execution.started",
+        "assessment.pipeline.started",
+        "assessment.pipeline.completed",
+        "run.execution.completed",
+        "run.execution.failed",
+    ]
+    stage_event_counts = {
+        event_type: sum(1 for event in events if event.event_type == event_type)
+        for event_type in stage_events
+    }
+    stage_outcomes = {
+        event_type: stage_event_counts[event_type] > 0 for event_type in stage_events
+    }
+
+    latest_failure_reason: str | None = None
+    for event in reversed(events):
+        if event.event_type == "run.execution.failed":
+            payload = json.loads(event.payload)
+            latest_failure_reason = str(payload.get("error")) if payload.get("error") else None
+            break
+
+    append_run_event(
+        db,
+        run_id=run.id,
+        tenant_id=auth.tenant_id,
+        event_type="run.diagnostics.requested",
+        payload={"tenant_id": auth.tenant_id},
+    )
+    log_structured_event(
+        "run.diagnostics.requested",
+        run_id=run.id,
+        tenant_id=auth.tenant_id,
+    )
+    db.commit()
+
+    return RunDiagnosticsResponse(
+        run_id=run.id,
+        status=run.status,
+        compiler_mode=run.compiler_mode,
+        manifest_present=manifest_present,
+        required_datapoints_count=required_datapoints_count,
+        required_datapoints_error=required_datapoints_error,
+        assessment_count=assessment_count,
+        assessment_status_counts=assessment_status_counts,
+        retrieval_hit_count=retrieval_hit_count,
+        latest_failure_reason=latest_failure_reason,
+        stage_outcomes=stage_outcomes,
+        stage_event_counts=stage_event_counts,
     )
 
 
@@ -352,6 +735,13 @@ def execute_run(
     run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    resolved = resolve_bundle_selection(
+        db,
+        company_id=run.company_id,
+        requested_bundle_id=payload.bundle_id,
+        requested_bundle_version=payload.bundle_version,
+    )
+
     assessment_count = current_assessment_count(db, run_id=run.id, tenant_id=auth.tenant_id)
     latest_execution_event = db.scalar(
         select(RunEvent.event_type)
@@ -397,6 +787,44 @@ def execute_run(
             status=run.status,
             assessment_count=assessment_count,
         )
+    if run.status == "failed" and payload.retry_failed:
+        latest_failure_event = db.scalar(
+            select(RunEvent)
+            .where(
+                RunEvent.run_id == run.id,
+                RunEvent.tenant_id == auth.tenant_id,
+                RunEvent.event_type == "run.execution.failed",
+            )
+            .order_by(RunEvent.id.desc())
+            .limit(1)
+        )
+        if latest_failure_event is not None:
+            failure_payload = json.loads(latest_failure_event.payload)
+            if not bool(failure_payload.get("retryable", False)):
+                append_run_event(
+                    db,
+                    run_id=run.id,
+                    tenant_id=auth.tenant_id,
+                    event_type="run.execution.retry.skipped",
+                    payload={
+                        "tenant_id": auth.tenant_id,
+                        "failure_category": failure_payload.get("failure_category"),
+                        "reason": "non_retryable_failure",
+                    },
+                )
+                log_structured_event(
+                    "run.execution.retry.skipped",
+                    run_id=run.id,
+                    tenant_id=auth.tenant_id,
+                    failure_category=failure_payload.get("failure_category"),
+                    reason="non_retryable_failure",
+                )
+                db.commit()
+                return RunExecuteResponse(
+                    run_id=run.id,
+                    status=run.status,
+                    assessment_count=assessment_count,
+                )
 
     run.status = "queued"
     append_run_event(
@@ -406,8 +834,8 @@ def execute_run(
         event_type="run.execution.queued",
         payload={
             "tenant_id": auth.tenant_id,
-            "bundle_id": payload.bundle_id,
-            "bundle_version": payload.bundle_version,
+            "bundle_id": resolved.bundle_id,
+            "bundle_version": resolved.bundle_version,
             "retry_failed": payload.retry_failed,
         },
     )
@@ -415,8 +843,8 @@ def execute_run(
         "run.execution.queued",
         run_id=run.id,
         tenant_id=auth.tenant_id,
-        bundle_id=payload.bundle_id,
-        bundle_version=payload.bundle_version,
+        bundle_id=resolved.bundle_id,
+        bundle_version=resolved.bundle_version,
         retry_failed=payload.retry_failed,
     )
     db.commit()
@@ -424,8 +852,8 @@ def execute_run(
     enqueue_run_execution(
         run.id,
         RunExecutionPayload(
-            bundle_id=payload.bundle_id,
-            bundle_version=payload.bundle_version,
+            bundle_id=resolved.bundle_id,
+            bundle_version=resolved.bundle_version,
             retrieval_top_k=payload.retrieval_top_k,
             retrieval_model_name=payload.retrieval_model_name,
             llm_provider=payload.llm_provider,
@@ -515,11 +943,18 @@ def required_datapoints_for_run(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
 
+    resolved = resolve_bundle_selection(
+        db,
+        company_id=run.company_id,
+        requested_bundle_id=payload.bundle_id,
+        requested_bundle_version=payload.bundle_version,
+    )
+
     required = resolve_required_datapoint_ids(
         db,
         company_id=run.company_id,
-        bundle_id=payload.bundle_id,
-        bundle_version=payload.bundle_version,
+        bundle_id=resolved.bundle_id,
+        bundle_version=resolved.bundle_version,
         run_id=run.id,
     )
     append_run_event(
@@ -529,8 +964,8 @@ def required_datapoints_for_run(
         event_type="required_datapoints.resolved",
         payload={
             "tenant_id": auth.tenant_id,
-            "bundle_id": payload.bundle_id,
-            "bundle_version": payload.bundle_version,
+            "bundle_id": resolved.bundle_id,
+            "bundle_version": resolved.bundle_version,
             "required_count": len(required),
         },
     )

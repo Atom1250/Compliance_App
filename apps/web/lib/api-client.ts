@@ -32,6 +32,7 @@ export type LLMHealthResponse = {
 export type AutoDiscoverResponse = {
   company_id: number;
   candidates_considered: number;
+  raw_candidates: number;
   ingested_count: number;
   ingested_documents: Array<{
     document_id: number;
@@ -45,9 +46,19 @@ export type AutoDiscoverResponse = {
   }>;
 };
 
+export type GuidedRunFlowResult = {
+  runId: number | null;
+  stages: string[];
+  discovery: AutoDiscoverResponse;
+};
+
 export type EvidencePackPreviewResponse = {
   run_id: number;
   entries: string[];
+  pack_files: Array<{
+    path: string;
+    sha256: string;
+  }>;
   pack_file_count: number;
   document_count: number;
   has_assessments: boolean;
@@ -160,6 +171,26 @@ export async function configureRun(payload: RunConfigPayload): Promise<{ runId: 
   );
 
   return { runId: created.run_id };
+}
+
+export async function orchestrateDiscoveryAndRun(
+  payload: RunConfigPayload & { maxDocuments?: number }
+): Promise<GuidedRunFlowResult> {
+  const stages: string[] = [];
+
+  stages.push("discovery.started");
+  const discovery = await autoDiscoverDocuments(payload.companyId, payload.maxDocuments ?? 3);
+  stages.push("discovery.completed");
+
+  stages.push("run.configure.started");
+  const configured = await configureRun(payload);
+  stages.push("run.configure.completed");
+
+  return {
+    runId: configured?.runId ?? null,
+    stages,
+    discovery
+  };
 }
 
 export async function fetchRunStatus(runId: number): Promise<{ status: string }> {

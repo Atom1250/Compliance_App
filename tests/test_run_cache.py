@@ -141,3 +141,29 @@ def test_run_hash_changes_when_retrieval_policy_version_changes() -> None:
         prompt_hash="prompt-hash-1",
     )
     assert compute_run_hash(base) != compute_run_hash(changed)
+
+
+def test_run_hash_changes_with_compiler_mode_and_registry_checksums() -> None:
+    base = RunHashInput(
+        tenant_id="default",
+        document_hashes=["doc-hash-1"],
+        company_profile={"employees": 100, "listed_status": True, "reporting_year": 2026},
+        materiality_inputs={"climate": True},
+        bundle_version="2026.01",
+        retrieval_params={"query_mode": "hybrid", "top_k": 3},
+        prompt_hash="prompt-hash-1",
+        compiler_mode="legacy",
+        registry_checksums=[],
+    )
+    registry_mode = RunHashInput(
+        tenant_id="default",
+        document_hashes=["doc-hash-1"],
+        company_profile={"employees": 100, "listed_status": True, "reporting_year": 2026},
+        materiality_inputs={"climate": True},
+        bundle_version="2026.01",
+        retrieval_params={"query_mode": "hybrid", "top_k": 3},
+        prompt_hash="prompt-hash-1",
+        compiler_mode="registry",
+        registry_checksums=["abc123"],
+    )
+    assert compute_run_hash(base) != compute_run_hash(registry_mode)

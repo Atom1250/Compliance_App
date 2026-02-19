@@ -1,3 +1,4 @@
+import json
 import time
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from alembic.config import Config
+from app.regulatory.canonical import sha256_checksum
 from app.requirements.importer import import_bundle, load_bundle
 from apps.api.app.db.models import (
     Chunk,
@@ -14,8 +16,12 @@ from apps.api.app.db.models import (
     DatapointAssessment,
     Document,
     DocumentFile,
+    RegulatoryBundle,
     Run,
     RunCacheEntry,
+    RunEvent,
+    RunInputSnapshot,
+    RunRegistryArtifact,
 )
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.main import app
@@ -237,6 +243,7 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
     assert payload["retrieval_params"] == {
         "bundle_id": "esrs_mini",
         "bundle_version": "2026.01",
+        "compiler_mode": "legacy",
         "llm_provider": "deterministic_fallback",
         "query_mode": "hybrid",
         "retrieval_policy": {
@@ -251,6 +258,80 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
     assert payload["model_name"] == "deterministic-local-v1"
     assert len(payload["prompt_hash"]) == 64
     assert payload["git_sha"] == "deadbeef" * 5
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        snapshot = session.scalar(
+            select(RunInputSnapshot).where(
+                RunInputSnapshot.run_id == run_id,
+                RunInputSnapshot.tenant_id == "default",
+            )
+        )
+    assert snapshot is not None
+    snapshot_payload = json.loads(snapshot.payload_json)
+    assert snapshot_payload["bundle_id"] == "esrs_mini"
+    assert snapshot_payload["bundle_version"] == "2026.01"
+    assert snapshot_payload["retrieval"]["retrieval_policy"]["tie_break"] == "chunk_id"
+    assert snapshot_payload["required_datapoint_universe"] == ["ESRS-E1-1", "ESRS-E1-6"]
+
+
+def test_run_manifest_includes_registry_section_in_registry_mode(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_FEATURE_REGISTRY_COMPILER", "true")
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    sample_payload = json.loads(Path("app/regulatory/bundles/eu_csrd_sample.json").read_text())
+    sample_checksum = sha256_checksum(sample_payload)
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        run.compiler_mode = "registry"
+        session.add(
+            RegulatoryBundle(
+                bundle_id="eu_csrd_sample",
+                version="2026.01",
+                jurisdiction="EU",
+                regime="CSRD_ESRS",
+                checksum=sample_checksum,
+                payload=sample_payload,
+            )
+        )
+        session.commit()
+
+    client = TestClient(app)
+    execute_response = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "eu_csrd_sample", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert execute_response.status_code == 200
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "completed"
+
+    manifest_response = client.get(f"/runs/{run_id}/manifest", headers=AUTH_DEFAULT)
+    assert manifest_response.status_code == 200
+    payload = manifest_response.json()
+    assert payload["retrieval_params"]["compiler_mode"] == "registry"
+    assert payload["retrieval_params"]["registry"] == {
+        "bundle_checksums": [sample_checksum],
+        "mode": "registry",
+    }
+
+    with Session(engine) as session:
+        artifact_keys = session.scalars(
+            select(RunRegistryArtifact.artifact_key)
+            .where(RunRegistryArtifact.run_id == run_id)
+            .order_by(RunRegistryArtifact.artifact_key)
+        ).all()
+    assert artifact_keys == ["compiled_plan", "coverage_matrix", "retrieval_trace"]
 
 
 def test_run_manifest_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
@@ -323,6 +404,28 @@ def test_run_execute_cache_hit_skips_pipeline_and_preserves_cached_output(
         entries = session.scalars(select(RunCacheEntry)).all()
         assert len(entries) == 1
         assert entries[0].output_json == first_cached_output
+        snapshot = session.scalar(
+            select(RunInputSnapshot).where(
+                RunInputSnapshot.run_id == run_id,
+                RunInputSnapshot.tenant_id == "default",
+            )
+        )
+        assert snapshot is not None
+        first_snapshot_json = snapshot.payload_json
+
+    third = client.post(f"/runs/{run_id}/execute", json=payload, headers=AUTH_DEFAULT)
+    assert third.status_code == 200
+    assert third.json()["status"] == "completed"
+
+    with Session(engine) as session:
+        snapshot_after = session.scalar(
+            select(RunInputSnapshot).where(
+                RunInputSnapshot.run_id == run_id,
+                RunInputSnapshot.tenant_id == "default",
+            )
+        )
+        assert snapshot_after is not None
+        assert snapshot_after.payload_json == first_snapshot_json
 
 
 def test_run_execute_retry_failed_is_idempotent(monkeypatch, tmp_path: Path) -> None:
@@ -360,5 +463,60 @@ def test_run_execute_retry_failed_is_idempotent(monkeypatch, tmp_path: Path) -> 
         headers=AUTH_DEFAULT,
     )
     assert with_retry.status_code == 200
-    assert with_retry.json()["status"] == "queued"
+    assert with_retry.json()["status"] == "failed"
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        retry_skipped = session.scalars(
+            select(RunEvent)
+            .where(RunEvent.run_id == run_id, RunEvent.event_type == "run.execution.retry.skipped")
+            .order_by(RunEvent.id)
+        ).all()
+    assert len(retry_skipped) == 1
+    retry_payload = json.loads(retry_skipped[0].payload)
+    assert retry_payload["reason"] == "non_retryable_failure"
+    assert retry_payload["failure_category"] == "bundle_not_found"
+
+
+def test_run_execute_retry_failed_allows_retry_for_retryable_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+    from apps.api.app.services import run_execution_worker as worker_module
+
+    get_settings.cache_clear()
+    original_execute = worker_module.execute_assessment_pipeline
+    call_count = {"count": 0}
+
+    def flaky_execute(*args, **kwargs):
+        call_count["count"] += 1
+        if call_count["count"] == 1:
+            raise TimeoutError("temporary provider timeout")
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(worker_module, "execute_assessment_pipeline", flaky_execute)
+    client = TestClient(app)
+
+    first = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert first.status_code == 200
+    assert _wait_for_terminal_status(db_url, run_id=run_id) == "failed"
+
+    retry = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": "esrs_mini",
+            "bundle_version": "2026.01",
+            "retry_failed": True,
+        },
+        headers=AUTH_DEFAULT,
+    )
+    assert retry.status_code == 200
+    assert retry.json()["status"] == "queued"
     assert _wait_for_terminal_status(db_url, run_id=run_id) == "completed"

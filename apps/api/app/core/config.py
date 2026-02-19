@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     app_name: str = "Compliance App API"
     app_version: str = "0.1.0"
     database_url: str = "postgresql+psycopg://compliance:compliance@localhost:5432/compliance_app"
+    runtime_environment: str = "development"
+    allow_sqlite_transitional: bool = False
     object_storage_root: Path = Path(".data/object_store")
     object_storage_uri_prefix: str = "file://"
     evidence_pack_output_root: Path = Path("outputs/evidence_packs")
@@ -22,6 +24,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    startup_validate_providers: str = ""
     git_sha: str = "unknown"
     security_enabled: bool = True
     auth_api_keys: str = "dev-key"
@@ -39,7 +42,11 @@ class Settings(BaseSettings):
     tavily_timeout_seconds: float = 20.0
     tavily_max_results: int = 8
     tavily_download_timeout_seconds: float = 30.0
-    tavily_max_document_bytes: int = 10000000
+    tavily_max_document_bytes: int = 50000000
+    feature_registry_compiler: bool = False
+    feature_registry_report_matrix: bool = False
+    regulatory_registry_sync_enabled: bool = False
+    regulatory_registry_bundles_root: Path = Path("app/regulatory/bundles")
 
     model_config = SettingsConfigDict(
         env_prefix="COMPLIANCE_APP_",

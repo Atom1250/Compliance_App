@@ -41,3 +41,50 @@ def test_probe_openai_compatible_returns_error_detail_on_transport_failure(monke
 
     assert reachable is False
     assert detail == "ValueError: probe failed"
+
+
+def test_probe_openai_compatible_detailed_returns_parse_status(monkeypatch) -> None:
+    class _DummyTransport:
+        def __init__(self, **kwargs):
+            del kwargs
+
+        def create_response(self, **kwargs):
+            del kwargs
+            return {
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": '{"ok":true}'}],
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(llm_health_module, "OpenAICompatibleTransport", _DummyTransport)
+    reachable, parse_ok, detail = llm_health_module.probe_openai_compatible_detailed(
+        base_url="http://127.0.0.1:1234",
+        api_key="lm-studio",
+        model="ministral-3-8b-instruct-2512-mlx",
+    )
+    assert reachable is True
+    assert parse_ok is True
+    assert detail == "ok"
+
+
+def test_probe_openai_compatible_detailed_reports_parse_error(monkeypatch) -> None:
+    class _DummyTransport:
+        def __init__(self, **kwargs):
+            del kwargs
+
+        def create_response(self, **kwargs):
+            del kwargs
+            return {"choices": [{"message": {"content": "not-json"}}]}
+
+    monkeypatch.setattr(llm_health_module, "OpenAICompatibleTransport", _DummyTransport)
+    reachable, parse_ok, detail = llm_health_module.probe_openai_compatible_detailed(
+        base_url="http://127.0.0.1:1234",
+        api_key="lm-studio",
+        model="ministral-3-8b-instruct-2512-mlx",
+    )
+    assert reachable is True
+    assert parse_ok is False
+    assert detail.startswith("parse_error:")

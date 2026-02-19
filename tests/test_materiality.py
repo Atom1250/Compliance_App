@@ -24,6 +24,7 @@ def _prepare_fixture(tmp_path: Path) -> tuple[str, int]:
     engine = create_engine(db_url)
     with Session(engine, expire_on_commit=False) as session:
         import_bundle(session, load_bundle(Path("requirements/esrs_mini/bundle.json")))
+        import_bundle(session, load_bundle(Path("requirements/esrs_mini_legacy/bundle.json")))
 
         company = Company(
             name="Materiality Co",
@@ -97,3 +98,33 @@ def test_materiality_toggle_changes_required_datapoints(monkeypatch, tmp_path: P
     )
     assert after_reenable.status_code == 200
     assert after_reenable.json()["required_datapoint_ids"] == ["ESRS-E1-1", "ESRS-E1-6"]
+
+
+def test_required_datapoints_auto_routes_by_reporting_period(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+    from apps.api.app.db.models import Company, Run
+
+    get_settings.cache_clear()
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        company = session.get(Company, run.company_id)
+        assert company is not None
+        company.reporting_year = 2024
+        company.reporting_year_start = 2022
+        company.reporting_year_end = 2024
+        session.commit()
+
+    client = TestClient(app)
+    response = client.post(
+        f"/runs/{run_id}/required-datapoints",
+        json={"bundle_id": "esrs_mini"},
+        headers=AUTH_HEADERS,
+    )
+    assert response.status_code == 200
+    assert response.json()["required_datapoint_ids"] == ["ESRS-E1-1", "ESRS-E1-6"]

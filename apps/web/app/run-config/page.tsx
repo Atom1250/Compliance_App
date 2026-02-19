@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { configureRun, fetchLLMHealth, LLMHealthResponse } from "../../lib/api-client";
+import { stateLabel, StepState, transitionOrStay } from "../../lib/flow-state";
 
 export default function RunConfigPage() {
   const router = useRouter();
@@ -18,16 +19,24 @@ export default function RunConfigPage() {
   const [llmHealth, setLlmHealth] = useState<LLMHealthResponse | null>(null);
   const [llmHealthStatus, setLlmHealthStatus] = useState("Checking local LLM config...");
   const [runError, setRunError] = useState("");
+  const [stepState, setStepState] = useState<StepState>("idle");
+  const [runStatusLabel, setRunStatusLabel] = useState(stateLabel("idle"));
   const [isStarting, setIsStarting] = useState(false);
 
   async function startRun() {
+    setStepState((state) => transitionOrStay(state, "validating"));
+    setRunStatusLabel(stateLabel("validating"));
     const companyId = Number(localStorage.getItem("company_id") ?? "0");
     if (!companyId) {
       setRunError("Company ID is missing. Complete Company Setup first.");
+      setStepState((state) => transitionOrStay(state, "error"));
+      setRunStatusLabel(stateLabel("error"));
       return;
     }
     setRunError("");
     setIsStarting(true);
+    setStepState((state) => transitionOrStay(state, "submitting"));
+    setRunStatusLabel(stateLabel("submitting"));
     try {
       const configured = await configureRun({
         companyId,
@@ -39,9 +48,13 @@ export default function RunConfigPage() {
         throw new Error("Missing run id in API response.");
       }
       localStorage.setItem("run_id", String(configured.runId));
+      setStepState((state) => transitionOrStay(state, "success"));
+      setRunStatusLabel(`Completed: run ${configured.runId} started.`);
       router.push(`/run-status?runId=${configured.runId}`);
     } catch (caught) {
-      setRunError(`Run start failed: ${String(caught)}`);
+      setRunError(`Run start failed: ${String(caught)}. Verify provider credentials and try again.`);
+      setStepState((state) => transitionOrStay(state, "error"));
+      setRunStatusLabel(stateLabel("error"));
     } finally {
       setIsStarting(false);
     }
@@ -151,12 +164,19 @@ export default function RunConfigPage() {
       </form>
       {runError ? (
         <div className="panel">
+          <p>Step Key: {stepState}</p>
+          <p>Step State: {runStatusLabel}</p>
           <p>{runError}</p>
           <button type="button" onClick={startRun} disabled={isStarting}>
             Retry Start Run
           </button>
         </div>
-      ) : null}
+      ) : (
+        <div>
+          <p>Step Key: {stepState}</p>
+          <p>Step State: {runStatusLabel}</p>
+        </div>
+      )}
     </main>
   );
 }

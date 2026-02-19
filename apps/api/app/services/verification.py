@@ -47,6 +47,12 @@ def _downgrade_status(status: str) -> str:
     return status
 
 
+def _enforce_evidence_gating(status: str, evidence_chunk_ids: list[str]) -> str:
+    if status in {_STATUS_PRESENT, _STATUS_PARTIAL} and not evidence_chunk_ids:
+        return _STATUS_ABSENT
+    return status
+
+
 def verify_assessment(
     *,
     status: str,
@@ -58,6 +64,12 @@ def verify_assessment(
     """Validate extracted value/evidence consistency with deterministic downgrade rules."""
     if status not in {_STATUS_PRESENT, _STATUS_PARTIAL}:
         return VerificationResult(status=status, rationale=rationale)
+
+    if not evidence_chunk_ids:
+        return VerificationResult(
+            status=_STATUS_ABSENT,
+            rationale=f"{rationale} Evidence gating downgraded: missing evidence_chunk_ids.",
+        )
 
     by_chunk_id = {item.chunk_id: item.text for item in retrieval_results}
     failures: list[str] = []
@@ -87,9 +99,17 @@ def verify_assessment(
         if unit not in cited_text_lower:
             failures.append(f"unit not found in evidence: {unit}")
 
-    if not failures:
-        return VerificationResult(status=status, rationale=rationale)
+    downgraded_status = status
+    updated_rationale = rationale
+    if failures:
+        downgraded_status = _downgrade_status(status)
+        updated_rationale = (
+            f"{rationale} Verification downgraded: {'; '.join(sorted(set(failures)))}."
+        )
 
-    downgraded_status = _downgrade_status(status)
-    updated_rationale = f"{rationale} Verification downgraded: {'; '.join(sorted(set(failures)))}."
-    return VerificationResult(status=downgraded_status, rationale=updated_rationale)
+    enforced_status = _enforce_evidence_gating(downgraded_status, evidence_chunk_ids)
+    if enforced_status != downgraded_status:
+        updated_rationale = (
+            f"{updated_rationale} Evidence gating downgraded: missing evidence_chunk_ids."
+        )
+    return VerificationResult(status=enforced_status, rationale=updated_rationale)

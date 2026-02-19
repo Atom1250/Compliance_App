@@ -20,10 +20,11 @@ from alembic.config import Config
 from app.requirements.importer import import_bundle, load_bundle
 from apps.api.app.core.auth import _resolve_key_maps
 from apps.api.app.core.config import get_settings
-from apps.api.app.main import create_app
+from apps.api.app.db.models import Run
 from compliance_app.golden_run import generate_golden_snapshot
 
 AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
+SCENARIO_FIXTURE_PATH = Path("tests/fixtures/uat/scenarios.json")
 
 
 @contextmanager
@@ -59,18 +60,90 @@ def _seed_requirements_bundle(db_url: str) -> None:
 
 
 def _wait_for_terminal_status(
-    client: TestClient, *, run_id: int, timeout_seconds: float = 5.0
+    *,
+    db_url: str,
+    run_id: int,
+    timeout_seconds: float = 5.0,
 ) -> str:
+    engine = create_engine(db_url)
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
-        response = client.get(f"/runs/{run_id}/status", headers=AUTH_HEADERS)
-        if response.status_code != 200:
-            raise AssertionError(f"status polling failed: {response.status_code} {response.text}")
-        status = response.json()["status"]
+        with Session(engine) as session:
+            status = session.get(Run, run_id).status
         if status in {"completed", "failed"}:
             return status
         time.sleep(0.05)
     raise AssertionError("run did not reach terminal status in time")
+
+
+def _load_scenarios() -> list[dict[str, str]]:
+    payload = json.loads(SCENARIO_FIXTURE_PATH.read_text())
+    scenarios = payload.get("scenarios")
+    if not isinstance(scenarios, list) or not scenarios:
+        raise AssertionError("UAT scenarios fixture is missing scenarios")
+    normalized: list[dict[str, str]] = []
+    for item in scenarios:
+        normalized.append(
+            {
+                "id": str(item["id"]),
+                "description": str(item.get("description", "")),
+                "llm_provider": str(item["llm_provider"]),
+                "bundle_id": str(item["bundle_id"]),
+                "bundle_version": str(item["bundle_version"]),
+                "expected_terminal_status": str(item["expected_terminal_status"]),
+            }
+        )
+    return normalized
+
+
+def _execute_scenario(
+    client: TestClient,
+    *,
+    db_url: str,
+    company_id: int,
+    scenario: dict[str, str],
+) -> dict[str, object]:
+    run_create = client.post("/runs", json={"company_id": company_id}, headers=AUTH_HEADERS)
+    assert run_create.status_code == 200, run_create.text
+    run_id = int(run_create.json()["run_id"])
+
+    execute = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": scenario["bundle_id"],
+            "bundle_version": scenario["bundle_version"],
+            "llm_provider": scenario["llm_provider"],
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert execute.status_code == 200, execute.text
+    terminal_status = _wait_for_terminal_status(db_url=db_url, run_id=run_id)
+    if terminal_status != scenario["expected_terminal_status"]:
+        raise AssertionError(
+            f"scenario {scenario['id']} unexpected terminal status: {terminal_status}"
+        )
+
+    readiness = client.get(f"/runs/{run_id}/export-readiness", headers=AUTH_HEADERS)
+    assert readiness.status_code == 200, readiness.text
+    readiness_payload = readiness.json()
+    report = client.get(f"/runs/{run_id}/report", headers=AUTH_HEADERS)
+    evidence_preview = client.get(f"/runs/{run_id}/evidence-pack-preview", headers=AUTH_HEADERS)
+
+    return {
+        "id": scenario["id"],
+        "llm_provider": scenario["llm_provider"],
+        "terminal_status": terminal_status,
+        "export_readiness": {
+            "report_ready": readiness_payload["report_ready"],
+            "evidence_pack_ready": readiness_payload["evidence_pack_ready"],
+            "blocking_reasons": readiness_payload["blocking_reasons"],
+        },
+        "contracts": {
+            "report_status_code": report.status_code,
+            "evidence_preview_status_code": evidence_preview.status_code,
+        },
+        "run_id": run_id,
+    }
 
 
 def run_uat_harness(*, work_dir: Path) -> dict[str, object]:
@@ -92,11 +165,15 @@ def run_uat_harness(*, work_dir: Path) -> dict[str, object]:
             "COMPLIANCE_APP_AUTH_API_KEYS": "dev-key",
             "COMPLIANCE_APP_AUTH_TENANT_KEYS": "default:dev-key",
             "COMPLIANCE_APP_REQUEST_RATE_LIMIT_ENABLED": "false",
+            "COMPLIANCE_APP_OPENAI_API_KEY": "",
+            "OPENAI_API_KEY": "",
         }
     ):
         db_url = f"sqlite:///{db_path}"
         _prepare_db(db_url)
         _seed_requirements_bundle(db_url)
+        from apps.api.app.main import create_app
+
         app = create_app()
         client = TestClient(app)
 
@@ -122,19 +199,17 @@ def run_uat_harness(*, work_dir: Path) -> dict[str, object]:
         )
         assert upload.status_code == 200, upload.text
 
-        run_create = client.post("/runs", json={"company_id": company_id}, headers=AUTH_HEADERS)
-        assert run_create.status_code == 200, run_create.text
-        run_id = run_create.json()["run_id"]
+        scenarios = _load_scenarios()
+        scenario_results = [
+            _execute_scenario(client, db_url=db_url, company_id=company_id, scenario=scenario)
+            for scenario in scenarios
+        ]
 
-        execute = client.post(
-            f"/runs/{run_id}/execute",
-            json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
-            headers=AUTH_HEADERS,
-        )
-        assert execute.status_code == 200, execute.text
-        status = _wait_for_terminal_status(client, run_id=run_id)
+        primary = scenario_results[0]
+        run_id = int(primary["run_id"])
+        status = str(primary["terminal_status"])
         if status != "completed":
-            raise AssertionError(f"run failed during UAT flow: {status}")
+            raise AssertionError(f"primary UAT scenario did not complete: {status}")
 
         report = client.get(f"/runs/{run_id}/report", headers=AUTH_HEADERS)
         assert report.status_code == 200, report.text
@@ -163,6 +238,14 @@ def run_uat_harness(*, work_dir: Path) -> dict[str, object]:
         if golden_snapshot != golden_expected:
             raise AssertionError("golden snapshot drift detected during UAT harness")
 
+        for result in scenario_results:
+            if result["terminal_status"] == "completed":
+                if result["contracts"]["report_status_code"] != 200:
+                    raise AssertionError(f"scenario {result['id']} expected report contract 200")
+            else:
+                if result["contracts"]["report_status_code"] != 409:
+                    raise AssertionError(f"scenario {result['id']} expected report contract 409")
+
         return {
             "flow": {
                 "terminal_status": status,
@@ -183,5 +266,21 @@ def run_uat_harness(*, work_dir: Path) -> dict[str, object]:
                 "entries": zip_entries,
                 "manifest_file_count": len(evidence_manifest["pack_files"]),
             },
+            "scenario_fixture_path": str(SCENARIO_FIXTURE_PATH),
+            "scenario_results": [
+                {
+                    "id": str(item["id"]),
+                    "llm_provider": str(item["llm_provider"]),
+                    "terminal_status": str(item["terminal_status"]),
+                    "report_ready": bool(item["export_readiness"]["report_ready"]),
+                    "evidence_pack_ready": bool(item["export_readiness"]["evidence_pack_ready"]),
+                    "report_status_code": int(item["contracts"]["report_status_code"]),
+                    "evidence_preview_status_code": int(
+                        item["contracts"]["evidence_preview_status_code"]
+                    ),
+                    "blocking_reasons": list(item["export_readiness"]["blocking_reasons"]),
+                }
+                for item in scenario_results
+            ],
             "golden_contract_hash": golden_snapshot["run_hash"],
         }

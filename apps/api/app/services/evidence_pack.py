@@ -11,7 +11,14 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from apps.api.app.db.models import Chunk, DatapointAssessment, Document, DocumentFile
+from apps.api.app.db.models import (
+    Chunk,
+    DatapointAssessment,
+    Document,
+    DocumentFile,
+    Run,
+)
+from apps.api.app.services.run_registry_artifacts import load_run_registry_artifacts
 
 _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
@@ -114,6 +121,13 @@ def export_evidence_pack(
     ).encode()
     files.append(PackFile(path="assessments.jsonl", content=assessments_jsonl))
     files.append(PackFile(path="evidence.jsonl", content=evidence_jsonl))
+    files.extend(
+        _registry_artifact_files(
+            db=db,
+            run_id=run_id,
+            tenant_id=tenant_id,
+        )
+    )
 
     documents_manifest: list[dict[str, str]] = []
     for document_file in document_files:
@@ -153,3 +167,16 @@ def export_evidence_pack(
         for entry in sorted(files, key=lambda item: item.path):
             zip_file.writestr(_zip_info(entry.path), entry.content)
     return output_zip_path
+
+
+def _registry_artifact_files(
+    *,
+    db: Session,
+    run_id: int,
+    tenant_id: str,
+) -> list[PackFile]:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == tenant_id))
+    if run is None or run.compiler_mode != "registry":
+        return []
+    artifacts = load_run_registry_artifacts(db, run_id=run_id, tenant_id=tenant_id)
+    return [PackFile(path=path, content=content) for path, content in sorted(artifacts.items())]

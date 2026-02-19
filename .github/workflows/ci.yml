@@ -66,7 +66,37 @@ jobs:
       - name: Run UAT golden contract
         run: python -m pytest tests/test_uat_harness.py
 
+  determinism-gates:
+    needs: [pr-template-gate]
+    if: always() && (needs.pr-template-gate.result == 'success' || github.event_name != 'pull_request')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+
+      - name: Run determinism-focused test gates
+        run: |
+          python -m pytest \
+            tests/test_chunking_golden.py \
+            tests/test_hybrid_retrieval.py \
+            tests/test_run_cache.py \
+            tests/test_reporting.py \
+            tests/test_evidence_pack.py \
+            tests/test_uat_harness.py
+
   workflow-validation:
+    needs: [pr-template-gate]
+    if: always() && (needs.pr-template-gate.result == 'success' || github.event_name != 'pull_request')
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -85,3 +115,57 @@ jobs:
       - name: Validate workflow hardening invariants
         run: |
           python -m pytest tests/test_workflow_hardening.py
+
+      - name: Validate migration upgrade/downgrade smoke tests
+        run: |
+          python -m pytest tests/test_db_migrations.py
+
+      - name: Validate workflow YAML syntax
+        run: |
+          python -m pip install pyyaml
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for path in sorted(Path(".github/workflows").glob("*.yml")):
+              yaml.safe_load(path.read_text())
+          print("workflow_yaml_syntax=ok")
+          PY
+
+  postgres-migration-smoke:
+    needs: [pr-template-gate]
+    if: always() && (needs.pr-template-gate.result == 'success' || github.event_name != 'pull_request')
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: compliance_app
+          POSTGRES_USER: compliance
+          POSTGRES_PASSWORD: compliance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U compliance -d compliance_app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+
+      - name: Run Postgres migration smoke test
+        env:
+          COMPLIANCE_APP_POSTGRES_TEST_URL: postgresql+psycopg://compliance:compliance@127.0.0.1:5432/compliance_app
+        run: |
+          python -m pytest tests/test_db_migrations_postgres.py

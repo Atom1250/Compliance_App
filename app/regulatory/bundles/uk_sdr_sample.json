@@ -1,0 +1,28 @@
+{
+  "bundle_id": "uk_sdr_sample",
+  "version": "2026.01",
+  "jurisdiction": "UK",
+  "regime": "UK_SDR",
+  "obligations": [
+    {
+      "obligation_id": "UK-SDR-1",
+      "title": "Sustainability disclosure statement",
+      "standard_reference": "UK SDR 1",
+      "elements": [
+        {
+          "element_id": "sdr-1-narrative",
+          "label": "Narrative sustainability statement",
+          "required": true,
+          "phase_in_rules": [
+            {
+              "key": "reporting_year",
+              "operator": ">=",
+              "value": 2025
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+

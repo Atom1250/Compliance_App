@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from alembic.config import Config
-from apps.api.app.db.models import Company, Run
+from apps.api.app.db.models import Company, DatapointAssessment, Run, RunManifest
 from apps.api.main import app
 
 AUTH_DEFAULT = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
@@ -99,6 +99,33 @@ def test_run_lifecycle_events_are_recorded(monkeypatch, tmp_path: Path) -> None:
         run = session.scalar(select(Run).where(Run.id == run_id))
         assert run is not None
         run.status = "completed"
+        session.add(
+            DatapointAssessment(
+                run_id=run.id,
+                tenant_id="default",
+                datapoint_key="ESRS-E1-1",
+                status="Absent",
+                value=None,
+                evidence_chunk_ids="[]",
+                rationale="No evidence.",
+                model_name="deterministic-local-v1",
+                prompt_hash="a" * 64,
+                retrieval_params='{"query_mode":"hybrid","top_k":5}',
+            )
+        )
+        session.add(
+            RunManifest(
+                run_id=run.id,
+                tenant_id="default",
+                document_hashes="[]",
+                bundle_id="esrs_mini",
+                bundle_version="2026.01",
+                retrieval_params='{"query_mode":"hybrid","top_k":5}',
+                model_name="deterministic-local-v1",
+                prompt_hash="a" * 64,
+                git_sha="deadbeef",
+            )
+        )
         session.commit()
 
     report_response = client.get(f"/runs/{run_id}/report", headers=AUTH_DEFAULT)

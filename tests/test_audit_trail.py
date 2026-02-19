@@ -59,6 +59,20 @@ def test_structured_log_payload_redacts_sensitive_fields() -> None:
     assert '"safe":"ok"' in payload
 
 
+def test_structured_log_payload_redacts_case_and_apikey_variants() -> None:
+    payload = log_structured_event(
+        "auth.headers",
+        tenant_id="default",
+        Authorization="Bearer xyz",
+        openaiApiKey="top-secret",
+        nested={"headers": [{"X-Api-Key": "abc123"}, {"ok": "yes"}]},
+    )
+    assert '"Authorization":"***REDACTED***"' in payload
+    assert '"openaiApiKey":"***REDACTED***"' in payload
+    assert '"X-Api-Key":"***REDACTED***"' in payload
+    assert '"ok":"yes"' in payload
+
+
 def test_run_event_history_is_complete_and_ordered(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
