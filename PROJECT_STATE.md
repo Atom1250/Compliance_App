@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-018
+Next PR ID: PR-019
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -91,6 +91,11 @@ Next PR ID: PR-018
 - Added report matrix section gated by `feature_registry_report_matrix` (default OFF) and wired router rendering through runtime settings.
 - Added tests in `tests/test_reporting.py` and `tests/test_registry_report_matrix_api.py` for deterministic computation and conditional rendering behavior.
 - Added PR execution log: `docs/prs/PR-017.md`.
+- PR-018 completed (B4 Part 2: evidence pack includes registry artifacts).
+- Added registry-mode evidence pack artifacts: `registry/compiled_plan.json` and `registry/coverage_matrix.json`.
+- Compiled plan artifact is generated from DB registry bundle + run company context and checksum-stamped in payload.
+- Added tests in `tests/test_evidence_pack.py` to verify registry artifact inclusion and deterministic coverage matrix contents.
+- Added PR execution log: `docs/prs/PR-018.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

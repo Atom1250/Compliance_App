@@ -11,7 +11,18 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from apps.api.app.db.models import Chunk, DatapointAssessment, Document, DocumentFile
+from app.regulatory.canonical import sha256_checksum
+from apps.api.app.db.models import (
+    Chunk,
+    Company,
+    DatapointAssessment,
+    Document,
+    DocumentFile,
+    Run,
+    RunManifest,
+)
+from apps.api.app.services.regulatory_registry import compile_from_db
+from apps.api.app.services.reporting import compute_registry_coverage_matrix
 
 _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
@@ -114,6 +125,14 @@ def export_evidence_pack(
     ).encode()
     files.append(PackFile(path="assessments.jsonl", content=assessments_jsonl))
     files.append(PackFile(path="evidence.jsonl", content=evidence_jsonl))
+    files.extend(
+        _registry_artifact_files(
+            db=db,
+            run_id=run_id,
+            tenant_id=tenant_id,
+            assessments=assessments,
+        )
+    )
 
     documents_manifest: list[dict[str, str]] = []
     for document_file in document_files:
@@ -153,3 +172,66 @@ def export_evidence_pack(
         for entry in sorted(files, key=lambda item: item.path):
             zip_file.writestr(_zip_info(entry.path), entry.content)
     return output_zip_path
+
+
+def _registry_artifact_files(
+    *,
+    db: Session,
+    run_id: int,
+    tenant_id: str,
+    assessments: list[DatapointAssessment],
+) -> list[PackFile]:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == tenant_id))
+    if run is None or run.compiler_mode != "registry":
+        return []
+
+    manifest = db.scalar(
+        select(RunManifest).where(RunManifest.run_id == run_id, RunManifest.tenant_id == tenant_id)
+    )
+    if manifest is None:
+        return []
+
+    company = db.scalar(
+        select(Company).where(Company.id == run.company_id, Company.tenant_id == tenant_id)
+    )
+    if company is None:
+        return []
+
+    compiled_plan = compile_from_db(
+        db,
+        bundle_id=manifest.bundle_id,
+        version=manifest.bundle_version,
+        context={
+            "company": {
+                "employees": company.employees,
+                "listed_status": company.listed_status,
+                "reporting_year": company.reporting_year,
+                "reporting_year_start": company.reporting_year_start,
+                "reporting_year_end": company.reporting_year_end,
+                "turnover": company.turnover,
+            }
+        },
+    )
+    plan_payload = compiled_plan.model_dump(mode="json")
+    plan_payload["checksum"] = sha256_checksum(plan_payload)
+    plan_bytes = json.dumps(plan_payload, sort_keys=True, separators=(",", ":")).encode()
+
+    coverage_payload = [
+        {
+            "obligation_id": row.obligation_id,
+            "total_elements": row.total_elements,
+            "present": row.present,
+            "partial": row.partial,
+            "absent": row.absent,
+            "na": row.na,
+            "coverage_pct": row.coverage_pct,
+            "status": row.status,
+        }
+        for row in compute_registry_coverage_matrix(assessments)
+    ]
+    coverage_bytes = json.dumps(coverage_payload, sort_keys=True, separators=(",", ":")).encode()
+
+    return [
+        PackFile(path="registry/compiled_plan.json", content=plan_bytes),
+        PackFile(path="registry/coverage_matrix.json", content=coverage_bytes),
+    ]
