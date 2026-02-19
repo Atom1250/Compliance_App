@@ -19,6 +19,7 @@ from apps.api.app.db.models import (
     RegulatoryBundle,
     Run,
     RunCacheEntry,
+    RunEvent,
     RunInputSnapshot,
     RunRegistryArtifact,
 )
@@ -462,5 +463,60 @@ def test_run_execute_retry_failed_is_idempotent(monkeypatch, tmp_path: Path) -> 
         headers=AUTH_DEFAULT,
     )
     assert with_retry.status_code == 200
-    assert with_retry.json()["status"] == "queued"
+    assert with_retry.json()["status"] == "failed"
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        retry_skipped = session.scalars(
+            select(RunEvent)
+            .where(RunEvent.run_id == run_id, RunEvent.event_type == "run.execution.retry.skipped")
+            .order_by(RunEvent.id)
+        ).all()
+    assert len(retry_skipped) == 1
+    retry_payload = json.loads(retry_skipped[0].payload)
+    assert retry_payload["reason"] == "non_retryable_failure"
+    assert retry_payload["failure_category"] == "bundle_not_found"
+
+
+def test_run_execute_retry_failed_allows_retry_for_retryable_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+    from apps.api.app.services import run_execution_worker as worker_module
+
+    get_settings.cache_clear()
+    original_execute = worker_module.execute_assessment_pipeline
+    call_count = {"count": 0}
+
+    def flaky_execute(*args, **kwargs):
+        call_count["count"] += 1
+        if call_count["count"] == 1:
+            raise TimeoutError("temporary provider timeout")
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(worker_module, "execute_assessment_pipeline", flaky_execute)
+    client = TestClient(app)
+
+    first = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert first.status_code == 200
+    assert _wait_for_terminal_status(db_url, run_id=run_id) == "failed"
+
+    retry = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": "esrs_mini",
+            "bundle_version": "2026.01",
+            "retry_failed": True,
+        },
+        headers=AUTH_DEFAULT,
+    )
+    assert retry.status_code == 200
+    assert retry.json()["status"] == "queued"
     assert _wait_for_terminal_status(db_url, run_id=run_id) == "completed"

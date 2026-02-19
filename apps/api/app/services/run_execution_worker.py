@@ -7,6 +7,7 @@ import json
 import threading
 from dataclasses import dataclass
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -87,6 +88,26 @@ def _assessment_count(db: Session, *, run_id: int, tenant_id: str) -> int:
         )
         or 0
     )
+
+
+def _classify_failure(exc: Exception) -> tuple[str, bool]:
+    if isinstance(exc, TimeoutError | httpx.TimeoutException | httpx.ConnectError):
+        return "provider_transient", True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code if exc.response is not None else 0
+        if 500 <= status_code <= 599:
+            return "provider_transient", True
+        return "provider_request_invalid", False
+    message = str(exc)
+    if "openai_api_key is required" in message:
+        return "config_error", False
+    if "Bundle not found:" in message:
+        return "bundle_not_found", False
+    if "llm_schema_parse_error" in message:
+        return "schema_parse_error", False
+    if "llm_schema_validation_error" in message:
+        return "schema_validation_error", False
+    return "internal_error", False
 
 
 def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
@@ -354,19 +375,27 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             )
             db.commit()
         except Exception as exc:  # pragma: no cover - defensive worker path
+            failure_category, retryable = _classify_failure(exc)
             run.status = "failed"
             append_run_event(
                 db,
                 run_id=run.id,
                 tenant_id=run.tenant_id,
                 event_type="run.execution.failed",
-                payload={"tenant_id": run.tenant_id, "error": str(exc)},
+                payload={
+                    "tenant_id": run.tenant_id,
+                    "error": str(exc),
+                    "failure_category": failure_category,
+                    "retryable": retryable,
+                },
             )
             log_structured_event(
                 "run.execution.failed",
                 run_id=run.id,
                 tenant_id=run.tenant_id,
                 error=str(exc),
+                failure_category=failure_category,
+                retryable=retryable,
             )
             db.commit()
 

@@ -533,6 +533,44 @@ def execute_run(
             status=run.status,
             assessment_count=assessment_count,
         )
+    if run.status == "failed" and payload.retry_failed:
+        latest_failure_event = db.scalar(
+            select(RunEvent)
+            .where(
+                RunEvent.run_id == run.id,
+                RunEvent.tenant_id == auth.tenant_id,
+                RunEvent.event_type == "run.execution.failed",
+            )
+            .order_by(RunEvent.id.desc())
+            .limit(1)
+        )
+        if latest_failure_event is not None:
+            failure_payload = json.loads(latest_failure_event.payload)
+            if not bool(failure_payload.get("retryable", False)):
+                append_run_event(
+                    db,
+                    run_id=run.id,
+                    tenant_id=auth.tenant_id,
+                    event_type="run.execution.retry.skipped",
+                    payload={
+                        "tenant_id": auth.tenant_id,
+                        "failure_category": failure_payload.get("failure_category"),
+                        "reason": "non_retryable_failure",
+                    },
+                )
+                log_structured_event(
+                    "run.execution.retry.skipped",
+                    run_id=run.id,
+                    tenant_id=auth.tenant_id,
+                    failure_category=failure_payload.get("failure_category"),
+                    reason="non_retryable_failure",
+                )
+                db.commit()
+                return RunExecuteResponse(
+                    run_id=run.id,
+                    status=run.status,
+                    assessment_count=assessment_count,
+                )
 
     run.status = "queued"
     append_run_event(

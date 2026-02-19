@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-030
+Next PR ID: PR-031
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -151,6 +151,11 @@ Next PR ID: PR-030
 - Added snapshot service `apps/api/app/services/run_input_snapshot.py` with canonical payload checksum persistence semantics.
 - Run execution now persists a snapshot including company/materiality/retrieval settings and resolved datapoint universe prior to pipeline execution.
 - Added/updated tests in `tests/test_run_execute_api.py` and `tests/test_db_migrations.py`; execution log added at `docs/prs/PR-029.md`.
+- PR-030 completed (C10: failure taxonomy + retry policy).
+- Added deterministic failure taxonomy in run worker (`provider_transient`, `bundle_not_found`, `config_error`, schema errors, etc.) with retryability flags.
+- Extended `run.execution.failed` event payload/logging with `failure_category` and `retryable`.
+- Added retry gating in execute API so `retry_failed=true` only requeues retryable failures; non-retryable cases emit `run.execution.retry.skipped`.
+- Added/updated tests in `tests/test_run_execute_api.py`; execution log added at `docs/prs/PR-030.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
