@@ -7,7 +7,7 @@ WEB_PORT ?= 3001
 DEV_API_BASE_URL ?= http://$(API_HOST):$(API_PORT)
 DEV_API_KEY ?= dev-key
 DEV_TENANT_ID ?= default
-DEV_DATABASE_URL ?= sqlite:///outputs/dev/compliance_app.sqlite
+DEV_DATABASE_URL ?= postgresql+psycopg://compliance:compliance@127.0.0.1:5432/compliance_app
 POSTGRES_USER ?= compliance
 POSTGRES_DB ?= compliance_app
 

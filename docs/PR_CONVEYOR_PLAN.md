@@ -812,3 +812,156 @@ Definition of Done:
 Tests:
 - `make lint`
 - `make test`
+
+---
+
+## PR-043 — F3: Postgres-First Local Defaults
+Objective:
+Switch local bootstrap defaults to Postgres while keeping explicit SQLite override support.
+
+Scope:
+- Update `.example.env` and Makefile development defaults to Postgres DSN
+- Document explicit SQLite override for transitional/test use
+- Add tests locking Postgres-first default contract
+
+Definition of Done:
+- Fresh local setup defaults to Postgres path
+- SQLite is only used when explicitly configured
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-044 — F4: Postgres Migration Smoke Gates
+Objective:
+Validate Alembic migration lifecycle against Postgres in CI and local smoke tooling.
+
+Scope:
+- Add Postgres migration smoke test (upgrade/downgrade/upgrade)
+- Add CI job running postgres migration smoke against service container
+- Keep local `make test` deterministic with skip when Postgres URL is not provided
+
+Definition of Done:
+- Postgres migration regressions are caught automatically
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-045 — F5: pgvector Embedding Schema Activation
+Objective:
+Activate pgvector-backed embedding storage path while preserving compatibility.
+
+Scope:
+- Add migration for pgvector embedding column on Postgres
+- Wire retrieval path to prefer vector column when available
+- Add tests for retrieval stability with vector-backed payloads
+
+Definition of Done:
+- pgvector column exists in Postgres path and retrieval remains deterministic
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-046 — F6: Postgres End-to-End Harness
+Objective:
+Add deterministic end-to-end harness path against Postgres backend.
+
+Scope:
+- Add Postgres-mode E2E script/test for company->upload->run->report/evidence flow
+- Validate run manifests, readiness contracts, and export behavior on Postgres
+- Keep test gated for environments without Postgres service
+
+Definition of Done:
+- Postgres E2E flow is executable and test-covered
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-047 — F7: SQLite to Postgres Migration Tooling
+Objective:
+Provide deterministic migration utility from legacy SQLite datasets to Postgres.
+
+Scope:
+- Add migration CLI for core run/document/assessment/manifests/events tables
+- Add count/hash verification report output
+- Add unit tests for idempotent migration behavior
+
+Definition of Done:
+- Migration utility is deterministic and repeatable
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-048 — F8: Dual-Backend Determinism Parity Checks
+Objective:
+Compare SQLite and Postgres outputs for deterministic parity during transition.
+
+Scope:
+- Add parity harness for key artifacts (manifest/report/evidence metadata)
+- Add normalization strategy for non-deterministic fields
+- Add regression tests for parity contract
+
+Definition of Done:
+- Drift between backends is detectable and test-covered
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-049 — F9: Postgres SoR Runtime Cutover
+Objective:
+Make Postgres the enforced system-of-record runtime backend.
+
+Scope:
+- Update runtime defaults/config checks to reject SQLite in non-test modes
+- Add explicit transitional override flag for controlled dev/test usage
+- Add tests for runtime enforcement behavior
+
+Definition of Done:
+- Runtime defaults enforce Postgres system-of-record policy
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-050 — F10: SQLite Phase-Down and Final Validation
+Objective:
+Complete transition by phasing down SQLite from primary runbooks and validating full flow.
+
+Scope:
+- Update runbooks/make docs to mark SQLite as transitional/test-only
+- Add final Postgres flow validation checklist and operator guidance
+- Add final transition guard tests
+
+Definition of Done:
+- Repo guidance reflects Postgres-first operation and SQLite phase-down
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`

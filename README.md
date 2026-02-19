@@ -13,7 +13,9 @@ Initial project scaffold.
 - Launch full app locally (opens browser): `make dev`
 - Default local URLs: UI `http://127.0.0.1:3001`, API `http://127.0.0.1:8001`
 - Override ports if needed: `make dev WEB_PORT=3100 API_PORT=8100`
-- `make dev` uses local SQLite by default (`sqlite:///outputs/dev/compliance_app.sqlite`) and runs migrations automatically.
+- `make dev` uses local Postgres by default (`postgresql+psycopg://compliance:compliance@127.0.0.1:5432/compliance_app`) and runs migrations automatically.
+- To run transitional SQLite locally, explicitly set:
+  - `COMPLIANCE_APP_DATABASE_URL=sqlite:///outputs/dev/compliance_app.sqlite make dev`
 - `make dev`, `make dev-api`, and `make dev-web` auto-load `.env` when present.
 - `make dev` and `make dev-api` also auto-import requirements bundles (`esrs_mini`, `green_finance_mini`) so run execution can start without manual DB seeding.
 
@@ -77,7 +79,8 @@ If older runs/documents are missing chunks, backfill them without resetting the 
 
 ## Database
 
-- Start Postgres: `docker compose up -d postgres`
+- Start Postgres: `make compose-up` (or `docker compose up -d postgres`)
+- Wait for readiness: `make db-wait`
 - Run migrations: `alembic upgrade head`
 
 ## Object Storage

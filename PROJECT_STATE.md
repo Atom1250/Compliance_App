@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-043
+Next PR ID: PR-044
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -216,6 +216,11 @@ Next PR ID: PR-043
 - Added Postgres extension bootstrap script `docker/postgres/init/001-enable-pgvector.sql`.
 - Added Make infrastructure targets `compose-up`, `compose-down`, and `db-wait`.
 - Added infra contract tests (`tests/test_infra_compose_contract.py`) and local infra runbook (`docs/runbooks/local_infra_postgres_pgvector.md`); PR log at `docs/prs/PR-042.md`.
+- PR-043 completed (F3: Postgres-first local defaults).
+- Updated `.example.env` and `Makefile` development defaults to local Postgres DSN.
+- Updated README run instructions to Postgres-first flow with explicit SQLite override for transitional local runs.
+- Added defaults contract tests in `tests/test_dev_defaults_postgres.py`.
+- Added PR execution log: `docs/prs/PR-043.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -229,9 +234,8 @@ Next PR ID: PR-043
 - [ ] Confirm migrations framework and how to run upgrade/downgrade in CI.
 - [ ] Confirm existing auth pattern for admin endpoints (or decide CLI-only for PR-011).
 - [ ] Confirm where feature flags/config lives and naming conventions.
-- [ ] Confirm test DB strategy (sqlite? postgres? docker service?).
+- [ ] Confirm test DB strategy for expanded Postgres smoke and parity gates (env-provided URL vs compose service in CI).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
-- [ ] `docs/PR_CONVEYOR_PLAN.md` currently ends at PR-042; PR-043+ scope must be authored before next auto-conveyor run.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`
