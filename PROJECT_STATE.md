@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-015
+Next PR ID: PR-016
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -76,6 +76,11 @@ Next PR ID: PR-015
 - Added flagged registry branch in assessment pipeline P06 stage using `compile_from_db()` -> generated datapoints.
 - Added tests in `tests/test_registry_mode_datapoints.py` for enabled registry mode and legacy-path behavior when flag is OFF.
 - Added PR execution log: `docs/prs/PR-014.md`.
+- PR-015 completed (B3 Part 1: manifest registry section + run-hash inputs).
+- Extended run-hash inputs with `compiler_mode` and `registry_checksums` to avoid collisions across legacy/registry modes.
+- Added registry manifest section (`retrieval_params.registry`) in registry mode, including bundle checksums.
+- Updated execute-path tests for manifest payload and added registry-mode manifest coverage.
+- Added PR execution log: `docs/prs/PR-015.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

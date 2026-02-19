@@ -13,7 +13,7 @@
     "report_url_matches_template": true,
     "terminal_status": "completed"
   },
-  "golden_contract_hash": "5d9a6464d60c943538be2063792f117791fbe1c6c5e153ccc7ed8ab1ca7af8fc",
+  "golden_contract_hash": "cfb37241c27972f63fdc0ca702e664761061a522f12ef8e46140aaa5ce00fdbd",
   "manifest": {
     "bundle_id": "esrs_mini",
     "bundle_version": "2026.01",

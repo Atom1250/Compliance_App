@@ -1,3 +1,4 @@
+import json
 import time
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from alembic.config import Config
+from app.regulatory.canonical import sha256_checksum
 from app.requirements.importer import import_bundle, load_bundle
 from apps.api.app.db.models import (
     Chunk,
@@ -14,6 +16,7 @@ from apps.api.app.db.models import (
     DatapointAssessment,
     Document,
     DocumentFile,
+    RegulatoryBundle,
     Run,
     RunCacheEntry,
 )
@@ -237,6 +240,7 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
     assert payload["retrieval_params"] == {
         "bundle_id": "esrs_mini",
         "bundle_version": "2026.01",
+        "compiler_mode": "legacy",
         "llm_provider": "deterministic_fallback",
         "query_mode": "hybrid",
         "retrieval_policy": {
@@ -251,6 +255,57 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
     assert payload["model_name"] == "deterministic-local-v1"
     assert len(payload["prompt_hash"]) == 64
     assert payload["git_sha"] == "deadbeef" * 5
+
+
+def test_run_manifest_includes_registry_section_in_registry_mode(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_FEATURE_REGISTRY_COMPILER", "true")
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    sample_payload = json.loads(Path("app/regulatory/bundles/eu_csrd_sample.json").read_text())
+    sample_checksum = sha256_checksum(sample_payload)
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        run.compiler_mode = "registry"
+        session.add(
+            RegulatoryBundle(
+                bundle_id="eu_csrd_sample",
+                version="2026.01",
+                jurisdiction="EU",
+                regime="CSRD_ESRS",
+                checksum=sample_checksum,
+                payload=sample_payload,
+            )
+        )
+        session.commit()
+
+    client = TestClient(app)
+    execute_response = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "eu_csrd_sample", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert execute_response.status_code == 200
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "completed"
+
+    manifest_response = client.get(f"/runs/{run_id}/manifest", headers=AUTH_DEFAULT)
+    assert manifest_response.status_code == 200
+    payload = manifest_response.json()
+    assert payload["retrieval_params"]["compiler_mode"] == "registry"
+    assert payload["retrieval_params"]["registry"] == {
+        "bundle_checksums": [sample_checksum],
+        "mode": "registry",
+    }
 
 
 def test_run_manifest_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:

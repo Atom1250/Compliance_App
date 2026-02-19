@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import select
@@ -23,6 +23,8 @@ class RunHashInput:
     bundle_version: str
     retrieval_params: dict[str, Any]
     prompt_hash: str
+    compiler_mode: str = "legacy"
+    registry_checksums: list[str] = field(default_factory=list)
 
 
 def _canonical_json(payload: dict[str, Any]) -> str:
@@ -38,6 +40,8 @@ def compute_run_hash(inputs: RunHashInput) -> str:
         "bundle_version": inputs.bundle_version,
         "retrieval_params": inputs.retrieval_params,
         "prompt_hash": inputs.prompt_hash,
+        "compiler_mode": inputs.compiler_mode,
+        "registry_checksums": sorted(inputs.registry_checksums),
     }
     canonical = _canonical_json(payload)
     return hashlib.sha256(canonical.encode()).hexdigest()

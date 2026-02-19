@@ -16,6 +16,7 @@ from apps.api.app.db.models import (
     DatapointAssessment,
     Document,
     DocumentFile,
+    RegulatoryBundle,
     Run,
     RunMateriality,
 )
@@ -150,15 +151,32 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             retrieval_params = {
                 "bundle_id": payload.bundle_id,
                 "bundle_version": payload.bundle_version,
+                "compiler_mode": run.compiler_mode,
                 "llm_provider": payload.llm_provider,
                 "query_mode": "hybrid",
                 "retrieval_model_name": payload.retrieval_model_name,
                 "retrieval_policy": retrieval_policy_to_dict(retrieval_policy),
                 "top_k": payload.retrieval_top_k,
             }
+            registry_checksums: list[str] = []
+            if settings.feature_registry_compiler and run.compiler_mode == "registry":
+                registry_rows = db.scalars(
+                    select(RegulatoryBundle.checksum)
+                    .where(
+                        RegulatoryBundle.bundle_id == payload.bundle_id,
+                        RegulatoryBundle.version == payload.bundle_version,
+                    )
+                    .order_by(RegulatoryBundle.checksum)
+                ).all()
+                registry_checksums = sorted(set(registry_rows))
+                retrieval_params["registry"] = {
+                    "bundle_checksums": registry_checksums,
+                    "mode": "registry",
+                }
             prompt_seed = {
                 "bundle_id": payload.bundle_id,
                 "bundle_version": payload.bundle_version,
+                "compiler_mode": run.compiler_mode,
                 "llm_provider": payload.llm_provider,
                 "model_name": extraction_client.model_name,
                 "retrieval_params": retrieval_params,
@@ -202,6 +220,8 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     bundle_version=payload.bundle_version,
                     retrieval_params=retrieval_params,
                     prompt_hash=prompt_hash,
+                    compiler_mode=run.compiler_mode,
+                    registry_checksums=registry_checksums,
                 ),
                 compute_assessments=_compute_assessments,
             )
