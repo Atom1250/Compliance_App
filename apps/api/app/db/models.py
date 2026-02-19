@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from apps.api.app.db.base import Base
@@ -257,6 +258,41 @@ class RunRegistryArtifact(Base):
     content_json: Mapped[str] = mapped_column(Text, nullable=False)
     checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RegulatorySourceDocument(Base):
+    __tablename__ = "regulatory_source_document"
+
+    record_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    jurisdiction: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    document_name: Mapped[str] = mapped_column(Text, nullable=False)
+    document_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    framework_level: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    legal_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    issuing_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    supervisory_authority: Mapped[str | None] = mapped_column(Text, nullable=True)
+    official_source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_format: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope_applicability: Mapped[str | None] = mapped_column(Text, nullable=True)
+    effective_date: Mapped[date | None] = mapped_column(nullable=True)
+    last_checked_date: Mapped[date | None] = mapped_column(nullable=True)
+    update_frequency: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version_identifier: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    keywords_tags: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes_for_db_tagging: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_sheets: Mapped[str | None] = mapped_column(Text, nullable=True)
+    row_checksum: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_row_json: Mapped[dict | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
 
 
 class DocumentDiscoveryCandidate(Base):

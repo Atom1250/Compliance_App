@@ -90,3 +90,8 @@ If older runs/documents are missing chunks, backfill them without resetting the 
 - Start MinIO: `docker compose up -d minio`
 - Upload endpoint: `POST /documents/upload` (`company_id`, `title`, `file`)
 - Retrieval endpoint: `GET /documents/{document_id}`
+
+## Regulatory Source Register Import
+
+- Docs: `docs/regulatory_sources_import.md`
+- CLI: `python -m apps.api.app.scripts.import_regulatory_sources --file ./sources.xlsx`
