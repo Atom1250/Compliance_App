@@ -61,7 +61,19 @@ def _lexical_score(query_terms: list[str], text: str) -> float:
     return hits / len(query_terms)
 
 
-def _parse_embedding(payload: str) -> list[float] | None:
+def _parse_embedding(payload: object) -> list[float] | None:
+    if isinstance(payload, list | tuple):
+        parsed: list[float] = []
+        for item in payload:
+            if isinstance(item, int | float):
+                parsed.append(float(item))
+            else:
+                return None
+        return parsed
+
+    if not isinstance(payload, str):
+        return None
+
     try:
         values = json.loads(payload)
     except json.JSONDecodeError:
@@ -124,7 +136,10 @@ def retrieve_chunks(
                 Embedding.chunk_id.in_(chunk_ids),
             )
         ).all()
-    embeddings_by_chunk_id = {row.chunk_id: row.embedding for row in embedding_rows}
+    embeddings_by_chunk_id = {
+        row.chunk_id: (row.embedding_vector if row.embedding_vector is not None else row.embedding)
+        for row in embedding_rows
+    }
 
     scored: list[RetrievalResult] = []
     for chunk in chunks:

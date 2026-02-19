@@ -85,6 +85,7 @@ class Embedding(Base):
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
     dimensions: Mapped[int] = mapped_column(nullable=False)
     embedding: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

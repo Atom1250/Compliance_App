@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-045
+Next PR ID: PR-046
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -226,6 +226,10 @@ Next PR ID: PR-045
 - Added CI `postgres-migration-smoke` job in `.github/workflows/ci.yml` using pgvector Postgres service and explicit Postgres test URL env.
 - Updated workflow hardening invariants in `tests/test_workflow_hardening.py` for new Postgres migration gate.
 - Added PR execution log: `docs/prs/PR-044.md`.
+- PR-045 completed (F5: pgvector embedding schema activation).
+- Added migration `0018_embedding_vector_column.py` with Postgres `vector` column path and SQLite compatibility fallback.
+- Updated retrieval service to prefer `embedding_vector` payloads when available while preserving deterministic tie-break ordering.
+- Added/updated tests in `tests/test_hybrid_retrieval.py`, `tests/test_db_migrations.py`, and `tests/test_db_migrations_postgres.py`; execution log added at `docs/prs/PR-045.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

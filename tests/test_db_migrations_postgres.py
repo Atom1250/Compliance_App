@@ -37,7 +37,14 @@ def test_postgres_migrations_upgrade_downgrade_upgrade_smoke() -> None:
             has_vector = conn.execute(
                 text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')")
             ).scalar()
+            embedding_vector_type = conn.execute(
+                text(
+                    "SELECT data_type FROM information_schema.columns "
+                    "WHERE table_name = 'embedding' AND column_name = 'embedding_vector'"
+                )
+            ).scalar()
         assert bool(has_vector) is True
+        assert embedding_vector_type == "USER-DEFINED"
     finally:
         if target_engine is not None:
             with suppress(Exception):

@@ -68,12 +68,14 @@ def _prepare_db(tmp_path: Path) -> str:
                     model_name="default",
                     dimensions=3,
                     embedding=json.dumps([0.9, 0.1, 0.0]),
+                    embedding_vector=json.dumps([0.9, 0.1, 0.0]),
                 ),
                 Embedding(
                     chunk_id=chunk_b.id,
                     model_name="default",
                     dimensions=3,
                     embedding=json.dumps([0.2, 0.9, 0.1]),
+                    embedding_vector=json.dumps([0.2, 0.9, 0.1]),
                 ),
             ]
         )
@@ -157,3 +159,25 @@ def test_hybrid_retrieval_policy_version_pin_is_deterministic(tmp_path: Path) ->
         )
     assert [item.chunk_id for item in first] == [item.chunk_id for item in second]
     assert [item.chunk_id for item in first] == ["aaa", "bbb", "ccc"]
+
+
+def test_hybrid_retrieval_prefers_embedding_vector_payload(tmp_path: Path) -> None:
+    db_url = _prepare_db(tmp_path)
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        row = session.query(Embedding).filter(Embedding.model_name == "default").first()
+        assert row is not None
+        row.embedding = json.dumps([0.0, 0.0, 1.0])
+        row.embedding_vector = json.dumps([0.9, 0.1, 0.0])
+        session.commit()
+
+        results = retrieve_chunks(
+            session,
+            query="green bond",
+            query_embedding=[0.9, 0.1, 0.0],
+            top_k=1,
+            tenant_id="default",
+            model_name="default",
+        )
+
+    assert results[0].chunk_id == "aaa"

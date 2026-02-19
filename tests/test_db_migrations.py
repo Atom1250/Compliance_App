@@ -46,6 +46,8 @@ def test_migrations_upgrade_head_is_idempotent(tmp_path: Path) -> None:
     engine = create_engine(db_url)
     inspector = inspect(engine)
     assert REQUIRED_TABLES.issubset(set(inspector.get_table_names()))
+    embedding_columns = {column["name"] for column in inspector.get_columns("embedding")}
+    assert "embedding_vector" in embedding_columns
 
 
 def test_regulatory_bundle_migration_upgrade_and_downgrade(tmp_path: Path) -> None:
