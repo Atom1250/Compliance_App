@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-032
+Next PR ID: PR-033
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -161,6 +161,11 @@ Next PR ID: PR-032
 - Coverage denominator semantics now explicitly exclude `NA` datapoints and report excluded count.
 - Added/updated report tests in `tests/test_reporting.py` and refreshed deterministic golden snapshots (`tests/golden/golden_run_snapshot.json`, `tests/golden/uat_harness_snapshot.json`).
 - Added PR execution log: `docs/prs/PR-031.md`.
+- PR-032 completed (D2: report preview API).
+- Added API coverage for `GET /runs/{run_id}/report-preview` validating rendered HTML plus structured preview sections (`summary`, `metrics`, `gaps`, `rows`).
+- Added tenant-scoping and completed-run guardrail tests for report preview endpoint behavior.
+- Added tests in `tests/test_report_preview_api.py`.
+- Added PR execution log: `docs/prs/PR-032.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
