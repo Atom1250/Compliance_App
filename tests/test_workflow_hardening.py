@@ -30,4 +30,11 @@ def test_ci_workflow_contains_pr_template_gate() -> None:
     workflow = _read(".github/workflows/ci.yml")
     assert "pr-template-gate:" in workflow
     assert "Enforce PR template checklist" in workflow
+    assert "determinism-gates:" in workflow
     assert "workflow-validation:" in workflow
+    assert "tests/test_chunking_golden.py" in workflow
+    assert "tests/test_run_cache.py" in workflow
+    assert "tests/test_evidence_pack.py" in workflow
+    assert "tests/test_uat_harness.py" in workflow
+    assert "tests/test_db_migrations.py" in workflow
+    assert "workflow_yaml_syntax=ok" in workflow

@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-039
+Next PR ID: PR-040
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -196,6 +196,11 @@ Next PR ID: PR-039
 - Added provider-specific required-config validation for `local_lm_studio`, `openai_cloud`, and `tavily` in runtime configuration validation.
 - Hardened sensitive log-field redaction for mixed-case and hyphenated key variants (for example `Authorization`, `X-Api-Key`, `openaiApiKey`).
 - Added/updated tests in `tests/test_auth_config_validation.py` and `tests/test_audit_trail.py`; execution log added at `docs/prs/PR-038.md`.
+- PR-039 completed (E4: CI determinism gates expansion).
+- Expanded CI with a dedicated `determinism-gates` job for chunking, retrieval ordering, run hash, report/export, and UAT determinism checks.
+- Expanded CI workflow validation with explicit migration smoke coverage (`tests/test_db_migrations.py`) and workflow YAML syntax parsing.
+- Updated workflow hardening tests in `tests/test_workflow_hardening.py` to enforce presence of new CI deterministic/migration/workflow gates.
+- Added PR execution log: `docs/prs/PR-039.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
