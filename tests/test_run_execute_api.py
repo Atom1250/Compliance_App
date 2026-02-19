@@ -19,6 +19,7 @@ from apps.api.app.db.models import (
     RegulatoryBundle,
     Run,
     RunCacheEntry,
+    RunInputSnapshot,
     RunRegistryArtifact,
 )
 from apps.api.app.services.llm_extraction import ExtractionClient
@@ -257,6 +258,21 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
     assert len(payload["prompt_hash"]) == 64
     assert payload["git_sha"] == "deadbeef" * 5
 
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        snapshot = session.scalar(
+            select(RunInputSnapshot).where(
+                RunInputSnapshot.run_id == run_id,
+                RunInputSnapshot.tenant_id == "default",
+            )
+        )
+    assert snapshot is not None
+    snapshot_payload = json.loads(snapshot.payload_json)
+    assert snapshot_payload["bundle_id"] == "esrs_mini"
+    assert snapshot_payload["bundle_version"] == "2026.01"
+    assert snapshot_payload["retrieval"]["retrieval_policy"]["tie_break"] == "chunk_id"
+    assert snapshot_payload["required_datapoint_universe"] == ["ESRS-E1-1", "ESRS-E1-6"]
+
 
 def test_run_manifest_includes_registry_section_in_registry_mode(
     monkeypatch, tmp_path: Path
@@ -387,6 +403,28 @@ def test_run_execute_cache_hit_skips_pipeline_and_preserves_cached_output(
         entries = session.scalars(select(RunCacheEntry)).all()
         assert len(entries) == 1
         assert entries[0].output_json == first_cached_output
+        snapshot = session.scalar(
+            select(RunInputSnapshot).where(
+                RunInputSnapshot.run_id == run_id,
+                RunInputSnapshot.tenant_id == "default",
+            )
+        )
+        assert snapshot is not None
+        first_snapshot_json = snapshot.payload_json
+
+    third = client.post(f"/runs/{run_id}/execute", json=payload, headers=AUTH_DEFAULT)
+    assert third.status_code == 200
+    assert third.json()["status"] == "completed"
+
+    with Session(engine) as session:
+        snapshot_after = session.scalar(
+            select(RunInputSnapshot).where(
+                RunInputSnapshot.run_id == run_id,
+                RunInputSnapshot.tenant_id == "default",
+            )
+        )
+        assert snapshot_after is not None
+        assert snapshot_after.payload_json == first_snapshot_json
 
 
 def test_run_execute_retry_failed_is_idempotent(monkeypatch, tmp_path: Path) -> None:

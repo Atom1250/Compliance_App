@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-029
+Next PR ID: PR-030
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -146,6 +146,11 @@ Next PR ID: PR-029
 - Wired routing into `/runs/{run_id}/execute` and `/runs/{run_id}/required-datapoints` while preserving explicit bundle/version overrides.
 - Added tests in `tests/test_bundle_routing.py` and `tests/test_materiality.py` for pre-2026 routing, post-2026 routing, and explicit override behavior.
 - Added PR execution log: `docs/prs/PR-028.md`.
+- PR-029 completed (C9: run input snapshot freezing).
+- Added migration `0017_run_input_snapshot` and ORM model `RunInputSnapshot` for immutable run input freezing.
+- Added snapshot service `apps/api/app/services/run_input_snapshot.py` with canonical payload checksum persistence semantics.
+- Run execution now persists a snapshot including company/materiality/retrieval settings and resolved datapoint universe prior to pipeline execution.
+- Added/updated tests in `tests/test_run_execute_api.py` and `tests/test_db_migrations.py`; execution log added at `docs/prs/PR-029.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

@@ -21,6 +21,7 @@ REQUIRED_TABLES = {
     "regulatory_bundle",
     "run",
     "run_cache_entry",
+    "run_input_snapshot",
     "run_manifest",
     "run_registry_artifact",
     "run_materiality",

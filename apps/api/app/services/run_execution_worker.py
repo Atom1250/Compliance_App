@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.regulatory.datapoint_generation import generate_registry_datapoints
+from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
     Company,
@@ -31,6 +33,7 @@ from apps.api.app.services.llm_provider import build_extraction_client_from_sett
 from apps.api.app.services.regulatory_registry import compile_from_db
 from apps.api.app.services.retrieval import get_retrieval_policy, retrieval_policy_to_dict
 from apps.api.app.services.run_cache import RunHashInput, get_or_compute_cached_output
+from apps.api.app.services.run_input_snapshot import persist_run_input_snapshot
 from apps.api.app.services.run_manifest import RunManifestPayload, persist_run_manifest
 from apps.api.app.services.run_registry_artifacts import persist_registry_outputs_for_run
 
@@ -186,6 +189,59 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             prompt_hash = hashlib.sha256(
                 json.dumps(prompt_seed, sort_keys=True, separators=(",", ":")).encode()
             ).hexdigest()
+
+            if settings.feature_registry_compiler and run.compiler_mode == "registry":
+                compiled_for_snapshot = compile_from_db(
+                    db,
+                    bundle_id=payload.bundle_id,
+                    version=payload.bundle_version,
+                    context={
+                        "company": {
+                            "employees": company.employees,
+                            "listed_status": company.listed_status,
+                            "reporting_year": company.reporting_year,
+                            "reporting_year_start": company.reporting_year_start,
+                            "reporting_year_end": company.reporting_year_end,
+                            "turnover": company.turnover,
+                        }
+                    },
+                )
+                required_datapoint_universe = sorted(
+                    item.datapoint_key
+                    for item in generate_registry_datapoints(compiled_for_snapshot)
+                )
+            else:
+                required_datapoint_universe = resolve_required_datapoint_ids(
+                    db,
+                    company_id=run.company_id,
+                    bundle_id=payload.bundle_id,
+                    bundle_version=payload.bundle_version,
+                    run_id=run.id,
+                )
+            persist_run_input_snapshot(
+                db,
+                run_id=run.id,
+                tenant_id=run.tenant_id,
+                payload={
+                    "run_id": run.id,
+                    "tenant_id": run.tenant_id,
+                    "company_id": run.company_id,
+                    "company_profile": {
+                        "employees": company.employees,
+                        "listed_status": company.listed_status,
+                        "reporting_year": company.reporting_year,
+                        "reporting_year_start": company.reporting_year_start,
+                        "reporting_year_end": company.reporting_year_end,
+                        "turnover": company.turnover,
+                    },
+                    "materiality_inputs": materiality_inputs,
+                    "bundle_id": payload.bundle_id,
+                    "bundle_version": payload.bundle_version,
+                    "compiler_mode": run.compiler_mode,
+                    "retrieval": retrieval_params,
+                    "required_datapoint_universe": required_datapoint_universe,
+                },
+            )
 
             computed_assessments: list[DatapointAssessment] | None = None
 
