@@ -27,6 +27,7 @@ from apps.api.app.services.retrieval import (
     retrieval_policy_to_dict,
     retrieve_chunks,
 )
+from apps.api.app.services.run_registry_artifacts import persist_retrieval_trace_for_run
 from apps.api.app.services.verification import verify_assessment
 
 
@@ -153,9 +154,11 @@ def execute_assessment_pipeline(
         "query_mode": "hybrid",
         "retrieval_policy": retrieval_policy_to_dict(get_retrieval_policy()),
     }
+    retrieval_policy_payload = retrieval_policy_to_dict(get_retrieval_policy())
     retrieval_params_json = json.dumps(
         retrieval_params_payload, sort_keys=True, separators=(",", ":")
     )
+    retrieval_trace_entries: list[dict[str, object]] = []
 
     for datapoint_key in sorted(required_datapoints):
         datapoint_def = datapoint_defs.get(datapoint_key)
@@ -209,8 +212,37 @@ def execute_assessment_pipeline(
         )
         db.add(assessment)
         created.append(assessment)
+        retrieval_trace_entries.append(
+            {
+                "datapoint_key": datapoint_key,
+                "query": query,
+                "selected_chunk_ids": sorted(extraction.evidence_chunk_ids),
+                "candidates": [
+                    {
+                        "rank": idx,
+                        "chunk_id": item.chunk_id,
+                        "document_id": item.document_id,
+                        "page_number": item.page_number,
+                        "start_offset": item.start_offset,
+                        "end_offset": item.end_offset,
+                        "lexical_score": item.lexical_score,
+                        "vector_score": item.vector_score,
+                        "combined_score": item.combined_score,
+                    }
+                    for idx, item in enumerate(retrieval_results, start=1)
+                ],
+            }
+        )
 
     db.commit()
+    persist_retrieval_trace_for_run(
+        db,
+        run_id=run.id,
+        tenant_id=run.tenant_id,
+        retrieval_top_k=config.retrieval_top_k,
+        retrieval_policy=retrieval_policy_payload,
+        entries=sorted(retrieval_trace_entries, key=lambda item: str(item["datapoint_key"])),
+    )
     append_run_event(
         db,
         run_id=run.id,

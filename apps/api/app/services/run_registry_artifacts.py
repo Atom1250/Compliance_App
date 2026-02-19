@@ -15,6 +15,7 @@ from apps.api.app.services.reporting import compute_registry_coverage_matrix
 
 COMPILED_PLAN_ARTIFACT_KEY = "compiled_plan"
 COVERAGE_MATRIX_ARTIFACT_KEY = "coverage_matrix"
+RETRIEVAL_TRACE_ARTIFACT_KEY = "retrieval_trace"
 
 
 def _canonical_json(payload: Any) -> str:
@@ -123,3 +124,26 @@ def load_run_registry_artifacts(
             mapping["registry/coverage_matrix.json"] = row.content_json.encode()
     return mapping
 
+
+def persist_retrieval_trace_for_run(
+    db: Session,
+    *,
+    run_id: int,
+    tenant_id: str,
+    retrieval_top_k: int,
+    retrieval_policy: dict[str, Any],
+    entries: list[dict[str, Any]],
+) -> RunRegistryArtifact:
+    payload = {
+        "run_id": run_id,
+        "retrieval_top_k": retrieval_top_k,
+        "retrieval_policy": retrieval_policy,
+        "entries": entries,
+    }
+    return upsert_run_registry_artifact(
+        db,
+        run_id=run_id,
+        tenant_id=tenant_id,
+        artifact_key=RETRIEVAL_TRACE_ARTIFACT_KEY,
+        payload=payload,
+    )

@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-025
+Next PR ID: PR-026
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -126,6 +126,11 @@ Next PR ID: PR-025
 - Added tests in `tests/test_chunking_golden.py` covering golden chunk snapshot matching, persisted chunk stability across rebuilds, and parser-version pin checks for PDF/DOCX/fallback paths.
 - Verified deterministic chunking and extraction contracts remain stable under repeated execution.
 - Added PR execution log: `docs/prs/PR-024.md`.
+- PR-025 completed (C5: retrieval explainability artifacts).
+- Added deterministic retrieval trace persistence (`retrieval_trace`) in run-scoped artifacts with per-datapoint candidate list, selected chunk IDs, and retrieval scores.
+- Retrieval trace payload now includes retrieval policy metadata with explicit tie-break (`chunk_id`).
+- Added/updated tests in `tests/test_assessment_pipeline.py` and `tests/test_run_execute_api.py` for artifact existence and stability.
+- Added PR execution log: `docs/prs/PR-025.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

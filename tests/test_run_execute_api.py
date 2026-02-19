@@ -314,7 +314,7 @@ def test_run_manifest_includes_registry_section_in_registry_mode(
             .where(RunRegistryArtifact.run_id == run_id)
             .order_by(RunRegistryArtifact.artifact_key)
         ).all()
-    assert artifact_keys == ["compiled_plan", "coverage_matrix"]
+    assert artifact_keys == ["compiled_plan", "coverage_matrix", "retrieval_trace"]
 
 
 def test_run_manifest_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
