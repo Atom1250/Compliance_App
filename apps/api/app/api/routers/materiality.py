@@ -27,7 +27,7 @@ from apps.api.app.db.models import (
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
 from apps.api.app.services.evidence_pack import export_evidence_pack
-from apps.api.app.services.reporting import generate_html_report
+from apps.api.app.services.reporting import build_report_data, generate_html_report
 from apps.api.app.services.run_execution_worker import (
     RunExecutionPayload,
     current_assessment_count,
@@ -136,6 +136,43 @@ class RunExecuteResponse(BaseModel):
     assessment_count: int
 
 
+class ReportPreviewSummary(BaseModel):
+    covered: int
+    denominator_datapoints: int
+    excluded_na_count: int
+    coverage_pct: float
+
+
+class ReportPreviewMetrics(BaseModel):
+    present: int
+    partial: int
+    absent: int
+    na: int
+    total_datapoints: int
+
+
+class ReportPreviewGapItem(BaseModel):
+    datapoint_key: str
+    status: str
+
+
+class ReportPreviewRow(BaseModel):
+    datapoint_key: str
+    status: str
+    value: str | None
+    citations: list[str]
+    rationale: str
+
+
+class ReportPreviewResponse(BaseModel):
+    run_id: int
+    html: str
+    summary: ReportPreviewSummary
+    metrics: ReportPreviewMetrics
+    gaps: list[ReportPreviewGapItem]
+    rows: list[ReportPreviewRow]
+
+
 @router.post("", response_model=RunCreateResponse)
 def create_run(
     payload: RunCreateRequest,
@@ -231,6 +268,61 @@ def _render_report_html(db: Session, *, run: Run, tenant_id: str) -> str:
     )
 
 
+def _render_report_preview(
+    db: Session,
+    *,
+    run: Run,
+    tenant_id: str,
+) -> ReportPreviewResponse:
+    assessments = db.scalars(
+        select(DatapointAssessment)
+        .where(
+            DatapointAssessment.run_id == run.id,
+            DatapointAssessment.tenant_id == tenant_id,
+        )
+        .order_by(DatapointAssessment.datapoint_key)
+    ).all()
+    settings = get_settings()
+    html = generate_html_report(
+        run_id=run.id,
+        assessments=assessments,
+        include_registry_report_matrix=settings.feature_registry_report_matrix,
+    )
+    report = build_report_data(run_id=run.id, assessments=assessments)
+    return ReportPreviewResponse(
+        run_id=run.id,
+        html=html,
+        summary=ReportPreviewSummary(
+            covered=report.covered,
+            denominator_datapoints=report.denominator_datapoints,
+            excluded_na_count=report.excluded_na_count,
+            coverage_pct=report.coverage_pct,
+        ),
+        metrics=ReportPreviewMetrics(
+            present=report.present,
+            partial=report.partial,
+            absent=report.absent,
+            na=report.na,
+            total_datapoints=report.total_datapoints,
+        ),
+        gaps=[
+            ReportPreviewGapItem(datapoint_key=row.datapoint_key, status=row.status)
+            for row in report.rows
+            if row.status in {"Absent", "Partial"}
+        ],
+        rows=[
+            ReportPreviewRow(
+                datapoint_key=row.datapoint_key,
+                status=row.status,
+                value=row.value,
+                citations=sorted(json.loads(row.evidence_chunk_ids)),
+                rationale=row.rationale,
+            )
+            for row in report.rows
+        ],
+    )
+
+
 @router.get("/{run_id}/report")
 def run_report(
     run_id: int,
@@ -275,6 +367,21 @@ def run_report_html(
     )
     html = _render_report_html(db, run=run, tenant_id=auth.tenant_id)
     return HTMLResponse(content=html)
+
+
+@router.get("/{run_id}/report-preview", response_model=ReportPreviewResponse)
+def run_report_preview(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> ReportPreviewResponse:
+    run = _load_completed_run(
+        db,
+        run_id=run_id,
+        tenant_id=auth.tenant_id,
+        resource_name="report",
+    )
+    return _render_report_preview(db, run=run, tenant_id=auth.tenant_id)
 
 
 @router.get("/{run_id}/evidence-pack")
