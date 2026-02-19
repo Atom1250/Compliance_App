@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.regulatory.canonical import sha256_checksum
+from app.regulatory.loader import load_bundle
 from app.regulatory.schema import RegulatoryBundle as RegulatoryBundleSchema
 from apps.api.app.db.models import RegulatoryBundle
 
@@ -59,3 +62,20 @@ def upsert_bundle(
     db.refresh(created)
     return created
 
+
+def _iter_bundle_paths(bundles_root: Path) -> list[Path]:
+    return sorted(path for path in bundles_root.rglob("*.json") if path.is_file())
+
+
+def sync_from_filesystem(
+    db: Session,
+    *,
+    bundles_root: Path,
+) -> list[tuple[str, str, str]]:
+    """Deterministically sync bundle files from filesystem into the registry."""
+    synced: list[tuple[str, str, str]] = []
+    for bundle_path in _iter_bundle_paths(bundles_root.resolve()):
+        bundle, checksum, _ = load_bundle(bundle_path)
+        upsert_bundle(db, bundle=bundle)
+        synced.append((bundle.bundle_id, bundle.version, checksum))
+    return sorted(synced)

@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-006
+Next PR ID: PR-007
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -28,6 +28,11 @@ Next PR ID: PR-006
 - Implemented checksum-based idempotency/update behavior keyed by `bundle_id` + `version`.
 - Added registry tests in `tests/test_regulatory_registry.py` for idempotent upsert, retrieval, and changed-payload checksum update.
 - Added PR execution log: `docs/prs/PR-005.md`.
+- PR-006 completed (A2 Part 3: filesystem sync).
+- Added deterministic registry sync function `sync_from_filesystem()` to import all bundle JSON files from a root directory.
+- Ensured deterministic processing order and idempotent behavior through sorted file traversal and upsert semantics.
+- Added tests in `tests/test_regulatory_registry_sync.py` for repeatable sync outputs and stable ordering.
+- Added PR execution log: `docs/prs/PR-006.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
