@@ -20,5 +20,32 @@
     "model_name": "deterministic-local-v1",
     "retrieval_policy_version": "hybrid-v1",
     "retrieval_top_k": 5
-  }
+  },
+  "scenario_fixture_path": "tests/fixtures/uat/scenarios.json",
+  "scenario_results": [
+    {
+      "blocking_reasons": [],
+      "evidence_pack_ready": true,
+      "evidence_preview_status_code": 200,
+      "id": "local_deterministic_success",
+      "llm_provider": "deterministic_fallback",
+      "report_ready": true,
+      "report_status_code": 200,
+      "terminal_status": "completed"
+    },
+    {
+      "blocking_reasons": [
+        "assessments_missing",
+        "manifest_missing_for_report",
+        "run_not_completed:failed"
+      ],
+      "evidence_pack_ready": false,
+      "evidence_preview_status_code": 409,
+      "id": "openai_missing_key_failure",
+      "llm_provider": "openai_cloud",
+      "report_ready": false,
+      "report_status_code": 409,
+      "terminal_status": "failed"
+    }
+  ]
 }

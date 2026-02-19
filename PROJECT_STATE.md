@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-040
+Next PR ID: PR-041
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -201,6 +201,11 @@ Next PR ID: PR-040
 - Expanded CI workflow validation with explicit migration smoke coverage (`tests/test_db_migrations.py`) and workflow YAML syntax parsing.
 - Updated workflow hardening tests in `tests/test_workflow_hardening.py` to enforce presence of new CI deterministic/migration/workflow gates.
 - Added PR execution log: `docs/prs/PR-039.md`.
+- PR-040 completed (E5: UAT harness and golden scenario pack).
+- Added versioned UAT scenario fixture pack (`tests/fixtures/uat/scenarios.json`) covering deterministic local-success and cloud-config-failure contracts.
+- Extended `src/compliance_app/uat_harness.py` to execute scenario pack runs and validate readiness/report/evidence contract outcomes per scenario.
+- Added operator runbook (`docs/runbooks/uat_execution.md`) and updated UAT golden snapshot (`tests/golden/uat_harness_snapshot.json`).
+- Added PR execution log: `docs/prs/PR-040.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -216,6 +221,7 @@ Next PR ID: PR-040
 - [ ] Confirm where feature flags/config lives and naming conventions.
 - [ ] Confirm test DB strategy (sqlite? postgres? docker service?).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
+- [ ] `docs/PR_CONVEYOR_PLAN.md` currently ends at PR-040; PR-041+ scope needs to be authored before next auto-conveyor run.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`
