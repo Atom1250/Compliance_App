@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-016
+Next PR ID: PR-017
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -81,6 +81,11 @@ Next PR ID: PR-016
 - Added registry manifest section (`retrieval_params.registry`) in registry mode, including bundle checksums.
 - Updated execute-path tests for manifest payload and added registry-mode manifest coverage.
 - Added PR execution log: `docs/prs/PR-015.md`.
+- PR-016 completed (B3 Part 2: regulatory sync/compile audit events).
+- Added `regulatory.sync.started|completed|failed` structured events in filesystem sync flow.
+- Added `regulatory.compile.started|completed|failed` structured events in compile-from-DB flow.
+- Added audit event tests in `tests/test_regulatory_audit_events.py`.
+- Added PR execution log: `docs/prs/PR-016.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
