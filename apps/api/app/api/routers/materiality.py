@@ -28,7 +28,11 @@ from apps.api.app.db.models import (
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
 from apps.api.app.services.evidence_pack import export_evidence_pack
-from apps.api.app.services.reporting import build_report_data, generate_html_report
+from apps.api.app.services.reporting import (
+    ReportManifestMetadata,
+    build_report_data,
+    generate_html_report,
+)
 from apps.api.app.services.run_execution_worker import (
     RunExecutionPayload,
     current_assessment_count,
@@ -111,7 +115,18 @@ class RunManifestResponse(BaseModel):
     model_name: str
     prompt_hash: str
     report_template_version: str
+    regulatory_registry_version: dict[str, object] | None = None
+    regulatory_compiler_version: str | None = None
+    regulatory_plan_json: dict[str, object] | None = None
+    regulatory_plan_hash: str | None = None
     git_sha: str
+
+
+class RunRegulatoryPlanResponse(BaseModel):
+    run_id: int
+    compiler_version: str | None
+    plan_hash: str | None
+    plan: dict[str, object] | None
 
 
 class RunExportReadinessResponse(BaseModel):
@@ -375,10 +390,44 @@ def _render_report_html(db: Session, *, run: Run, tenant_id: str) -> str:
         .order_by(DatapointAssessment.datapoint_key)
     ).all()
     settings = get_settings()
+    manifest = db.scalar(
+        select(RunManifest).where(RunManifest.run_id == run.id, RunManifest.tenant_id == tenant_id)
+    )
+    metadata = ReportManifestMetadata()
+    if manifest is not None:
+        retrieval_params = json.loads(manifest.retrieval_params)
+        plan_json = (
+            json.loads(manifest.regulatory_plan_json) if manifest.regulatory_plan_json else {}
+        )
+        selected_bundles = plan_json.get("selected_bundles", [])
+        requirements_bundles = ", ".join(
+            f"{item.get('bundle_id')}@{item.get('version')}"
+            for item in selected_bundles
+            if item.get("bundle_id") and item.get("version")
+        ) or f"{manifest.bundle_id}@{manifest.bundle_version}"
+        overlays = sorted(
+            {
+                item.get("reason", "").split(":", 1)[1]
+                for item in plan_json.get("obligations_excluded", [])
+                if str(item.get("reason", "")).startswith("overlay_disabled:")
+            }
+        )
+        metadata = ReportManifestMetadata(
+            requirements_bundles=requirements_bundles,
+            regulatory_registry_version=manifest.regulatory_registry_version or "n/a",
+            compiler_version=manifest.regulatory_compiler_version or "n/a",
+            model_used=manifest.model_name,
+            retrieval_parameters=json.dumps(retrieval_params, sort_keys=True),
+            git_sha=manifest.git_sha,
+            applied_regimes=", ".join(plan_json.get("regimes", [])) or "n/a",
+            applied_overlays=", ".join(overlays) if overlays else "none",
+            obligations_applied_count=len(plan_json.get("obligations_applied", [])),
+        )
     return generate_html_report(
         run_id=run.id,
         assessments=assessments,
         include_registry_report_matrix=settings.feature_registry_report_matrix,
+        metadata=metadata,
     )
 
 
@@ -397,10 +446,36 @@ def _render_report_preview(
         .order_by(DatapointAssessment.datapoint_key)
     ).all()
     settings = get_settings()
+    manifest = db.scalar(
+        select(RunManifest).where(RunManifest.run_id == run.id, RunManifest.tenant_id == tenant_id)
+    )
+    metadata = ReportManifestMetadata()
+    if manifest is not None:
+        retrieval_params = json.loads(manifest.retrieval_params)
+        plan_json = (
+            json.loads(manifest.regulatory_plan_json) if manifest.regulatory_plan_json else {}
+        )
+        requirements_bundles = ", ".join(
+            f"{item.get('bundle_id')}@{item.get('version')}"
+            for item in plan_json.get("selected_bundles", [])
+            if item.get("bundle_id") and item.get("version")
+        ) or f"{manifest.bundle_id}@{manifest.bundle_version}"
+        metadata = ReportManifestMetadata(
+            requirements_bundles=requirements_bundles,
+            regulatory_registry_version=manifest.regulatory_registry_version or "n/a",
+            compiler_version=manifest.regulatory_compiler_version or "n/a",
+            model_used=manifest.model_name,
+            retrieval_parameters=json.dumps(retrieval_params, sort_keys=True),
+            git_sha=manifest.git_sha,
+            applied_regimes=", ".join(plan_json.get("regimes", [])) or "n/a",
+            applied_overlays="none",
+            obligations_applied_count=len(plan_json.get("obligations_applied", [])),
+        )
     html = generate_html_report(
         run_id=run.id,
         assessments=assessments,
         include_registry_report_matrix=settings.feature_registry_report_matrix,
+        metadata=metadata,
     )
     report = build_report_data(run_id=run.id, assessments=assessments)
     return ReportPreviewResponse(
@@ -613,7 +688,42 @@ def run_manifest(
         model_name=manifest.model_name,
         prompt_hash=manifest.prompt_hash,
         report_template_version=manifest.report_template_version,
+        regulatory_registry_version=(
+            json.loads(manifest.regulatory_registry_version)
+            if manifest.regulatory_registry_version
+            else None
+        ),
+        regulatory_compiler_version=manifest.regulatory_compiler_version,
+        regulatory_plan_json=(
+            json.loads(manifest.regulatory_plan_json) if manifest.regulatory_plan_json else None
+        ),
+        regulatory_plan_hash=manifest.regulatory_plan_hash,
         git_sha=manifest.git_sha,
+    )
+
+
+@router.get("/{run_id}/regulatory-plan", response_model=RunRegulatoryPlanResponse)
+def run_regulatory_plan(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunRegulatoryPlanResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    manifest = db.scalar(
+        select(RunManifest).where(
+            RunManifest.run_id == run_id,
+            RunManifest.tenant_id == auth.tenant_id,
+        )
+    )
+    if manifest is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="manifest not found")
+    return RunRegulatoryPlanResponse(
+        run_id=run_id,
+        compiler_version=manifest.regulatory_compiler_version,
+        plan_hash=manifest.regulatory_plan_hash,
+        plan=json.loads(manifest.regulatory_plan_json) if manifest.regulatory_plan_json else None,
     )
 
 

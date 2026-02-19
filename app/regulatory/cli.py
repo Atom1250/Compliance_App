@@ -20,8 +20,10 @@ def list_bundles(db: Session) -> list[tuple[str, str, str]]:
     return [(row.bundle_id, row.version, row.checksum) for row in rows]
 
 
-def sync_bundles(db: Session, *, bundles_root: Path) -> list[tuple[str, str, str]]:
-    return sync_from_filesystem(db, bundles_root=bundles_root)
+def sync_bundles(
+    db: Session, *, bundles_root: Path, mode: str = "sync"
+) -> list[tuple[str, str, str]]:
+    return sync_from_filesystem(db, bundles_root=bundles_root, mode=mode)  # type: ignore[arg-type]
 
 
 def compile_preview(
@@ -45,4 +47,3 @@ def context_from_json(value: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("context JSON must decode to an object")
     return payload
-

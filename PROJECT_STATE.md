@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-062
+Next PR ID: PR-REG-009
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -255,6 +255,12 @@ Next PR ID: PR-062
 - Added manifest/report contract upgrades: `report_template_version` persisted in `run_manifest`, `REPORT_TEMPLATE_VERSION = "gold_standard_v1"`, and deterministic report section anchors aligned to template structure.
 - Implemented discovery and ingestion hardening: year-range Tavily multi-query merge/dedupe, fetch-time PDF validation with retries/headers, larger default document-size cap, and cross-company duplicate document linking via `company_document_link`.
 - Implemented retrieval and observability upgrades: company-scoped retrieval support, discovery diagnostics fields, UI diagnostics panel, benchmark harness script (`scripts/run_discovery_analysis_benchmark.py`), and supporting tests (`tests/test_company_document_link.py`, updated discovery/reporting/golden tests).
+- PR-REG-001..PR-REG-008 completed (Regulatory Context Layer to Spec).
+- Extended `regulatory_bundle` + `run_manifest` schema to persist regulatory compiler context (registry versions, compiler version, plan JSON/hash).
+- Added deterministic company-context compiler service with jurisdiction/regime selection, overlay application, stable ordering, and canonical plan hash.
+- Added minimal EU core bundle `csrd_esrs_core@2026.02` with ESRS E1-1/E1-6 and Norway overlay example, plus bundle sync CLI (`merge|sync`) and documentation.
+- Wired run execution to persist compiler outputs into manifest and updated report metadata rendering to read manifest-backed regulatory values.
+- Added read-only regulatory context APIs: `/regulatory/sources`, `/regulatory/bundles`, and `/runs/{run_id}/regulatory-plan`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

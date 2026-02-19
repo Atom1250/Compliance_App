@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,32 +15,42 @@ from app.regulatory.schema import RegulatoryBundle as RegulatoryBundleSchema
 from apps.api.app.db.models import RegulatoryBundle
 from apps.api.app.services.audit import log_structured_event
 
+SyncMode = Literal["merge", "sync"]
+
 
 def get_bundle(
     db: Session,
     *,
+    regime: str | None = None,
     bundle_id: str,
     version: str,
 ) -> RegulatoryBundle | None:
     """Fetch one stored regulatory bundle by ID and version."""
-    return db.scalar(
-        select(RegulatoryBundle).where(
-            RegulatoryBundle.bundle_id == bundle_id,
-            RegulatoryBundle.version == version,
-        )
+    query = select(RegulatoryBundle).where(
+        RegulatoryBundle.bundle_id == bundle_id,
+        RegulatoryBundle.version == version,
     )
+    if regime is not None:
+        query = query.where(RegulatoryBundle.regime == regime)
+    return db.scalar(query)
 
 
 def upsert_bundle(
     db: Session,
     *,
     bundle: RegulatoryBundleSchema,
+    mode: SyncMode = "merge",
 ) -> RegulatoryBundle:
     """Idempotently store or update a regulatory bundle by bundle_id/version."""
     payload = bundle.model_dump(mode="json")
     checksum = sha256_checksum(payload)
 
-    existing = get_bundle(db, bundle_id=bundle.bundle_id, version=bundle.version)
+    existing = get_bundle(
+        db,
+        regime=bundle.regime,
+        bundle_id=bundle.bundle_id,
+        version=bundle.version,
+    )
     if existing is not None:
         if existing.checksum == checksum:
             return existing
@@ -48,6 +58,8 @@ def upsert_bundle(
         existing.regime = bundle.regime
         existing.checksum = checksum
         existing.payload = payload
+        existing.source_record_ids = sorted(set(bundle.source_record_ids))
+        existing.status = "active"
         db.commit()
         db.refresh(existing)
         return existing
@@ -59,6 +71,8 @@ def upsert_bundle(
         regime=bundle.regime,
         checksum=checksum,
         payload=payload,
+        source_record_ids=sorted(set(bundle.source_record_ids)),
+        status="active",
     )
     db.add(created)
     db.commit()
@@ -74,20 +88,40 @@ def sync_from_filesystem(
     db: Session,
     *,
     bundles_root: Path,
+    mode: SyncMode = "merge",
 ) -> list[tuple[str, str, str]]:
     """Deterministically sync bundle files from filesystem into the registry."""
     log_structured_event("regulatory.sync.started", bundles_root=str(bundles_root.resolve()))
     synced: list[tuple[str, str, str]] = []
     try:
+        seen_triplets: set[tuple[str, str, str]] = set()
         for bundle_path in _iter_bundle_paths(bundles_root.resolve()):
             bundle, checksum, _ = load_bundle(bundle_path)
-            upsert_bundle(db, bundle=bundle)
+            upsert_bundle(db, bundle=bundle, mode=mode)
             synced.append((bundle.bundle_id, bundle.version, checksum))
+            seen_triplets.add((bundle.regime, bundle.bundle_id, bundle.version))
+        if mode == "sync":
+            # Symmetric sync mode: deactivate bundles not present in source tree.
+            rows = db.scalars(select(RegulatoryBundle)).all()
+            changed = False
+            for row in rows:
+                key = (row.regime, row.bundle_id, row.version)
+                if key in seen_triplets:
+                    if row.status != "active":
+                        row.status = "active"
+                        changed = True
+                    continue
+                if row.status != "inactive":
+                    row.status = "inactive"
+                    changed = True
+            if changed:
+                db.commit()
         ordered = sorted(synced)
         log_structured_event(
             "regulatory.sync.completed",
             bundles_root=str(bundles_root.resolve()),
             synced_count=len(ordered),
+            mode=mode,
         )
         return ordered
     except Exception as exc:
@@ -133,3 +167,20 @@ def compile_from_db(
             error=str(exc),
         )
         raise
+
+
+def list_bundles(
+    db: Session,
+    *,
+    regime: str | None = None,
+) -> list[RegulatoryBundle]:
+    query = select(RegulatoryBundle).where(RegulatoryBundle.status == "active")
+    if regime:
+        query = query.where(RegulatoryBundle.regime == regime)
+    return db.scalars(
+        query.order_by(
+            RegulatoryBundle.regime,
+            RegulatoryBundle.bundle_id,
+            RegulatoryBundle.version,
+        )
+    ).all()

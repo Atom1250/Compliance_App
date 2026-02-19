@@ -30,6 +30,7 @@ from apps.api.app.services.audit import append_run_event, log_structured_event
 from apps.api.app.services.company_documents import list_company_document_hashes
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
+from apps.api.app.services.regulatory_compiler import compile_company_regulatory_plan
 from apps.api.app.services.regulatory_registry import compile_from_db
 from apps.api.app.services.retrieval import get_retrieval_policy, retrieval_policy_to_dict
 from apps.api.app.services.run_cache import RunHashInput, get_or_compute_cached_output
@@ -205,6 +206,10 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             prompt_hash = hashlib.sha256(
                 json.dumps(prompt_seed, sort_keys=True, separators=(",", ":")).encode()
             ).hexdigest()
+            regulatory_plan_result = compile_company_regulatory_plan(
+                db,
+                company=company,
+            )
 
             if settings.feature_registry_compiler and run.compiler_mode == "registry":
                 compiled_for_snapshot = compile_from_db(
@@ -312,6 +317,12 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     retrieval_params=retrieval_params,
                     model_name=extraction_client.model_name,
                     prompt_hash=prompt_hash,
+                    regulatory_registry_version={
+                        "selected_bundles": regulatory_plan_result.plan["selected_bundles"]
+                    },
+                    regulatory_compiler_version=regulatory_plan_result.plan["compiler_version"],
+                    regulatory_plan_json=regulatory_plan_result.plan,
+                    regulatory_plan_hash=regulatory_plan_result.plan_hash,
                     git_sha=settings.git_sha,
                 ),
                 assessments=computed_assessments or [],

@@ -361,6 +361,153 @@ Tests:
 
 ---
 
+## PR-REG-001 — Regulatory Bundle Schema + DB Model + Migration
+Objective:
+Ensure DB-backed storage supports versioned bundle metadata and deterministic lifecycle management.
+
+Scope:
+- Extended `regulatory_bundle` model/migration with status + source-record metadata + unique `(regime,bundle_id,version)`.
+- Added run-manifest regulatory context columns for compiler output persistence.
+
+Definition of Done:
+- Migration chain reaches head with new columns.
+- Existing and new bundle workflows remain deterministic.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-002 — Bundle Loader + Sync Command (Repo JSON → DB)
+Objective:
+Provide deterministic repo-bundle sync with explicit `merge|sync` behavior.
+
+Scope:
+- Extended registry sync service to support `mode=merge|sync`.
+- Added CLI: `python -m apps.api.app.scripts.sync_regulatory_bundles --path app/regulatory/bundles --mode sync`.
+
+Definition of Done:
+- Sync is deterministic and idempotent.
+- `sync` mode deactivates bundles absent from source path.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-003 — Minimal EU Bundle (CSRD/ESRS Core)
+Objective:
+Ship a working EU-first core bundle for compiler context and report metadata.
+
+Scope:
+- Added `app/regulatory/bundles/csrd_esrs_core@2026.02.json`.
+- Includes ESRS E1-1 and E1-6 obligations plus NO overlay example.
+- Added bundle README.
+
+Definition of Done:
+- Bundle validates and compiles.
+- Bundle sync includes new core bundle.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-004 — Regulatory Compiler v1
+Objective:
+Compile company context into deterministic applicable/excluded obligation plans.
+
+Scope:
+- Added `apps/api/app/services/regulatory_compiler.py`.
+- Selects active bundles by company jurisdictions/regimes, applies overlays, and returns stable plan hash.
+
+Definition of Done:
+- Stable ordering/hash behavior for repeated runs.
+- Overlay behavior deterministic by jurisdiction.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-005 — Persist Plan in Manifest + Report Metadata
+Objective:
+Eliminate `n/a` registry metadata by persisting compiler outputs and rendering them.
+
+Scope:
+- Run execution now persists registry version/compiler version/plan JSON/plan hash in `run_manifest`.
+- Report metadata now renders manifest-backed values instead of placeholder `n/a`.
+- Added `/runs/{run_id}/regulatory-plan` endpoint.
+
+Definition of Done:
+- Manifest contains persisted regulatory context.
+- Report metadata displays real run context values.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-006 — Jurisdiction Overlay Framework
+Objective:
+Support overlay add/modify/disable logic in bundle schema/compiler.
+
+Scope:
+- Extended schema with `overlays[]`.
+- Compiler applies overlay obligations for matching jurisdictions.
+- Added NO overlay example in core bundle.
+
+Definition of Done:
+- NO+EU context includes overlay obligations.
+- EU-only context excludes NO overlay obligations.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-007 — Coverage Matrix Assembly v1
+Objective:
+Keep obligation coverage matrix deterministic and renderable alongside report sections.
+
+Scope:
+- Coverage matrix helper supports explicit obligation-ID inclusion and deterministic ordering.
+- Report metadata now includes obligations applied count from manifest plan.
+
+Definition of Done:
+- Matrix/report rendering deterministic with registry metadata context.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-008 — Regulatory Context Read APIs
+Objective:
+Expose read-only regulatory context for UI/ops diagnostics.
+
+Scope:
+- Added endpoints:
+  - `GET /regulatory/sources?jurisdiction=EU`
+  - `GET /regulatory/bundles?regime=CSRD_ESRS`
+  - `GET /runs/{run_id}/regulatory-plan`
+
+Definition of Done:
+- Endpoints return deterministic ordered responses and pass auth/tenant checks.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
 ## PR-053 — Download Robustness + PDF Validation
 Objective:
 Increase ingestion success for discovered candidates while keeping PDF-only MVP policy.

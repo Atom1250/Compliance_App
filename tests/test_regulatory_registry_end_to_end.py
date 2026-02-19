@@ -30,6 +30,7 @@ def test_sync_and_compile_are_deterministic_for_seeded_bundles(tmp_path: Path) -
             select(RegulatoryBundle).order_by(RegulatoryBundle.bundle_id, RegulatoryBundle.version)
         ).all()
         assert [row.bundle_id for row in rows] == [
+            "csrd_esrs_core",
             "eu_csrd_sample",
             "eu_green_bond_sample",
             "no_transparency_sample",
@@ -59,4 +60,3 @@ def test_sync_and_compile_are_deterministic_for_seeded_bundles(tmp_path: Path) -
             compiled_twice, sort_keys=True, separators=(",", ":")
         )
         assert all(plan["obligations"] for plan in compiled_once)
-

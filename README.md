@@ -98,3 +98,12 @@ If older runs/documents are missing chunks, backfill them without resetting the 
 - EU-only CSV: `python -m apps.api.app.scripts.import_regulatory_sources --file regulatory_source_document_SOURCE_SHEETS_EU_only.csv --jurisdiction EU`
 - Optional XLSX convenience remains supported via `--sheets ...`
 - Prefer `SOURCE_SHEETS_*` CSV artifacts; avoid `regulatory_source_document_full.csv` unless you preprocess non-data tabs.
+
+## Regulatory Bundle Sync + Compiler Context
+
+- Sync bundles to DB:
+  - `python -m apps.api.app.scripts.sync_regulatory_bundles --path app/regulatory/bundles --mode sync`
+- Registry APIs:
+  - `GET /regulatory/sources?jurisdiction=EU`
+  - `GET /regulatory/bundles?regime=CSRD_ESRS`
+  - `GET /runs/{run_id}/regulatory-plan`

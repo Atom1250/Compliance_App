@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -229,12 +229,19 @@ class RunManifest(Base):
     report_template_version: Mapped[str] = mapped_column(
         String(64), nullable=False, default="legacy_v1"
     )
+    regulatory_registry_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    regulatory_compiler_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    regulatory_plan_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    regulatory_plan_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     git_sha: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class RegulatoryBundle(Base):
     __tablename__ = "regulatory_bundle"
+    __table_args__ = (
+        UniqueConstraint("regime", "bundle_id", "version", name="uq_regulatory_bundle_triplet"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     bundle_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
@@ -243,7 +250,14 @@ class RegulatoryBundle(Base):
     regime: Mapped[str] = mapped_column(String(64), nullable=False)
     checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    source_record_ids: Mapped[dict] = mapped_column(JSON, nullable=False, default=list)
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
 
 
 class RunRegistryArtifact(Base):

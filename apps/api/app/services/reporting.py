@@ -56,6 +56,19 @@ class ReportData:
     final_determination: str
 
 
+@dataclass(frozen=True)
+class ReportManifestMetadata:
+    requirements_bundles: str = "n/a"
+    regulatory_registry_version: str = "n/a"
+    compiler_version: str = "n/a"
+    model_used: str = "n/a"
+    retrieval_parameters: str = "n/a"
+    git_sha: str = "n/a"
+    applied_regimes: str = "n/a"
+    applied_overlays: str = "n/a"
+    obligations_applied_count: int = 0
+
+
 def _to_generated_at(timestamp: datetime | None) -> str:
     value = timestamp or datetime.now(UTC)
     return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -81,6 +94,8 @@ def _obligation_status(*, present: int, partial: int, absent: int, na: int, tota
 
 def compute_registry_coverage_matrix(
     assessments: Sequence[DatapointAssessment],
+    *,
+    obligation_ids: Sequence[str] | None = None,
 ) -> list[RegistryCoverageRow]:
     grouped: dict[str, list[DatapointAssessment]] = {}
     for assessment in assessments:
@@ -112,6 +127,24 @@ def compute_registry_coverage_matrix(
                 ),
             )
         )
+    if obligation_ids:
+        existing = {row.obligation_id for row in rows}
+        for obligation_id in sorted(set(obligation_ids)):
+            if obligation_id in existing:
+                continue
+            rows.append(
+                RegistryCoverageRow(
+                    obligation_id=obligation_id,
+                    total_elements=0,
+                    present=0,
+                    partial=0,
+                    absent=0,
+                    na=0,
+                    coverage_pct=0.0,
+                    status="Absent",
+                )
+            )
+    rows.sort(key=lambda item: item.obligation_id)
     return rows
 
 
@@ -169,6 +202,7 @@ def generate_html_report(
     assessments: Sequence[DatapointAssessment],
     generated_at: datetime | None = None,
     include_registry_report_matrix: bool = False,
+    metadata: ReportManifestMetadata | None = None,
 ) -> str:
     """Render deterministic HTML report content from datapoint assessments."""
     report = build_report_data(run_id=run_id, assessments=assessments)
@@ -194,9 +228,14 @@ def generate_html_report(
         for item in report.rows
     )
 
+    metadata = metadata or ReportManifestMetadata()
     registry_section = ""
     if include_registry_report_matrix:
-        rows = compute_registry_coverage_matrix(assessments)
+        obligation_ids: list[str] = []
+        if metadata.obligations_applied_count and metadata.regulatory_registry_version != "n/a":
+            # Kept as metadata-only hint; IDs themselves are rendered from plan where available.
+            obligation_ids = []
+        rows = compute_registry_coverage_matrix(assessments, obligation_ids=obligation_ids)
         matrix_rows = "".join(
             (
                 "<tr>"
@@ -241,12 +280,18 @@ def generate_html_report(
         f"<tr><th>Run ID</th><td>{report.run_id}</td></tr>"
         f"<tr><th>Generated On</th><td>{generated_at_text}</td></tr>"
         f"<tr><th>Report Template Version</th><td>{REPORT_TEMPLATE_VERSION}</td></tr>"
-        "<tr><th>Requirements Bundles</th><td>n/a</td></tr>"
-        "<tr><th>Regulatory Registry Version</th><td>n/a</td></tr>"
-        "<tr><th>Compiler Version</th><td>n/a</td></tr>"
-        "<tr><th>Model Used</th><td>n/a</td></tr>"
-        "<tr><th>Retrieval Parameters</th><td>n/a</td></tr>"
-        "<tr><th>Git SHA</th><td>n/a</td></tr>"
+        f"<tr><th>Requirements Bundles</th>"
+        f"<td>{html.escape(metadata.requirements_bundles)}</td></tr>"
+        f"<tr><th>Regulatory Registry Version</th>"
+        f"<td>{html.escape(metadata.regulatory_registry_version)}</td></tr>"
+        f"<tr><th>Compiler Version</th><td>{html.escape(metadata.compiler_version)}</td></tr>"
+        f"<tr><th>Model Used</th><td>{html.escape(metadata.model_used)}</td></tr>"
+        f"<tr><th>Retrieval Parameters</th>"
+        f"<td>{html.escape(metadata.retrieval_parameters)}</td></tr>"
+        f"<tr><th>Git SHA</th><td>{html.escape(metadata.git_sha)}</td></tr>"
+        f"<tr><th>Applied Regimes</th><td>{html.escape(metadata.applied_regimes)}</td></tr>"
+        f"<tr><th>Applied Overlays</th><td>{html.escape(metadata.applied_overlays)}</td></tr>"
+        f"<tr><th>Obligations Applied</th><td>{metadata.obligations_applied_count}</td></tr>"
         "</tbody></table></section>"
         "<section id=\"executive-summary\">"
         "<h2>Executive Summary</h2>"

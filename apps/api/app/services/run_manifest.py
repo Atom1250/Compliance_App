@@ -26,6 +26,10 @@ class RunManifestPayload:
     model_name: str
     prompt_hash: str
     git_sha: str
+    regulatory_registry_version: dict[str, Any] | None = None
+    regulatory_compiler_version: str | None = None
+    regulatory_plan_json: dict[str, Any] | None = None
+    regulatory_plan_hash: str | None = None
     report_template_version: str = REPORT_TEMPLATE_VERSION
 
 
@@ -63,6 +67,16 @@ def persist_run_manifest(
         prompt_hash = _aggregate_prompt_hash(assessments)
     retrieval_params_json = _canonical_json(payload.retrieval_params)
     document_hashes_json = _canonical_json(document_hashes)
+    regulatory_registry_version_json = (
+        _canonical_json(payload.regulatory_registry_version)
+        if payload.regulatory_registry_version is not None
+        else None
+    )
+    regulatory_plan_json = (
+        _canonical_json(payload.regulatory_plan_json)
+        if payload.regulatory_plan_json is not None
+        else None
+    )
 
     existing = db.scalar(
         select(RunManifest).where(
@@ -79,6 +93,10 @@ def persist_run_manifest(
             retrieval_params=retrieval_params_json,
             model_name=payload.model_name,
             prompt_hash=prompt_hash,
+            regulatory_registry_version=regulatory_registry_version_json,
+            regulatory_compiler_version=payload.regulatory_compiler_version,
+            regulatory_plan_json=regulatory_plan_json,
+            regulatory_plan_hash=payload.regulatory_plan_hash,
             report_template_version=payload.report_template_version,
             git_sha=payload.git_sha,
         )
@@ -93,6 +111,10 @@ def persist_run_manifest(
     existing.retrieval_params = retrieval_params_json
     existing.model_name = payload.model_name
     existing.prompt_hash = prompt_hash
+    existing.regulatory_registry_version = regulatory_registry_version_json
+    existing.regulatory_compiler_version = payload.regulatory_compiler_version
+    existing.regulatory_plan_json = regulatory_plan_json
+    existing.regulatory_plan_hash = payload.regulatory_plan_hash
     existing.report_template_version = payload.report_template_version
     existing.git_sha = payload.git_sha
     db.commit()

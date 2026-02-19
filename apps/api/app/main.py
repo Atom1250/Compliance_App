@@ -19,6 +19,7 @@ from starlette.responses import Response
 from apps.api.app.api.routers.companies import router as companies_router
 from apps.api.app.api.routers.documents import router as documents_router
 from apps.api.app.api.routers.materiality import router as materiality_router
+from apps.api.app.api.routers.regulatory import router as regulatory_router
 from apps.api.app.api.routers.retrieval import router as retrieval_router
 from apps.api.app.api.routers.system import router as system_router
 from apps.api.app.core.auth import validate_auth_configuration
@@ -99,6 +100,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
+        allow_origin_regex=settings.cors_allowed_origin_regex,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -124,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(companies_router)
     app.include_router(documents_router)
     app.include_router(materiality_router)
+    app.include_router(regulatory_router)
     app.include_router(retrieval_router)
     return app
 

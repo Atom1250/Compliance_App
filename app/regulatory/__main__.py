@@ -18,6 +18,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sync_parser = sub.add_parser("sync", help="Sync bundles from filesystem")
     sync_parser.add_argument("--bundles-root", required=True, help="Root directory containing bundle JSON")
+    sync_parser.add_argument(
+        "--mode",
+        choices=("merge", "sync"),
+        default="sync",
+        help="merge=upsert only, sync=deactivate bundles absent from source path",
+    )
 
     preview_parser = sub.add_parser("compile-preview", help="Compile plan preview from DB bundle")
     preview_parser.add_argument("--bundle-id", required=True)
@@ -39,7 +45,7 @@ def main() -> int:
         if args.command == "sync":
             print(
                 json.dumps(
-                    sync_bundles(session, bundles_root=Path(args.bundles_root)),
+                    sync_bundles(session, bundles_root=Path(args.bundles_root), mode=args.mode),
                     indent=2,
                 )
             )
@@ -66,4 +72,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
