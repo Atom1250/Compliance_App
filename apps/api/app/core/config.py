@@ -41,7 +41,12 @@ class Settings(BaseSettings):
     tavily_download_timeout_seconds: float = 30.0
     tavily_max_document_bytes: int = 10000000
 
-    model_config = SettingsConfigDict(env_prefix="COMPLIANCE_APP_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="COMPLIANCE_APP_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 @lru_cache

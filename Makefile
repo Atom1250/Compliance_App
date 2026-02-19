@@ -81,6 +81,17 @@ dev: setup
 	$(PYTHON) -m uvicorn apps.api.main:app --host $(API_HOST) --port $(API_PORT) --reload >>/tmp/compliance-api.log 2>&1 & \
 	api_pid=$$!; \
 	trap "kill $$api_pid 2>/dev/null || true" EXIT INT TERM; \
+	for i in {1..30}; do \
+		if curl -fsS "http://$(API_HOST):$(API_PORT)/healthz" >/dev/null 2>&1; then \
+			break; \
+		fi; \
+		sleep 0.5; \
+	done; \
+	if ! curl -fsS "http://$(API_HOST):$(API_PORT)/healthz" >/dev/null 2>&1; then \
+		echo "API failed to start on $(API_HOST):$(API_PORT). Recent /tmp/compliance-api.log:"; \
+		tail -n 80 /tmp/compliance-api.log; \
+		exit 1; \
+	fi; \
 	cd apps/web; \
 	if [ ! -x node_modules/.bin/next ]; then npm install; fi; \
 	NEXT_PUBLIC_API_BASE_URL=$${NEXT_PUBLIC_API_BASE_URL:-$(DEV_API_BASE_URL)} \
