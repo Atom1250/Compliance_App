@@ -207,7 +207,12 @@ def _render_report_html(db: Session, *, run: Run, tenant_id: str) -> str:
         )
         .order_by(DatapointAssessment.datapoint_key)
     ).all()
-    return generate_html_report(run_id=run.id, assessments=assessments)
+    settings = get_settings()
+    return generate_html_report(
+        run_id=run.id,
+        assessments=assessments,
+        include_registry_report_matrix=settings.feature_registry_report_matrix,
+    )
 
 
 @router.get("/{run_id}/report")

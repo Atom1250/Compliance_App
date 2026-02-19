@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-017
+Next PR ID: PR-018
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -86,6 +86,11 @@ Next PR ID: PR-017
 - Added `regulatory.compile.started|completed|failed` structured events in compile-from-DB flow.
 - Added audit event tests in `tests/test_regulatory_audit_events.py`.
 - Added PR execution log: `docs/prs/PR-016.md`.
+- PR-017 completed (B4 Part 1: deterministic coverage matrix + flagged report section).
+- Added deterministic registry coverage matrix computation in reporting service with stable obligation ordering.
+- Added report matrix section gated by `feature_registry_report_matrix` (default OFF) and wired router rendering through runtime settings.
+- Added tests in `tests/test_reporting.py` and `tests/test_registry_report_matrix_api.py` for deterministic computation and conditional rendering behavior.
+- Added PR execution log: `docs/prs/PR-017.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

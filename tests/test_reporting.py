@@ -1,7 +1,11 @@
 from datetime import UTC, datetime
 
 from apps.api.app.db.models import DatapointAssessment
-from apps.api.app.services.reporting import generate_html_report, normalize_report_html
+from apps.api.app.services.reporting import (
+    compute_registry_coverage_matrix,
+    generate_html_report,
+    normalize_report_html,
+)
 
 
 def _assessment(
@@ -86,3 +90,71 @@ def test_html_report_is_stable_for_identical_inputs() -> None:
     first = normalize_report_html(generate_html_report(run_id=1, assessments=assessments))
     second = normalize_report_html(generate_html_report(run_id=1, assessments=assessments))
     assert first == second
+
+
+def test_registry_coverage_matrix_is_deterministic() -> None:
+    assessments = [
+        _assessment(
+            datapoint_key="OBL-B::Z",
+            status="Absent",
+            value=None,
+            evidence_chunk_ids="[]",
+        ),
+        _assessment(
+            datapoint_key="OBL-A::A",
+            status="Present",
+            value="yes",
+            evidence_chunk_ids='["chunk-1"]',
+        ),
+        _assessment(
+            datapoint_key="OBL-A::B",
+            status="Partial",
+            value="partial",
+            evidence_chunk_ids='["chunk-2"]',
+        ),
+        _assessment(
+            datapoint_key="ESRS-E1-1",
+            status="Absent",
+            value=None,
+            evidence_chunk_ids="[]",
+        ),
+    ]
+
+    rows = compute_registry_coverage_matrix(assessments)
+    assert [row.obligation_id for row in rows] == ["OBL-A", "OBL-B"]
+    assert rows[0].total_elements == 2
+    assert rows[0].present == 1
+    assert rows[0].partial == 1
+    assert rows[0].absent == 0
+    assert rows[0].na == 0
+    assert rows[0].coverage_pct == 100.0
+    assert rows[0].status == "Partial"
+    assert rows[1].status == "Absent"
+
+
+def test_html_report_registry_matrix_rendering_is_flagged() -> None:
+    assessments = [
+        _assessment(
+            datapoint_key="OBL-1::A",
+            status="Present",
+            value="ok",
+            evidence_chunk_ids='["chunk-a"]',
+        ),
+    ]
+
+    disabled = generate_html_report(
+        run_id=7,
+        assessments=assessments,
+        generated_at=datetime(2026, 2, 18, 12, 0, tzinfo=UTC),
+        include_registry_report_matrix=False,
+    )
+    enabled = generate_html_report(
+        run_id=7,
+        assessments=assessments,
+        generated_at=datetime(2026, 2, 18, 12, 0, tzinfo=UTC),
+        include_registry_report_matrix=True,
+    )
+    assert 'id="registry-coverage-matrix"' not in disabled
+    assert 'id="registry-coverage-matrix"' in enabled
+    assert "<td>OBL-1</td>" in enabled
+    assert "<td>100.0%</td>" in enabled
