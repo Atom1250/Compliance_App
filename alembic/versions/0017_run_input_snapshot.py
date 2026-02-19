@@ -1,7 +1,7 @@
 """Add run_input_snapshot table for immutable run input freezing.
 
 Revision ID: 0017_run_input_snapshot
-Revises: 0016_document_discovery_candidate
+Revises: 0016_discovery_candidate
 Create Date: 2026-02-19
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "0017_run_input_snapshot"
-down_revision: str | None = "0016_document_discovery_candidate"
+down_revision: str | None = "0016_discovery_candidate"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -37,4 +37,3 @@ def downgrade() -> None:
     op.drop_index("ix_run_input_snapshot_tenant_id", table_name="run_input_snapshot")
     op.drop_index("ix_run_input_snapshot_run_id", table_name="run_input_snapshot")
     op.drop_table("run_input_snapshot")
-

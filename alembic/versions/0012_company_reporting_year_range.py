@@ -1,7 +1,7 @@
 """Add reporting year range fields to company profile.
 
-Revision ID: 0012_company_reporting_year_range
-Revises: 0011_run_related_tenant_isolation
+Revision ID: 0012_company_year_range
+Revises: 0011_run_tenant_isolation
 Create Date: 2026-02-18
 """
 
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = "0012_company_reporting_year_range"
-down_revision: str | None = "0011_run_related_tenant_isolation"
+revision: str = "0012_company_year_range"
+down_revision: str | None = "0011_run_tenant_isolation"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

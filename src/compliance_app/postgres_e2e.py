@@ -19,7 +19,6 @@ from app.requirements.importer import import_bundle, load_bundle
 from apps.api.app.core.auth import _resolve_key_maps
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import Run
-from apps.api.app.main import create_app
 
 AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
 
@@ -94,6 +93,8 @@ def run_postgres_e2e(*, database_url: str, work_dir: Path) -> dict[str, object]:
     ):
         _prepare_db(database_url)
         _seed_requirements_bundle(database_url)
+
+        from apps.api.app.main import create_app
 
         app = create_app()
         client = TestClient(app)

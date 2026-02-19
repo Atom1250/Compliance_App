@@ -1,6 +1,6 @@
 """Add company jurisdiction/regime fields and run compiler_mode.
 
-Revision ID: 0014_company_jurisdictions_and_run_compiler_mode
+Revision ID: 0014_company_juris_compiler_mode
 Revises: 0013_regulatory_bundle_table
 Create Date: 2026-02-19
 """
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = "0014_company_jurisdictions_and_run_compiler_mode"
+revision: str = "0014_company_juris_compiler_mode"
 down_revision: str | None = "0013_regulatory_bundle_table"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -36,4 +36,3 @@ def downgrade() -> None:
     op.drop_column("run", "compiler_mode")
     op.drop_column("company", "regulatory_regimes")
     op.drop_column("company", "regulatory_jurisdictions")
-

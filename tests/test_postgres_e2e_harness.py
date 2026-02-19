@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import OperationalError
 
 from compliance_app.postgres_e2e import run_postgres_e2e
 
@@ -21,8 +22,11 @@ def test_postgres_e2e_harness_executes_full_flow(tmp_path: Path) -> None:
     target_url = base_url.set(database=db_name)
 
     admin_engine = create_engine(str(admin_url), isolation_level="AUTOCOMMIT")
-    with admin_engine.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+    try:
+        with admin_engine.connect() as conn:
+            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+    except OperationalError as exc:
+        pytest.skip(f"postgres test user lacks database create privileges: {exc}")
 
     try:
         summary = run_postgres_e2e(database_url=str(target_url), work_dir=tmp_path / "postgres-e2e")

@@ -1,6 +1,6 @@
 """Add tenant_id columns to run-related tables.
 
-Revision ID: 0011_run_related_tenant_isolation
+Revision ID: 0011_run_tenant_isolation
 Revises: 0010_run_manifest
 Create Date: 2026-02-18
 """
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = "0011_run_related_tenant_isolation"
+revision: str = "0011_run_tenant_isolation"
 down_revision: str | None = "0010_run_manifest"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

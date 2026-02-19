@@ -1,7 +1,7 @@
 """Add regulatory_bundle table for registry payload storage.
 
 Revision ID: 0013_regulatory_bundle_table
-Revises: 0012_company_reporting_year_range
+Revises: 0012_company_year_range
 Create Date: 2026-02-19
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "0013_regulatory_bundle_table"
-down_revision: str | None = "0012_company_reporting_year_range"
+down_revision: str | None = "0012_company_year_range"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -39,4 +39,3 @@ def downgrade() -> None:
     op.drop_index("ix_regulatory_bundle_version", table_name="regulatory_bundle")
     op.drop_index("ix_regulatory_bundle_bundle_id", table_name="regulatory_bundle")
     op.drop_table("regulatory_bundle")
-

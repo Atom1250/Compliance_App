@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-050
+Next PR ID: PR-051
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -246,6 +246,10 @@ Next PR ID: PR-050
 - Added runtime settings `runtime_environment` and `allow_sqlite_transitional` to enforce Postgres-first policy outside test mode.
 - Updated runtime validation in `apps/api/app/core/ops.py` to reject SQLite unless test mode or explicit transitional override is enabled.
 - Added enforcement tests in `tests/test_postgres_sor_enforcement.py` and test-suite SQLite guard in `tests/conftest.py`; execution log added at `docs/prs/PR-049.md`.
+- PR-050 completed (F10: SQLite phase-down and final validation).
+- Updated Postgres-first operator docs and added `docs/runbooks/postgres_cutover_validation.md` checklist.
+- Added transition guard tests in `tests/test_postgres_phase_down_docs.py`.
+- Fixed Postgres migration/runtime blockers discovered during live E2E validation (Alembic revision ID length constraints and `chunk.content_tsv` type compatibility) via migration chain updates and `0019_chunk_content_tsv_text.py`; execution log added at `docs/prs/PR-050.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -261,6 +265,7 @@ Next PR ID: PR-050
 - [ ] Confirm where feature flags/config lives and naming conventions.
 - [ ] Confirm test DB strategy for expanded Postgres smoke and parity gates (env-provided URL vs compose service in CI).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
+- [ ] Postgres-gated tests currently require database-create privileges for full execution; when unavailable they skip by design.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`

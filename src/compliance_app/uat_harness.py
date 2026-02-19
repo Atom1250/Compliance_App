@@ -21,7 +21,6 @@ from app.requirements.importer import import_bundle, load_bundle
 from apps.api.app.core.auth import _resolve_key_maps
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import Run
-from apps.api.app.main import create_app
 from compliance_app.golden_run import generate_golden_snapshot
 
 AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
@@ -173,6 +172,8 @@ def run_uat_harness(*, work_dir: Path) -> dict[str, object]:
         db_url = f"sqlite:///{db_path}"
         _prepare_db(db_url)
         _seed_requirements_bundle(db_url)
+        from apps.api.app.main import create_app
+
         app = create_app()
         client = TestClient(app)
 

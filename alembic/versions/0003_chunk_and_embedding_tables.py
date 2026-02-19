@@ -25,7 +25,7 @@ def upgrade() -> None:
     if is_postgres:
         op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
-    content_tsv_type = postgresql.TSVECTOR() if is_postgres else sa.Text()
+    content_tsv_type = sa.Text()
 
     op.create_table(
         "chunk",

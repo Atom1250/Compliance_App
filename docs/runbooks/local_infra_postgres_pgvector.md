@@ -16,5 +16,7 @@
 - Postgres init scripts are mounted from `docker/postgres/init`.
 - pgvector extension bootstrap script:
   - `docker/postgres/init/001-enable-pgvector.sql`
-- Current make targets provision infra only; application runtime cutover to Postgres as default is
-  handled in follow-up PRs.
+- Runtime policy:
+  - Postgres is the system-of-record backend.
+  - SQLite is transitional/test-only and requires explicit opt-in via
+    `COMPLIANCE_APP_ALLOW_SQLITE_TRANSITIONAL=true`.

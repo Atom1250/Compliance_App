@@ -60,7 +60,7 @@ def test_regulatory_bundle_migration_upgrade_and_downgrade(tmp_path: Path) -> No
     inspector = inspect(engine)
     assert "regulatory_bundle" in set(inspector.get_table_names())
 
-    command.downgrade(config, "0012_company_reporting_year_range")
+    command.downgrade(config, "0012_company_year_range")
     inspector = inspect(engine)
     assert "regulatory_bundle" not in set(inspector.get_table_names())
 

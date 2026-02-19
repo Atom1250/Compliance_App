@@ -5,6 +5,7 @@ from contextlib import suppress
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import OperationalError
 
 from alembic import command
 from alembic.config import Config
@@ -21,8 +22,11 @@ def test_postgres_migrations_upgrade_downgrade_upgrade_smoke() -> None:
     target_url = base_url.set(database=db_name)
 
     admin_engine = create_engine(str(admin_url), isolation_level="AUTOCOMMIT")
-    with admin_engine.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+    try:
+        with admin_engine.connect() as conn:
+            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+    except OperationalError as exc:
+        pytest.skip(f"postgres test user lacks database create privileges: {exc}")
 
     target_engine = None
     try:

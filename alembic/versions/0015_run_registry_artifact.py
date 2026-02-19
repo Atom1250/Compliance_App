@@ -1,7 +1,7 @@
 """Add run_registry_artifact table for run-scoped registry outputs.
 
 Revision ID: 0015_run_registry_artifact
-Revises: 0014_company_jurisdictions_and_run_compiler_mode
+Revises: 0014_company_juris_compiler_mode
 Create Date: 2026-02-19
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "0015_run_registry_artifact"
-down_revision: str | None = "0014_company_jurisdictions_and_run_compiler_mode"
+down_revision: str | None = "0014_company_juris_compiler_mode"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -45,4 +45,3 @@ def downgrade() -> None:
     op.drop_index("ix_run_registry_artifact_tenant_id", table_name="run_registry_artifact")
     op.drop_index("ix_run_registry_artifact_run_id", table_name="run_registry_artifact")
     op.drop_table("run_registry_artifact")
-
