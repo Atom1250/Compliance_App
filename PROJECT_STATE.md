@@ -20,6 +20,13 @@ We are building a compliance analysis application for EU clients:
 - Requirements Library: versioned bundles in-repo with importer + applicability/materiality integration
 - Determinism: strict chunk IDs, retrieval tie-breaks, schema-only extraction, run-hash cache, deterministic reporting/export
 
+## Tooling Notes
+- Test runner: `pytest` via `make test` (`.venv/bin/python -m pytest`), tests under `tests/`.
+- Lint tooling: `ruff` via `make lint` (`.venv/bin/python -m ruff check src apps tests`).
+- Migration tooling: Alembic (`alembic.ini`, `alembic/versions/`, `alembic upgrade head`).
+- Config/feature flags: Pydantic settings in `apps/api/app/core/config.py` with `COMPLIANCE_APP_` env prefix.
+- Baseline test command/result (PR-001 recon): `make test` -> `107 passed, 1 warning`.
+
 ## 2) Non-Negotiables
 - Requirements-first / datapoint-native / evidence gating
 - Run manifest + reproducible outputs
@@ -27,10 +34,11 @@ We are building a compliance analysis application for EU clients:
 - CI gates merges; all PRs must add tests
 
 ## 3) PR Conveyor Index
-Next PR ID: TBD
+Next PR ID: PR-002
 
 Planned PRs:
-- (No queued PRs in current roadmap; add next sequence before execution)
+- PR-001: Phase 0 staging + baseline lock + conveyor bootstrap
+- PR-002: Codex GitHub automation workflow wiring/review loop
 
 ## 4) Completed Work
 - PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
@@ -242,6 +250,12 @@ Planned PRs:
   - Added committed UAT golden snapshot and repeatability/contract tests for harness output.
   - Added `make uat` target and README operator runbook instructions for local deterministic UAT execution.
   - Added CI UAT golden-contract step to run `tests/test_uat_harness.py` on pushes and pull requests.
+- PR-001 (Phase 0 refresh): conveyor bootstrap and baseline lock completed:
+  - Verified mandatory conveyor artifacts are present (`PROJECT_STATE.md`, `docs/PR_CONVEYOR_PLAN.md`, `.github/pull_request_template.md`, `.github/codex/prompts/meta_next_pr.md`).
+  - Confirmed ADR-0001 availability at `docs/adr/0001-architecture.md`.
+  - Added legacy resolver regression guardrail test (`tests/test_legacy_requirements_resolution_stability.py`) asserting `ESRS-E1-1` and `ESRS-E1-6`.
+  - Added execution log `docs/prs/PR-001.md` with recon notes and command outcomes.
+  - Revalidated quality gates: `make lint` and `make test` passed.
 
 ## 5) Open Risks / Unknowns
 - GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
@@ -249,6 +263,7 @@ Planned PRs:
 - Choice of PDF parsing stack: must be deterministic and testable; avoid fragile OCR in MVP.
 - Manual check still required in GitHub Actions UI to confirm `Codex Run Prompt (Create PR)` appears and dispatches with repository secrets.
 - Discovery quality hardening needed: enforce file-type/domain filters in Tavily auto-discovery (PDF-first, report-document focused) to avoid indexing non-report listing pages.
+- `pytest` emits `PytestConfigWarning` for unknown option `asyncio_default_fixture_loop_scope`; config cleanup is pending and may mask async-test config drift.
 
 ## 6) Decisions Log (High Level)
 - Start with Option 1: GitHub Actions + Codex GitHub Action for stable autonomy.
