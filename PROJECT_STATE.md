@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-022
+Next PR ID: PR-023
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -111,6 +111,11 @@ Next PR ID: PR-022
 - Added latest failure-reason extraction from `run.execution.failed` events for failure triage.
 - Added tests in `tests/test_run_diagnostics_api.py` for completed run diagnostics, failed run diagnostics, and tenant scoping.
 - Added PR execution log: `docs/prs/PR-021.md`.
+- PR-022 completed (C2: discovery hardening).
+- Added deterministic Tavily candidate tie-break ordering and explicit PDF-candidate URL checks.
+- Added persistent storage of discovery candidate decisions with reasons via `document_discovery_candidate` table (migration `0016_document_discovery_candidate`).
+- Updated auto-discover API to persist accepted/rejected decisions (`ingested`, `duplicate_ingested`, `non_pdf_candidate`, `max_documents_reached`, and exception reasons).
+- Added/updated tests in `tests/test_tavily_discovery.py`, `tests/test_document_auto_discover_api.py`, and `tests/test_db_migrations.py`; execution log added at `docs/prs/PR-022.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

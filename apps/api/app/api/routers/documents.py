@@ -9,11 +9,12 @@ from sqlalchemy.orm import Session
 
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
-from apps.api.app.db.models import Company, Document, DocumentFile
+from apps.api.app.db.models import Company, Document, DocumentDiscoveryCandidate, DocumentFile
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.document_ingestion import ingest_document_bytes
 from apps.api.app.services.tavily_discovery import (
     download_discovery_candidate,
+    is_pdf_candidate_url,
     search_tavily_documents,
 )
 
@@ -109,9 +110,49 @@ def auto_discover_documents(
     ingested: list[AutoDiscoverItem] = []
     skipped: list[AutoDiscoverSkipItem] = []
 
+    def _record_decision(
+        *,
+        source_url: str,
+        title: str,
+        score: float,
+        accepted: bool,
+        reason: str,
+    ) -> None:
+        db.add(
+            DocumentDiscoveryCandidate(
+                company_id=company.id,
+                tenant_id=auth.tenant_id,
+                source_url=source_url,
+                title=title[:255],
+                score=score,
+                accepted=accepted,
+                reason=reason,
+            )
+        )
+
     for candidate in candidates:
+        if not is_pdf_candidate_url(candidate.url):
+            reason = "non_pdf_candidate"
+            skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=False,
+                reason=reason,
+            )
+            continue
         if len(ingested) >= payload.max_documents:
-            break
+            reason = "max_documents_reached"
+            skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=False,
+                reason=reason,
+            )
+            continue
         try:
             downloaded = download_discovery_candidate(
                 candidate=candidate,
@@ -135,13 +176,30 @@ def auto_discover_documents(
                     duplicate=bool(result["duplicate"]),
                 )
             )
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=True,
+                reason="duplicate_ingested" if bool(result["duplicate"]) else "ingested",
+            )
         except Exception as exc:
+            reason = f"{type(exc).__name__}: {exc}"
             skipped.append(
                 AutoDiscoverSkipItem(
                     source_url=candidate.url,
-                    reason=f"{type(exc).__name__}: {exc}",
+                    reason=reason,
                 )
             )
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=False,
+                reason=reason,
+            )
+
+    db.commit()
 
     return AutoDiscoverResponse(
         company_id=company.id,

@@ -23,6 +23,11 @@ class DownloadedDocument:
     source_url: str
 
 
+def is_pdf_candidate_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.path.lower().endswith(".pdf")
+
+
 def _build_query(company_name: str, reporting_year: int | None) -> str:
     year = str(reporting_year) if reporting_year is not None else "latest"
     return (
@@ -60,8 +65,7 @@ def search_tavily_documents(
         url = str(item.get("url", "")).strip()
         if not url.startswith(("http://", "https://")):
             continue
-        parsed = urlparse(url)
-        if not parsed.path.lower().endswith(".pdf"):
+        if not is_pdf_candidate_url(url):
             continue
         candidates.append(
             TavilyCandidate(
@@ -70,7 +74,7 @@ def search_tavily_documents(
                 score=float(item.get("score", 0.0)),
             )
         )
-    return sorted(candidates, key=lambda item: (-item.score, item.url))
+    return sorted(candidates, key=lambda item: (-item.score, item.url, item.title))
 
 
 def _filename_from_url(url: str) -> str:

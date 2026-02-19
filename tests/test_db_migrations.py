@@ -13,6 +13,7 @@ REQUIRED_TABLES = {
     "datapoint_def",
     "datapoint_assessment",
     "document",
+    "document_discovery_candidate",
     "document_file",
     "document_page",
     "embedding",

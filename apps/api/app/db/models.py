@@ -241,3 +241,19 @@ class RunRegistryArtifact(Base):
     content_json: Mapped[str] = mapped_column(Text, nullable=False)
     checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DocumentDiscoveryCandidate(Base):
+    __tablename__ = "document_discovery_candidate"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default", index=True
+    )
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    score: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    accepted: Mapped[bool] = mapped_column(nullable=False, default=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
