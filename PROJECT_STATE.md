@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-011
+Next PR ID: PR-012
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -54,6 +54,11 @@ Next PR ID: PR-011
 - Added integration tests in `tests/test_regulatory_compile_from_db.py` covering sync->compile flow and missing-bundle failure.
 - Preserved deterministic compile behavior by reusing schema validation + compiler ordering logic.
 - Added PR execution log: `docs/prs/PR-010.md`.
+- PR-011 completed (A4: CLI inspect/sync/preview interface).
+- Added CLI helpers in `app/regulatory/cli.py` for listing bundles, filesystem sync, and compile preview from DB.
+- Added `app/regulatory/__main__.py` entrypoint exposing `list`, `sync`, and `compile-preview` commands.
+- Added tests in `tests/test_regulatory_cli.py` for sync/list/preview behavior and safe context JSON parsing.
+- Added PR execution log: `docs/prs/PR-011.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
