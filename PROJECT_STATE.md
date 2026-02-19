@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-002
+Next PR ID: PR-003
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -8,6 +8,11 @@ Next PR ID: PR-002
 - Verified ADR-0001 path exists and is readable at `docs/adr/0001-architecture.md`.
 - Added legacy regression guardrail test: `tests/test_legacy_requirements_resolution_stability.py`.
 - Added PR execution log: `docs/prs/PR-001.md`.
+- PR-002 completed (A1 Part 1: schema + canonicalization).
+- Added `app/regulatory/schema.py` with minimal validated bundle models (`RegulatoryBundle`, `Obligation`, `Element`, `PhaseInRule`).
+- Added `app/regulatory/canonical.py` with deterministic canonical JSON and SHA-256 checksum helpers.
+- Added unit tests in `tests/test_regulatory_schema_and_canonical.py` for schema acceptance/rejection and checksum stability/change sensitivity.
+- Added PR execution log: `docs/prs/PR-002.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
