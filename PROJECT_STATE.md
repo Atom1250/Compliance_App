@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-041
+Next PR ID: PR-042
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -206,6 +206,11 @@ Next PR ID: PR-041
 - Extended `src/compliance_app/uat_harness.py` to execute scenario pack runs and validate readiness/report/evidence contract outcomes per scenario.
 - Added operator runbook (`docs/runbooks/uat_execution.md`) and updated UAT golden snapshot (`tests/golden/uat_harness_snapshot.json`).
 - Added PR execution log: `docs/prs/PR-040.md`.
+- PR-041 completed (F1: persistence architecture lock).
+- Added persistence cutover ADR `docs/adr/0002-persistence-cutover-postgres-pgvector.md` aligning runtime storage policy with ADR-0001.
+- Formalized transitional policy: SQLite restricted to test/transitional workflows while Postgres+pgvector is system-of-record target.
+- Added ADR contract guard test `tests/test_persistence_cutover_adr.py` and extended conveyor roadmap with PR-041/PR-042 sections.
+- Added PR execution log: `docs/prs/PR-041.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -221,7 +226,6 @@ Next PR ID: PR-041
 - [ ] Confirm where feature flags/config lives and naming conventions.
 - [ ] Confirm test DB strategy (sqlite? postgres? docker service?).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
-- [ ] `docs/PR_CONVEYOR_PLAN.md` currently ends at PR-040; PR-041+ scope needs to be authored before next auto-conveyor run.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`

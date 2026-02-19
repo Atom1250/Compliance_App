@@ -770,3 +770,45 @@ Definition of Done:
 Tests:
 - `make lint`
 - `make test`
+
+---
+
+## PR-041 — F1: Persistence Architecture Lock (Postgres + pgvector)
+Objective:
+Lock persistence architecture to align implementation with ADR-0001 storage decisions.
+
+Scope:
+- Add ADR documenting Postgres + pgvector cutover and SQLite phase-out policy
+- Define transitional policy: SQLite allowed only for tests/local transitional workflows
+- Define deterministic SQL ordering requirements where row order is material
+- Update conveyor plan/state context for cutover sequence
+
+Definition of Done:
+- Persistence cutover architecture is documented and accepted in-repo
+- Test/documentation guards ensure ADR artifact remains present
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-042 — F2: Local Postgres/pgvector + MinIO Provisioning Baseline
+Objective:
+Provision deterministic local infrastructure for Postgres (with pgvector) and S3-compatible storage.
+
+Scope:
+- Harden `docker-compose.yml` for Postgres+pgvector and MinIO with health checks
+- Add Postgres init SQL for `CREATE EXTENSION IF NOT EXISTS vector`
+- Add Make targets: `compose-up`, `compose-down`, `db-wait`
+- Add tests locking compose/make infra contract
+
+Definition of Done:
+- Local infrastructure can be brought up/down with make targets
+- Postgres container initializes pgvector extension deterministically
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
