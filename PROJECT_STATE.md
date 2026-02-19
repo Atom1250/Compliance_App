@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-004
+Next PR ID: PR-005
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -18,6 +18,11 @@ Next PR ID: PR-004
 - Added `app/regulatory/loader.py` to load + validate + return `(bundle, checksum, source_path)` deterministically.
 - Added loader tests in `tests/test_regulatory_loader.py` covering deterministic checksum/path behavior and invalid payload rejection.
 - Added PR execution log: `docs/prs/PR-003.md`.
+- PR-004 completed (A2 Part 1: DB model + migration for regulatory bundles).
+- Added ORM model `RegulatoryBundle` with `bundle_id`, `version`, `jurisdiction`, `regime`, `checksum`, and JSON `payload`.
+- Added Alembic migration `0013_regulatory_bundle_table.py` to create/drop `regulatory_bundle` table and indexes.
+- Extended migration tests to include regulatory table presence and explicit upgrade/downgrade smoke path.
+- Added PR execution log: `docs/prs/PR-004.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from apps.api.app.db.base import Base
@@ -210,4 +210,17 @@ class RunManifest(Base):
     model_name: Mapped[str] = mapped_column(String(256), nullable=False)
     prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     git_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RegulatoryBundle(Base):
+    __tablename__ = "regulatory_bundle"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    bundle_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    jurisdiction: Mapped[str] = mapped_column(String(64), nullable=False)
+    regime: Mapped[str] = mapped_column(String(64), nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
