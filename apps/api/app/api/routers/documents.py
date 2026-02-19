@@ -48,13 +48,26 @@ class AutoDiscoverResponse(BaseModel):
 
 @router.post("/upload")
 async def upload_document(
-    company_id: int = Form(...),
-    title: str = Form(...),
-    file: UploadFile = File(...),
+    company_id: int | None = Form(default=None),
+    title: str | None = Form(default=None),
+    file: UploadFile | None = File(default=None),
     auth: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> dict[str, str | int | bool]:
     """Ingest document bytes immutably with hash-based dedupe."""
+    errors: list[dict[str, str]] = []
+    if company_id is None:
+        errors.append({"field": "company_id", "message": "field required"})
+    if title is None or not title.strip():
+        errors.append({"field": "title", "message": "field required"})
+    if file is None:
+        errors.append({"field": "file", "message": "field required"})
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_upload_request", "errors": errors},
+        )
+
     company = db.scalar(
         select(Company).where(Company.id == company_id, Company.tenant_id == auth.tenant_id)
     )
@@ -69,7 +82,7 @@ async def upload_document(
         db=db,
         tenant_id=auth.tenant_id,
         company_id=company_id,
-        title=title,
+        title=title.strip(),
         filename=file.filename or "uploaded-document.bin",
         content=content,
     )

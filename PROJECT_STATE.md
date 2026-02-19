@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-023
+Next PR ID: PR-024
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -116,6 +116,11 @@ Next PR ID: PR-023
 - Added persistent storage of discovery candidate decisions with reasons via `document_discovery_candidate` table (migration `0016_document_discovery_candidate`).
 - Updated auto-discover API to persist accepted/rejected decisions (`ingested`, `duplicate_ingested`, `non_pdf_candidate`, `max_documents_reached`, and exception reasons).
 - Added/updated tests in `tests/test_tavily_discovery.py`, `tests/test_document_auto_discover_api.py`, and `tests/test_db_migrations.py`; execution log added at `docs/prs/PR-022.md`.
+- PR-023 completed (C3: ingestion contract stabilization).
+- Updated `/documents/upload` required-field validation to return a normalized 422 contract payload (`invalid_upload_request`) for missing metadata.
+- Added title normalization (`strip`) before document persistence.
+- Added integration tests in `tests/test_document_upload_integration.py` for consistent 422 behavior and normalized successful upload persistence.
+- Added PR execution log: `docs/prs/PR-023.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
