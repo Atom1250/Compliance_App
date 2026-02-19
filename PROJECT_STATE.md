@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-009
+Next PR ID: PR-010
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -43,6 +43,12 @@ Next PR ID: PR-009
 - Added explicit symbol whitelist enforcement and unknown symbol/attribute rejection behavior.
 - Added tests in `tests/test_regulatory_safe_eval.py` for positive evaluation and rejection paths.
 - Added PR execution log: `docs/prs/PR-008.md`.
+- PR-009 completed (A3 Part 2: compiler core + compiled plan schema).
+- Added `app/regulatory/compiler.py` with deterministic bundle compilation to applicable obligations/elements.
+- Added compiled plan schema models and stable ordering for obligations/elements.
+- Added phase-in rule handling through strict safe-eval evaluation.
+- Added tests in `tests/test_regulatory_compiler.py` for deterministic ordering and phase-in behavior.
+- Added PR execution log: `docs/prs/PR-009.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
