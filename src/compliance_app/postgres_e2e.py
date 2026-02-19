@@ -161,6 +161,10 @@ def run_postgres_e2e(*, database_url: str, work_dir: Path) -> dict[str, object]:
             "terminal_status": terminal_status,
             "bundle_id": manifest_payload["bundle_id"],
             "bundle_version": manifest_payload["bundle_version"],
+            "retrieval_policy_version": manifest_payload["retrieval_params"]["retrieval_policy"][
+                "version"
+            ],
+            "retrieval_top_k": manifest_payload["retrieval_params"]["top_k"],
             "report_ready": readiness_payload["report_ready"],
             "evidence_pack_ready": readiness_payload["evidence_pack_ready"],
             "blocking_reasons": readiness_payload["blocking_reasons"],

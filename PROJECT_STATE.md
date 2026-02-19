@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-048
+Next PR ID: PR-049
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -238,6 +238,10 @@ Next PR ID: PR-048
 - Added migration utility `src/compliance_app/sqlite_to_postgres.py` for deterministic transfer of core tables with stable hash verification.
 - Added CLI script `scripts/migrate_sqlite_to_postgres.py` emitting structured migration report output.
 - Added idempotency test coverage in `tests/test_sqlite_to_postgres_migration.py`; execution log added at `docs/prs/PR-047.md`.
+- PR-048 completed (F8: dual-backend determinism parity checks).
+- Added parity harness utilities in `src/compliance_app/backend_parity.py` with normalization for backend-specific artifact shapes.
+- Added regression tests in `tests/test_backend_parity.py` for normalization behavior and Postgres-gated SQLite-vs-Postgres parity.
+- Extended Postgres E2E summary metadata in `src/compliance_app/postgres_e2e.py`; execution log added at `docs/prs/PR-048.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
