@@ -9,10 +9,19 @@ from dataclasses import dataclass
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.regulatory.datapoint_generation import generate_registry_datapoints
 from app.requirements.applicability import resolve_required_datapoint_ids
-from apps.api.app.db.models import DatapointAssessment, DatapointDefinition, RequirementBundle, Run
+from apps.api.app.core.config import get_settings
+from apps.api.app.db.models import (
+    Company,
+    DatapointAssessment,
+    DatapointDefinition,
+    RequirementBundle,
+    Run,
+)
 from apps.api.app.services.audit import append_run_event, log_structured_event
 from apps.api.app.services.llm_extraction import ExtractionClient
+from apps.api.app.services.regulatory_registry import compile_from_db
 from apps.api.app.services.retrieval import (
     get_retrieval_policy,
     retrieval_policy_to_dict,
@@ -30,6 +39,12 @@ class AssessmentRunConfig:
     retrieval_model_name: str = "default"
 
 
+@dataclass(frozen=True)
+class _DatapointQueryDef:
+    title: str
+    disclosure_reference: str
+
+
 def execute_assessment_pipeline(
     db: Session,
     *,
@@ -41,14 +56,8 @@ def execute_assessment_pipeline(
     if run is None:
         raise ValueError(f"Run not found: {config.run_id}")
 
-    bundle = db.scalar(
-        select(RequirementBundle).where(
-            RequirementBundle.bundle_id == config.bundle_id,
-            RequirementBundle.version == config.bundle_version,
-        )
-    )
-    if bundle is None:
-        raise ValueError(f"Bundle not found: {config.bundle_id}@{config.bundle_version}")
+    settings = get_settings()
+    use_registry_mode = settings.feature_registry_compiler and run.compiler_mode == "registry"
 
     append_run_event(
         db,
@@ -69,22 +78,66 @@ def execute_assessment_pipeline(
         bundle_version=config.bundle_version,
     )
 
-    required_datapoints = resolve_required_datapoint_ids(
-        db,
-        company_id=run.company_id,
-        bundle_id=config.bundle_id,
-        bundle_version=config.bundle_version,
-        run_id=run.id,
-    )
+    if use_registry_mode:
+        company = db.scalar(
+            select(Company).where(Company.id == run.company_id, Company.tenant_id == run.tenant_id)
+        )
+        if company is None:
+            raise ValueError(f"Company not found: {run.company_id}")
 
-    datapoint_defs = {
-        row.datapoint_key: row
-        for row in db.scalars(
-            select(DatapointDefinition)
-            .where(DatapointDefinition.requirement_bundle_id == bundle.id)
-            .order_by(DatapointDefinition.datapoint_key)
-        ).all()
-    }
+        compiled_plan = compile_from_db(
+            db,
+            bundle_id=config.bundle_id,
+            version=config.bundle_version,
+            context={
+                "company": {
+                    "employees": company.employees,
+                    "turnover": company.turnover,
+                    "listed_status": company.listed_status,
+                    "reporting_year": company.reporting_year,
+                    "reporting_year_start": company.reporting_year_start,
+                    "reporting_year_end": company.reporting_year_end,
+                }
+            },
+        )
+        generated = generate_registry_datapoints(compiled_plan)
+        required_datapoints = [item.datapoint_key for item in generated]
+        datapoint_defs = {
+            item.datapoint_key: _DatapointQueryDef(
+                title=item.title,
+                disclosure_reference=item.disclosure_reference,
+            )
+            for item in generated
+        }
+    else:
+        bundle = db.scalar(
+            select(RequirementBundle).where(
+                RequirementBundle.bundle_id == config.bundle_id,
+                RequirementBundle.version == config.bundle_version,
+            )
+        )
+        if bundle is None:
+            raise ValueError(f"Bundle not found: {config.bundle_id}@{config.bundle_version}")
+
+        required_datapoints = resolve_required_datapoint_ids(
+            db,
+            company_id=run.company_id,
+            bundle_id=config.bundle_id,
+            bundle_version=config.bundle_version,
+            run_id=run.id,
+        )
+
+        datapoint_defs = {
+            row.datapoint_key: _DatapointQueryDef(
+                title=row.title,
+                disclosure_reference=row.disclosure_reference,
+            )
+            for row in db.scalars(
+                select(DatapointDefinition)
+                .where(DatapointDefinition.requirement_bundle_id == bundle.id)
+                .order_by(DatapointDefinition.datapoint_key)
+            ).all()
+        }
 
     db.execute(
         delete(DatapointAssessment).where(

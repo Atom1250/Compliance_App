@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     tavily_max_results: int = 8
     tavily_download_timeout_seconds: float = 30.0
     tavily_max_document_bytes: int = 10000000
+    feature_registry_compiler: bool = False
     regulatory_registry_sync_enabled: bool = False
     regulatory_registry_bundles_root: Path = Path("app/regulatory/bundles")
 

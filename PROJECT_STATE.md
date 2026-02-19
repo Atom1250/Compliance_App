@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-014
+Next PR ID: PR-015
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -70,6 +70,12 @@ Next PR ID: PR-014
 - Added migration `0014_company_jurisdictions_and_run_compiler_mode.py`.
 - Added persistence tests in `tests/test_regulatory_mode_defaults.py` validating defaults.
 - Added PR execution log: `docs/prs/PR-013.md`.
+- PR-014 completed (B2 Part 2: flagged registry datapoint generation).
+- Added feature flag `feature_registry_compiler` (default OFF) in runtime config.
+- Added deterministic generator `app/regulatory/datapoint_generation.py` for stable datapoint keys from compiled obligations.
+- Added flagged registry branch in assessment pipeline P06 stage using `compile_from_db()` -> generated datapoints.
+- Added tests in `tests/test_registry_mode_datapoints.py` for enabled registry mode and legacy-path behavior when flag is OFF.
+- Added PR execution log: `docs/prs/PR-014.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
