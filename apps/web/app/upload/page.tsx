@@ -1,17 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { autoDiscoverDocuments, uploadDocument } from "../../lib/api-client";
+import { autoDiscoverDocuments, orchestrateDiscoveryAndRun, uploadDocument } from "../../lib/api-client";
 import { stateLabel, StepState, transitionOrStay } from "../../lib/flow-state";
 
 export default function UploadPage() {
+  const router = useRouter();
   const [stepState, setStepState] = useState<StepState>("idle");
   const [status, setStatus] = useState(stateLabel("idle"));
   const [error, setError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isAutoDiscovering, setIsAutoDiscovering] = useState(false);
+  const [isGuidedRunning, setIsGuidedRunning] = useState(false);
   const [title, setTitle] = useState("Annual ESG Report");
 
   async function runUpload(form: FormData) {
@@ -75,6 +78,48 @@ export default function UploadPage() {
     }
   }
 
+  async function runGuidedFlow() {
+    setStepState((state) => transitionOrStay(state, "validating"));
+    setStatus(stateLabel("validating"));
+    const companyId = Number(localStorage.getItem("company_id") ?? "0");
+    if (!companyId) {
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
+      setError("Missing company id.");
+      return;
+    }
+    const reportingYearEnd = Number(localStorage.getItem("company_reporting_year_end") ?? "2026");
+    const bundleVersion = Number.isFinite(reportingYearEnd) && reportingYearEnd < 2026 ? "2024.01" : "2026.01";
+    setIsGuidedRunning(true);
+    setError("");
+    setStepState((state) => transitionOrStay(state, "submitting"));
+    setStatus("Submitting...");
+    try {
+      const result = await orchestrateDiscoveryAndRun({
+        companyId,
+        bundleId: "esrs_mini",
+        bundleVersion,
+        llmProvider: "deterministic_fallback",
+        maxDocuments: 3
+      });
+      if (!result.runId) {
+        throw new Error("Missing run id in guided flow response.");
+      }
+      localStorage.setItem("run_id", String(result.runId));
+      setStepState((state) => transitionOrStay(state, "success"));
+      setStatus(
+        `Completed: stages=${result.stages.join(" -> ")}; ingested=${result.discovery.ingested_count}; run=${result.runId}`
+      );
+      router.push(`/run-status?runId=${result.runId}`);
+    } catch (caught) {
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
+      setError(`Guided flow failed: ${String(caught)}. Check discovery settings and run configuration.`);
+    } finally {
+      setIsGuidedRunning(false);
+    }
+  }
+
   return (
     <main>
       <h1>Upload Documents</h1>
@@ -102,6 +147,9 @@ export default function UploadPage() {
       </form>
       <button type="button" onClick={runAutoDiscovery} disabled={isAutoDiscovering}>
         {isAutoDiscovering ? "Discovering..." : "Auto-Find ESG Documents"}
+      </button>
+      <button type="button" onClick={runGuidedFlow} disabled={isGuidedRunning}>
+        {isGuidedRunning ? "Running Guided Flow..." : "Auto-Find + Start Run"}
       </button>
       <p>{status}</p>
       <p>Step Key: {stepState}</p>

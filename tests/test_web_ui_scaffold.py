@@ -25,6 +25,7 @@ def test_pages_use_shared_api_client() -> None:
     assert "export async function fetchEvidencePackPreview" in api_client
     assert "export async function fetchLLMHealth" in api_client
     assert "export async function autoDiscoverDocuments" in api_client
+    assert "export async function orchestrateDiscoveryAndRun" in api_client
     assert "export function buildEvidencePackDownloadUrl" in api_client
     assert "/llm-health" in api_client
     assert "llm_provider" in api_client
@@ -39,6 +40,7 @@ def test_pages_use_shared_api_client() -> None:
     assert "Retry Save" in company_page
     assert "Retry upload" in upload_page
     assert "Auto-Find ESG Documents" in upload_page
+    assert "Auto-Find + Start Run" in upload_page
     assert "Execution Provider" in run_config_page
     assert "fetchLLMHealth" in run_config_page
     assert "Run LLM Probe" in run_config_page

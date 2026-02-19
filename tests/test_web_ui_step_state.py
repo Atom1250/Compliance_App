@@ -29,6 +29,11 @@ def test_run_setup_pages_use_step_state_transitions() -> None:
     assert 'transitionOrStay(state, "error")' in upload_page
     assert "Step Key:" in upload_page
     assert "Auto-discovery failed:" in upload_page
+    assert "orchestrateDiscoveryAndRun" in upload_page
+
+    api_client = (WEB_ROOT / "lib/api-client.ts").read_text()
+    assert "discovery.started" in api_client
+    assert "run.configure.completed" in api_client
 
     assert "useState<StepState>" in run_config_page
     assert 'transitionOrStay(state, "submitting")' in run_config_page

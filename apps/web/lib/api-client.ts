@@ -45,6 +45,12 @@ export type AutoDiscoverResponse = {
   }>;
 };
 
+export type GuidedRunFlowResult = {
+  runId: number | null;
+  stages: string[];
+  discovery: AutoDiscoverResponse;
+};
+
 export type EvidencePackPreviewResponse = {
   run_id: number;
   entries: string[];
@@ -164,6 +170,26 @@ export async function configureRun(payload: RunConfigPayload): Promise<{ runId: 
   );
 
   return { runId: created.run_id };
+}
+
+export async function orchestrateDiscoveryAndRun(
+  payload: RunConfigPayload & { maxDocuments?: number }
+): Promise<GuidedRunFlowResult> {
+  const stages: string[] = [];
+
+  stages.push("discovery.started");
+  const discovery = await autoDiscoverDocuments(payload.companyId, payload.maxDocuments ?? 3);
+  stages.push("discovery.completed");
+
+  stages.push("run.configure.started");
+  const configured = await configureRun(payload);
+  stages.push("run.configure.completed");
+
+  return {
+    runId: configured?.runId ?? null,
+    stages,
+    discovery
+  };
 }
 
 export async function fetchRunStatus(runId: number): Promise<{ status: string }> {

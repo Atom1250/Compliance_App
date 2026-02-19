@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-035
+Next PR ID: PR-036
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -176,6 +176,11 @@ Next PR ID: PR-035
 - Applied step-state transitions and clearer API-error messaging in run setup pages (`company`, `upload`, `run-config`, `run-status`, `report`).
 - Added frontend transition coverage in `tests/test_web_ui_step_state.py` and aligned web API types with evidence preview checksum payload (`pack_files`).
 - Added PR execution log: `docs/prs/PR-034.md`.
+- PR-035 completed (D5: UI discovery→ingestion→run orchestration).
+- Added guided client orchestration helper in `apps/web/lib/api-client.ts` to execute deterministic stages: discovery then run configuration/execution.
+- Updated upload flow with `Auto-Find + Start Run`, deterministic stage updates, and automatic navigation to run status on success.
+- Added API integration coverage in `tests/test_guided_flow_api_integration.py` and updated frontend contract tests (`tests/test_web_ui_scaffold.py`, `tests/test_web_ui_step_state.py`).
+- Added PR execution log: `docs/prs/PR-035.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
