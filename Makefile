@@ -8,8 +8,10 @@ DEV_API_BASE_URL ?= http://$(API_HOST):$(API_PORT)
 DEV_API_KEY ?= dev-key
 DEV_TENANT_ID ?= default
 DEV_DATABASE_URL ?= sqlite:///outputs/dev/compliance_app.sqlite
+POSTGRES_USER ?= compliance
+POSTGRES_DB ?= compliance_app
 
-.PHONY: setup setup-refresh seed-requirements lint test uat ui-setup dev dev-api dev-web
+.PHONY: setup setup-refresh seed-requirements lint test uat ui-setup dev dev-api dev-web compose-up compose-down db-wait
 
 setup:
 	@if [ ! -x "$(PYTHON)" ]; then \
@@ -40,6 +42,23 @@ test: setup
 
 uat: setup
 	$(PYTHON) scripts/run_uat_harness.py
+
+compose-up:
+	docker compose up -d postgres minio
+
+compose-down:
+	docker compose down
+
+db-wait:
+	@for i in $$(seq 1 60); do \
+		if docker compose exec -T postgres pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB) >/dev/null 2>&1; then \
+			echo "postgres_ready=1"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "postgres_ready=0"; \
+	exit 1
 
 ui-setup:
 	cd apps/web && npm install

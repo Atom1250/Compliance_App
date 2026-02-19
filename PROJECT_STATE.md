@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-042
+Next PR ID: PR-043
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -211,6 +211,11 @@ Next PR ID: PR-042
 - Formalized transitional policy: SQLite restricted to test/transitional workflows while Postgres+pgvector is system-of-record target.
 - Added ADR contract guard test `tests/test_persistence_cutover_adr.py` and extended conveyor roadmap with PR-041/PR-042 sections.
 - Added PR execution log: `docs/prs/PR-041.md`.
+- PR-042 completed (F2: local Postgres/pgvector + MinIO provisioning baseline).
+- Hardened `docker-compose.yml` with pgvector-ready Postgres image, init-script mount, and MinIO health checks.
+- Added Postgres extension bootstrap script `docker/postgres/init/001-enable-pgvector.sql`.
+- Added Make infrastructure targets `compose-up`, `compose-down`, and `db-wait`.
+- Added infra contract tests (`tests/test_infra_compose_contract.py`) and local infra runbook (`docs/runbooks/local_infra_postgres_pgvector.md`); PR log at `docs/prs/PR-042.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -226,6 +231,7 @@ Next PR ID: PR-042
 - [ ] Confirm where feature flags/config lives and naming conventions.
 - [ ] Confirm test DB strategy (sqlite? postgres? docker service?).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
+- [ ] `docs/PR_CONVEYOR_PLAN.md` currently ends at PR-042; PR-043+ scope must be authored before next auto-conveyor run.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`
