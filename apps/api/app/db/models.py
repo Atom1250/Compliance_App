@@ -24,6 +24,8 @@ class Company(Base):
     reporting_year: Mapped[int | None] = mapped_column(nullable=True)
     reporting_year_start: Mapped[int | None] = mapped_column(nullable=True)
     reporting_year_end: Mapped[int | None] = mapped_column(nullable=True)
+    regulatory_jurisdictions: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    regulatory_regimes: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -132,6 +134,7 @@ class Run(Base):
         String(64), nullable=False, default="default", index=True
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    compiler_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="legacy")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

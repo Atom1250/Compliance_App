@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-013
+Next PR ID: PR-014
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -64,6 +64,12 @@ Next PR ID: PR-013
 - Added `app/requirements/bundle_view.py` with deterministic adapters for legacy datapoints and flattened obligation elements.
 - Added back-compat tests in `tests/test_requirements_bundle_view.py` covering legacy bundle stability and obligations-native views.
 - Added PR execution log: `docs/prs/PR-012.md`.
+- PR-013 completed (B2 Part 1: company jurisdictions + compiler mode defaults).
+- Added company fields `regulatory_jurisdictions` and `regulatory_regimes` with safe default `[]`.
+- Added run field `compiler_mode` with default `legacy`.
+- Added migration `0014_company_jurisdictions_and_run_compiler_mode.py`.
+- Added persistence tests in `tests/test_regulatory_mode_defaults.py` validating defaults.
+- Added PR execution log: `docs/prs/PR-013.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
