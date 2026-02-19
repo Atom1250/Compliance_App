@@ -1,277 +1,36 @@
-# PROJECT_STATE.md — Compliance App (Live Context)
+# Project State — Regulatory Registry + Obligations Conveyor
 
-This file is the single source of truth for project status and decisions-in-progress.
-Every PR MUST update this file.
-
-## 0) Project Summary
-We are building a compliance analysis application for EU clients:
-- CSRD/ESRS compliance and gap reporting
-- Green finance alignment (ICMA Green Bond Principles, EU Green Bond Standard / EuGB)
-- Deterministic, evidence-gated results with citations + evidence pack exports
-- RAG-based retrieval to reduce tokens and increase speed
-- Local LLM used for structured extraction; external services only for optional web search in later phases
-
-## 1) Architectural Snapshot (Current)
-- Backend: FastAPI app with tenant-scoped lifecycle/document/retrieval/system endpoints implemented
-- Worker: synchronous execution in API process (background runner pending PR-175)
-- DB: SQLAlchemy + Alembic migrations with Postgres/pgvector schema support implemented
-- Object storage: immutable local object-store service implemented (S3-compatible MinIO dev path configured)
-- Frontend: Next.js workflow UI implemented for company/upload/run/status/report with LLM controls
-- Requirements Library: versioned bundles in-repo with importer + applicability/materiality integration
-- Determinism: strict chunk IDs, retrieval tie-breaks, schema-only extraction, run-hash cache, deterministic reporting/export
-
-## Tooling Notes
-- Test runner: `pytest` via `make test` (`.venv/bin/python -m pytest`), tests under `tests/`.
-- Lint tooling: `ruff` via `make lint` (`.venv/bin/python -m ruff check src apps tests`).
-- Migration tooling: Alembic (`alembic.ini`, `alembic/versions/`, `alembic upgrade head`).
-- Config/feature flags: Pydantic settings in `apps/api/app/core/config.py` with `COMPLIANCE_APP_` env prefix.
-- Baseline test command/result (PR-001 recon): `make test` -> `107 passed, 1 warning`.
-
-## 2) Non-Negotiables
-- Requirements-first / datapoint-native / evidence gating
-- Run manifest + reproducible outputs
-- No implicit global state (no env-based run context)
-- CI gates merges; all PRs must add tests
-
-## 3) PR Conveyor Index
 Next PR ID: PR-002
 
-Planned PRs:
-- PR-001: Phase 0 staging + baseline lock + conveyor bootstrap
-- PR-002: Codex GitHub automation workflow wiring/review loop
+## Completed Work
+- PR-001 completed (Phase 0 bootstrap + baseline lock).
+- Verified mandatory conveyor artifacts exist: `PROJECT_STATE.md`, `docs/PR_CONVEYOR_PLAN.md`, `.github/pull_request_template.md`, `.github/codex/prompts/meta_next_pr.md`.
+- Verified ADR-0001 path exists and is readable at `docs/adr/0001-architecture.md`.
+- Added legacy regression guardrail test: `tests/test_legacy_requirements_resolution_stability.py`.
+- Added PR execution log: `docs/prs/PR-001.md`.
 
-## 4) Completed Work
-- PR-000: Repo scaffold + governance context files + PR template/checklists + ADR-0001.
-- PR-001: Tooling + CI baseline (`make lint`, `make test`), Python package scaffold, and deterministic run-fingerprint unit tests.
-- PR-002: Added Codex GitHub Action workflows and prompt files for PR conveyor execution and automated PR review comments.
-- PR-001 and PR-002 are merged to `main` and active in repository workflows/tooling.
-- PR-003: Conveyor normalization and deterministic ingestion baseline completed:
-  - Added canonical roadmap scope section for PR-003 in `docs/PR_CONVEYOR_PLAN.md`.
-  - Normalized ADR path with `docs/adr/0001-architecture.md`.
-  - Added deterministic document identity helpers (`sha256_bytes`, `stable_document_id`) with explicit input contracts.
-  - Added deterministic unit tests for stable and changed document hash/identity behavior.
-- PR-010: FastAPI skeleton + configuration layer completed:
-  - Added FastAPI app entrypoint at `apps/api/main.py` with app package structure under `apps/api/app/`.
-  - Added `/healthz` and `/version` routes via `api/routers/` and environment-driven config in `core/config.py`.
-  - Added Pydantic settings model (`COMPLIANCE_APP_` env prefix) and wired app metadata/version deterministically.
-  - Added tests for health endpoint and env-backed version/config loading.
-- PR-011: Postgres schema + migrations completed:
-  - Added Postgres docker-compose service (`docker-compose.yml`) and database URL wiring in settings.
-  - Added SQLAlchemy ORM models and DB session management for `company`, `document`, `document_file`, `run`, and `run_event`.
-  - Added Alembic configuration and initial migration for the required schema.
-  - Added migration idempotency and CRUD integration tests (`company` + `run`) against a test database.
-- PR-012: Object storage + document upload completed:
-  - Added MinIO service to `docker-compose.yml` for S3-compatible local object storage in dev.
-  - Implemented `POST /documents/upload` to store original bytes, compute SHA-256, and deduplicate stored objects by hash.
-  - Added metadata persistence linking uploaded document records to deterministic storage URIs.
-  - Added document metadata retrieval endpoint and integration test covering upload, retrieval, and duplicate-upload same-reference behavior.
-- PR-020: Page-level extraction completed:
-  - Added deterministic PDF and basic DOCX extraction service with parser-version metadata per extracted page.
-  - Added `document_page` schema via migration and ORM model to persist `page_number`, `text`, `char_count`, and `parser_version`.
-  - Wired document upload flow to extract and persist page rows after immutable object storage.
-  - Added determinism tests showing repeated extraction/storage on a fixed PDF yields identical persisted page snapshots.
-- PR-021: Deterministic chunking + pgvector baseline completed:
-  - Added deterministic chunking service with fixed chunk-size/overlap rules and stable chunk IDs derived from `document_hash + page + offsets`.
-  - Added `chunk` and `embedding` tables plus Alembic migration with pgvector extension bootstrap for PostgreSQL environments.
-  - Added FTS-ready `content_tsv` column and persistence wiring to generate chunks from extracted document pages during upload.
-  - Added chunk determinism and retrieval-sanity tests with explicit stable tie-break behavior.
-- PR-022: Hybrid retrieval engine completed:
-  - Added deterministic hybrid retrieval service combining lexical and vector similarity with explicit weighted scoring.
-  - Implemented stable tie-break ordering by `chunk_id` when combined scores are equal.
-  - Added structured retrieval API endpoint (`POST /retrieval/search`) returning typed retrieval result records.
-  - Added ordering determinism tests validating repeatable ranking and tie-break behavior.
-- PR-030: Requirements bundle system completed:
-  - Added `requirements/` bundle structure with sample `requirements/esrs_mini/bundle.json`.
-  - Added requirements DB tables (`requirement_bundle`, `datapoint_def`, `applicability_rule`) via migration.
-  - Implemented validated importer CLI (`python -m app.requirements import`) and import service.
-  - Added tests for import success, idempotency, and version pin behavior.
-- PR-031: Company scope + applicability logic completed:
-  - Added company profile fields (`employees`, `turnover`, `listed_status`, `reporting_year`) with DB migration support.
-  - Implemented deterministic applicability engine to evaluate bundle rules against explicit company profile values.
-  - Added deterministic output behavior with stable ordering for required datapoint IDs.
-  - Added fixture-based unit tests validating expected datapoint applicability results.
-- PR-032: Materiality questionnaire integration completed:
-  - Added questionnaire endpoints for per-run topic materiality storage and required datapoint resolution.
-  - Added persistent run-level topic decisions via `run_materiality` storage and DB migration support.
-  - Integrated materiality filtering into applicability evaluation with deterministic ordering.
-  - Added fixture-based tests confirming toggling materiality changes required datapoints.
-- PR-040: LLM client + schema enforcement completed:
-  - Added deterministic OpenAI-compatible LLM extraction client abstraction with enforced `temperature=0`.
-  - Defined strict extraction JSON schema (`status`, `value`, `evidence_chunk_ids`, `rationale`) with schema-only parsing.
-  - Implemented hard evidence gating validation rejecting Present/Partial without evidence IDs.
-  - Added mock-based extraction tests for temperature enforcement, schema validation, and evidence gating behavior.
-- PR-041: Datapoint assessment pipeline completed:
-  - Added deterministic retrieval -> extraction -> persistence pipeline for required datapoints.
-  - Added `datapoint_assessment` storage schema with run/datapoint uniqueness and manifest metadata fields.
-  - Persisted extraction provenance per assessment (`model_name`, `prompt_hash`, deterministic `retrieval_params`).
-  - Added mocked integration test validating stored assessment outputs and deterministic manifest fields.
-- PR-042: Verification pass completed:
-  - Added deterministic post-extraction verification checks for cited numeric values, units, and year/period signals.
-  - Implemented predictable downgrade rules (`Present -> Partial`, `Partial -> Absent`) when verification fails.
-  - Integrated verification into the assessment pipeline prior to persistence.
-  - Added crafted edge-case tests for numeric mismatch, missing evidence chunks, and year consistency failures.
-- PR-043: Run hashing + cache completed:
-  - Added deterministic run hash computation from document hashes, company profile, materiality inputs, bundle version, retrieval params, and prompt hash.
-  - Added persistent run cache storage (`run_cache_entry`) for run-hash keyed output reuse.
-  - Implemented cache-first execution helper returning cached output and skipping recomputation on hash hit.
-  - Added deterministic tests for run hash stability/input sensitivity and cache-hit behavior with identical output reuse.
-- PR-050: Deterministic HTML report generator completed:
-  - Added deterministic HTML report renderer with executive summary, coverage metrics, gap summary, and datapoint table.
-  - Added inline citation references in datapoint rows using evidence chunk IDs.
-  - Added timestamp normalization utility for stable snapshot testing.
-  - Added snapshot-style and repeatability tests to verify byte-stable normalized HTML output for identical inputs.
-- PR-051: Evidence pack ZIP export completed:
-  - Added deterministic ZIP exporter producing `manifest.json`, `assessments.jsonl`, `evidence.jsonl`, and referenced document binaries.
-  - Added stable entry ordering and fixed ZIP metadata timestamps to ensure reproducible archives for identical inputs.
-  - Added document integrity validation by re-hashing referenced document bytes against stored `sha256_hash`.
-  - Added manifest integrity test validating file structure and SHA-256 checks for all packed artifacts.
-- PR-052: Optional PDF export completed:
-  - Added optional PDF export service to convert HTML reports into PDF bytes.
-  - Added explicit feature flag behavior so PDF generation is skipped when disabled.
-  - Added graceful dependency-missing error handling for environments without PDF renderer libraries.
-  - Added unit tests for disabled mode, enabled export path, and dependency-missing behavior.
-- PR-060: Green finance requirements bundle completed:
-  - Added a versioned green finance requirements bundle for ICMA GBP + EuGB alignment.
-  - Added obligation metadata (required artifacts and required data elements) for matrix rendering.
-  - Implemented deterministic obligations matrix generation with output fields: obligation, required, produced, evidence, gap.
-  - Added tests for bundle loading, enabled-mode matrix generation, and disabled-mode suppression.
-- PR-061: Green finance extraction pipeline completed:
-  - Added green finance extraction pipeline that reuses the existing deterministic datapoint assessment engine.
-  - Implemented retrieval + schema-enforced extraction flow for green finance obligations via the green finance requirements bundle.
-  - Added reporting matrix generation directly from extracted assessments with evidence gating aligned to ESRS rules.
-  - Added integration tests for enabled pipeline execution (stored assessments + reported matrix) and disabled-mode no-op behavior.
-- PR-070: Minimal Next.js UI completed:
-  - Added a minimal Next.js app scaffold under `apps/web` with a deterministic operational flow.
-  - Implemented required pages: company setup, upload docs, run configuration, run status, and report download.
-  - Added shared API client integration used across workflow pages with graceful local fallbacks for unavailable endpoints.
-  - Added CI-visible scaffold tests validating required pages and shared API-client wiring.
-- PR-080: API key auth + tenant isolation completed:
-  - Added API key authentication dependency using request headers (`X-API-Key`, `X-Tenant-ID`) with tenant-aware key validation.
-  - Added tenant isolation columns and indexes for core entity roots (`company`, `document`, `run`) with migration support.
-  - Enforced tenant-scoped filtering in document, run/materiality, and retrieval API paths.
-  - Added tests validating unauthorized access blocking and cross-tenant data isolation behavior.
-- PR-090: Golden run + contract tests completed:
-  - Added golden fixture document under `tests/fixtures/golden/` for deterministic contract validation.
-  - Added golden snapshot harness producing deterministic output contract fields (hashes, chunk IDs, ranking, report snapshot).
-  - Added committed snapshot artifact under `tests/golden/` and drift test that fails CI when output changes.
-  - Added repeatability test confirming identical golden-run outputs across repeated execution.
-- PR-082: Structured logging + audit trail completed:
-  - Added structured JSON logging helper for deterministic audit log payloads.
-  - Added run-event audit service to append and list ordered run history entries.
-  - Added tenant-scoped run-events API endpoint (`GET /runs/{run_id}/events`) and persisted run events from materiality/required-datapoints workflows.
-  - Added audit trail tests covering event ordering/completeness and tenant isolation.
-- PR-100: Tenant key management + rotation runbook completed:
-  - Added tenant key lifecycle runbook covering generation, rotation cadence, revocation, and verification checklist.
-  - Added strict tenant key configuration validation utility with explicit malformed entry detection.
-  - Added fail-fast startup validation to reject invalid tenant key mappings before serving requests.
-  - Added unit tests for valid/invalid key config parsing and startup validation behavior.
-- PR-110: Run lifecycle API endpoints completed:
-  - Added tenant-scoped run lifecycle routes: `POST /runs`, `GET /runs/{run_id}/status`, and `GET /runs/{run_id}/report`.
-  - Added deterministic run report URL generation (`/reports/run-{run_id}.html`) for workflow download linking.
-  - Added structured audit events for lifecycle actions (`run.created`, `run.status.requested`, `run.report.requested`).
-  - Added integration tests for lifecycle happy path, cross-tenant access denial, and complete event history capture.
-- PR-120: Company management API completed:
-  - Added tenant-scoped company lifecycle routes: `POST /companies` and `GET /companies`.
-  - Enforced deterministic company list ordering (`name`, `id`) within tenant scope.
-  - Added structured audit events for company create/list actions.
-  - Added integration tests for company create/list happy path and cross-tenant isolation.
-- PR-130: Run execution API completed:
-  - Added tenant-scoped run execution route: `POST /runs/{run_id}/execute`.
-  - Implemented deterministic local extraction fallback execution path for non-LLM environments.
-  - Added structured audit events for run execution lifecycle (`started`, `completed`, `failed`).
-  - Added integration tests for execute happy path, assessment persistence, and cross-tenant denial.
-- PR-140: Local LLM (LM Studio) integration completed:
-  - Added local LLM runtime configuration defaults for LM Studio (`http://127.0.0.1:1234`, `ministral-3-8b-instruct-2512-mlx`).
-  - Added extraction client provider wiring to build OpenAI-compatible clients from runtime settings.
-  - Added run execution provider selection (`llm_provider=\"local_lm_studio\"`) while preserving deterministic fallback mode.
-  - Added tests for local provider config wiring and execute endpoint local-provider path selection.
-- PR-150: Local LLM health check endpoint completed:
-  - Added `GET /llm-health` endpoint for local LLM config visibility (base URL/model).
-  - Added optional probe mode (`probe=true`) to actively test LM Studio-compatible connectivity.
-  - Added deterministic probe result response fields (`reachable`, `detail`) for operator diagnostics.
-  - Added endpoint tests for non-probe config response and mocked probe-path behavior.
-- PR-160: Frontend LLM controls + health visibility completed:
-  - Updated run configuration UI to select execution provider (`deterministic_fallback` or `local_lm_studio`).
-  - Wired run configuration flow to call `POST /runs` then `POST /runs/{run_id}/execute` with `llm_provider`.
-  - Added frontend LLM health panel that reads `/llm-health` and supports active `probe=true` checks.
-  - Added scaffold tests validating provider wiring, `/llm-health` route usage, and probe UI controls.
-- PR-170: Roadmap + state normalization completed:
-  - Added authoritative roadmap sections for PR-170 through PR-180 with objective/scope/DoD/tests.
-  - Normalized architectural snapshot to reflect implemented backend/frontend/data capabilities.
-  - Replaced `Next PR ID: TBD` by advancing sequence to `PR-171`.
-  - Added planned PR index entries for PR-171 through PR-180.
-- PR-171: Run manifest persistence + API exposure completed:
-  - Added `run_manifest` persistence table + migration for deterministic run-level manifest storage.
-  - Persisted manifest fields during execution: document hashes, bundle/version, retrieval params, model identity, prompt hash aggregate, and git SHA.
-  - Added tenant-scoped `GET /runs/{run_id}/manifest` endpoint with deterministic JSON serialization.
-  - Added integration tests for manifest completeness/shape and cross-tenant access denial.
-- PR-172: Strict run-hash cache integration in execute API completed:
-  - Integrated deterministic run-hash cache lookup into `POST /runs/{run_id}/execute`.
-  - On identical inputs, execute now reuses cached normalized assessment output and skips recomputation.
-  - Kept execute response contract stable across cache-miss/cache-hit paths (`run_id`, `status`, `assessment_count`).
-  - Added integration test coverage for cache hit/miss behavior and byte-identical cached output reuse.
-- PR-173: Evidence pack download endpoint completed:
-  - Added tenant-scoped `GET /runs/{run_id}/evidence-pack` endpoint wired to deterministic ZIP export.
-  - Added stable artifact naming (`run-{run_id}-evidence-pack.zip`) with configured output root support.
-  - Enforced run-status gating for evidence export (completed runs only) and tenant isolation.
-  - Added integration tests for happy-path ZIP response, tenant denial, and non-completed run rejection.
-- PR-174: Frontend workflow API hardening completed:
-  - Removed opaque demo fallbacks from shared API client run/company/report flow to enforce explicit backend lifecycle behavior.
-  - Added explicit status/error handling and retry affordances across company setup, upload, run config, run status, and report pages.
-  - Added evidence-pack route usage in frontend workflow (`/runs/{run_id}/evidence-pack`).
-  - Updated UI scaffold tests to assert API route wiring and explicit retry/error rendering markers.
-- PR-175: Background job runner for run execution completed:
-  - Added asynchronous run execution worker service to process execution outside the request path.
-  - Updated `POST /runs/{run_id}/execute` to enqueue work and return deterministic lifecycle states (`queued`, `running`, `completed`, `failed`).
-  - Added explicit idempotent retry behavior for failed runs via `retry_failed=true`.
-  - Added lifecycle/polling integration tests for async completion, cache stability, and failed-run retry behavior.
-- PR-176: Tenant isolation hardening audit completed:
-  - Added `tenant_id` columns/indexes for run-related entities (`run_event`, `run_materiality`, `datapoint_assessment`, `run_cache_entry`, `run_manifest`) with migration backfill.
-  - Enforced tenant-scoped reads/writes across audit trail, materiality updates, manifests, evidence-pack export, and run execution event lookups.
-  - Hardened run-hash cache by incorporating `tenant_id` into hash inputs and cache lookups to avoid cross-tenant reuse.
-  - Updated determinism/contract fixtures and integration paths to reflect tenant-scoped cache and manifest semantics.
-- PR-177: Deterministic retrieval tuning lock completed:
-  - Added explicit retrieval policy object with pinned version (`hybrid-v1`), weighted scoring params, and tie-break policy.
-  - Wired retrieval policy metadata into assessment pipeline/run execution retrieval params and persisted it in run manifests.
-  - Included retrieval policy version in run-hash inputs to pin cache reproducibility by retrieval policy.
-  - Added tests for retrieval policy determinism and policy-version pin behavior in run-hash stability checks.
-- PR-178: Security and operations baseline completed:
-  - Added request-operations middleware that attaches `X-Request-ID` to responses and emits deterministic `429` responses for throttled sensitive routes.
-  - Added structured redaction policy for sensitive logging fields (`api_key`, `authorization`, `*_key`, etc.) in audit event serialization.
-  - Added startup-time runtime validation for rate-limit parameters and LLM base URL format.
-  - Added tests for log redaction behavior, runtime config fail-fast, and sensitive-route throttling semantics.
-- PR-179: CI and autonomy workflow hardening completed:
-  - Hardened Codex review/autofix workflows with secret-presence guardrails and pinned Codex action/version.
-  - Added CI PR template checklist gating to fail pull requests with missing required checked items.
-  - Added workflow validation job in CI to assert hardening invariants for Codex/CI workflows.
-  - Added automated tests covering workflow pinning and checklist-gate configuration expectations.
-- PR-180: UAT pack + golden end-to-end harness completed:
-  - Added deterministic UAT harness module and CLI script that executes company->upload->execute->report->manifest->evidence-pack flow.
-  - Added committed UAT golden snapshot and repeatability/contract tests for harness output.
-  - Added `make uat` target and README operator runbook instructions for local deterministic UAT execution.
-  - Added CI UAT golden-contract step to run `tests/test_uat_harness.py` on pushes and pull requests.
-- PR-001 (Phase 0 refresh): conveyor bootstrap and baseline lock completed:
-  - Verified mandatory conveyor artifacts are present (`PROJECT_STATE.md`, `docs/PR_CONVEYOR_PLAN.md`, `.github/pull_request_template.md`, `.github/codex/prompts/meta_next_pr.md`).
-  - Confirmed ADR-0001 availability at `docs/adr/0001-architecture.md`.
-  - Added legacy resolver regression guardrail test (`tests/test_legacy_requirements_resolution_stability.py`) asserting `ESRS-E1-1` and `ESRS-E1-6`.
-  - Added execution log `docs/prs/PR-001.md` with recon notes and command outcomes.
-  - Revalidated quality gates: `make lint` and `make test` passed.
+## Tooling Notes
+- Test command: `make test` (`.venv/bin/python -m pytest`)
+- Lint command: `make lint` (`.venv/bin/python -m ruff check src apps tests`)
+- Format command: no dedicated formatter target (ruff-only lint gate currently)
+- Typecheck command: none configured
+- Migration tooling: Alembic (`alembic.ini`, `alembic/versions/`, `alembic upgrade head`)
+- Baseline PR-001 test run: `make test` -> `107 passed, 1 warning`
 
-## 5) Open Risks / Unknowns
-- GitHub secrets and permissions for Codex Action must be configured (OPENAI_API_KEY, etc.).
-- Sample documents for deterministic tests: must be small and redistributable.
-- Choice of PDF parsing stack: must be deterministic and testable; avoid fragile OCR in MVP.
-- Manual check still required in GitHub Actions UI to confirm `Codex Run Prompt (Create PR)` appears and dispatches with repository secrets.
-- Discovery quality hardening needed: enforce file-type/domain filters in Tavily auto-discovery (PDF-first, report-document focused) to avoid indexing non-report listing pages.
-- `pytest` emits `PytestConfigWarning` for unknown option `asyncio_default_fixture_loop_scope`; config cleanup is pending and may mask async-test config drift.
+## Open Risks / Unknowns
+- [ ] Confirm migrations framework and how to run upgrade/downgrade in CI.
+- [ ] Confirm existing auth pattern for admin endpoints (or decide CLI-only for PR-011).
+- [ ] Confirm where feature flags/config lives and naming conventions.
+- [ ] Confirm test DB strategy (sqlite? postgres? docker service?).
+- [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
 
-## 6) Decisions Log (High Level)
-- Start with Option 1: GitHub Actions + Codex GitHub Action for stable autonomy.
-- Option 2 (Codex SDK orchestrator) will be evaluated after deterministic golden tests exist.
+## Repository Conventions
+- Branch naming: `pr-XXX-<short-name>`
+- Commit message: `PR-XXX: <short summary>`
+- Required checks: `make lint`, `make test`
 
-## 7) How to Update This File
-Each PR must:
-- Mark the PR as completed in section 4
-- Update “Next PR ID”
-- Add or resolve risks
-- Record any new architectural decisions
+## Notes
+- This file is updated every PR:
+  - Add PR to Completed Work (2–5 bullets)
+  - Advance Next PR ID to the next PR in docs/PR_CONVEYOR_PLAN.md
+  - Record any new blockers/risks

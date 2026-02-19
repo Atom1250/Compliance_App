@@ -1,578 +1,362 @@
-PR_CONVEYOR_PLAN.md
-Compliance App — Implementation Roadmap (Phase B Onward)
-This document defines the authoritative PR conveyor from PHASE B forward.
-Codex must treat this as the long-horizon roadmap.
-For each PR:
-Implement ONLY the scope described.
-Follow AGENTS.md invariants.
-Update PROJECT_STATE.md.
-Add/modify ADRs if architecture changes.
-Ensure determinism and test coverage.
-Do not implement future PR scope early.
+# PR Conveyor Plan — Regulatory Registry + Obligations-Driven Runs
 
-## PR-003 — Conveyor Normalization + Deterministic Ingestion Baseline
-Objective
-Unblock autonomous PR execution by aligning roadmap/state references and add a minimal deterministic ingestion baseline.
-Scope
-- Add this PR-003 section so `Next PR ID: PR-003` has an authoritative scope.
-- Normalize ADR file path references by ensuring `docs/adr/0001-architecture.md` exists.
-- Add deterministic ingestion scaffolding only (no database or API expansion yet):
-  - Pure helper(s) for deterministic document identity/hash handling.
-  - Stable function contracts with explicit inputs (no global run state).
-- Add/adjust tests for deterministic behavior added in this PR.
-- Keep changes narrow; do not start PR-010 backend skeleton work.
-Definition of Done
-- `PROJECT_STATE.md` can resolve PR-003 to this section.
-- `docs/adr/0001-architecture.md` is present and readable.
-- Deterministic ingestion helper tests pass and are repeatable.
-Tests
-- Unit tests validating deterministic outputs for identical inputs.
-- Negative test showing changed input changes deterministic identifier/hash.
+This roadmap implements two overhauls:
+1) Regulatory & Jurisdictional Registry (DB-backed, versioned, compiler)
+2) Obligations-driven requirements resolution + coverage matrix reporting
 
-PHASE B — Backend Core (API + DB + Storage)
-PR-010 — FastAPI Skeleton + Configuration Layer
-Objective
-Create the minimal backend service foundation.
-Scope
-Create FastAPI app in apps/api/.
-Add:
-/healthz
-/version
-Add configuration system:
-Pydantic-based settings class
-Environment-variable driven
-Add basic project structure:
-app/ package
-api/routers/
-core/config.py
-Ensure OpenAPI schema is auto-generated.
-Definition of Done
-uvicorn apps.api.main:app runs.
-/healthz returns 200.
-At least one unit test verifies health endpoint.
-Tests
-pytest test for health endpoint.
-Config loads from env.
-PR-011 — Postgres Schema + Migrations
-Objective
-Establish database system-of-record.
-Scope
-Add Docker Compose service for Postgres.
-Add Alembic migrations.
-Create initial tables:
-company
-document
-document_file
-run
-run_event
-Add DB session management.
-Definition of Done
-alembic upgrade head works.
-CRUD test for company + run passes.
-Tests
-Integration test using test DB.
-Ensure migrations idempotent.
-PR-012 — Object Storage + Document Upload
-Objective
-Add immutable document ingestion.
-Scope
-Add MinIO service to docker-compose.
-Create upload endpoint:
-Store original bytes.
-Compute SHA-256 hash.
-Prevent duplicate storage by hash.
-Create document metadata record linking to storage URI.
-Definition of Done
-Upload endpoint works.
-File hash stored and verified.
-Duplicate upload returns same stored reference.
-Tests
-Upload + retrieval integration test.
-PHASE C — Deterministic Parsing + Retrieval
-PR-020 — Page-Level Extraction
-Objective
-Convert uploaded documents into deterministic page records.
-Scope
-Implement PDF page extraction.
-Store per-page text:
-page_number
-text
-char_count
-Record parser version in metadata.
-Support DOCX text extraction (basic).
-Definition of Done
-Given sample PDF, pages are stored.
-Re-running produces identical results.
-Tests
-Determinism test on fixed PDF sample.
-PR-021 — Deterministic Chunking + pgvector
-Objective
-Create stable chunk IDs and embedding storage.
-Scope
-Implement chunker:
-Stable chunk IDs = hash(doc_hash + page + offsets)
-Fixed chunk size rules
-Add pgvector extension.
-Store:
-chunk table
-embedding table
-tsvector column for FTS
-Definition of Done
-Same document → same chunk IDs.
-Embeddings stored.
-Tests
-Chunk determinism test.
-Retrieval sanity test.
-PR-022 — Hybrid Retrieval Engine
-Objective
-Implement deterministic retrieval layer.
-Scope
-Hybrid retrieval:
-Full-text search
-Vector similarity
-Deterministic score combination formula.
-Stable tie-break ordering.
-Definition of Done
-Same query → same ordering.
-Retrieval API returns structured results.
-Tests
-Ordering determinism test.
-PHASE D — Requirements Library + Applicability Engine
-PR-030 — Requirements Bundle System
-Objective
-Introduce versioned compliance requirements.
-Scope
-Add requirements/ directory structure.
-Define bundle schema:
-datapoint_def
-applicability_rule
-disclosure_reference
-Create importer CLI:
-python -m app.requirements import
-DB tables:
-requirement_bundle
-datapoint_def
-applicability_rule
-Definition of Done
-Sample ESRS mini-bundle imports successfully.
-Bundle version stored in DB.
-Tests
-Import idempotency.
-Version pin test.
-PR-031 — Company Scope + Applicability Logic
-Objective
-Determine which datapoints apply to a company.
-Scope
-Add company profile fields:
-employees
-turnover
-listed status
-reporting_year
-Implement applicability engine:
-Evaluate rules deterministically.
-Return required datapoint IDs.
-Definition of Done
-Given company profile fixture, expected datapoints returned.
-Tests
-Rule evaluation unit tests.
-PR-032 — Materiality Questionnaire Integration
-Objective
-Incorporate structured double-materiality inputs.
-Scope
-Add questionnaire endpoints.
-Store topic materiality per run.
-Integrate with applicability engine.
-Definition of Done
-Toggling materiality changes required datapoints.
-Tests
-Fixture-based materiality tests.
-PHASE E — LLM Extraction + Verification
-PR-040 — LLM Client + Schema Enforcement
-Objective
-Add deterministic, schema-only LLM extraction.
-Scope
-Implement LLM client abstraction:
-OpenAI-compatible API
-temperature=0 enforced
-Define JSON schema:
-status
-value
-evidence_chunk_ids
-rationale
-Hard validation:
-Reject Present without evidence.
-Definition of Done
-Mock LLM test passes.
-Schema validation enforced.
-Tests
-Schema validation tests.
-Evidence gating test.
-PR-041 — Datapoint Assessment Pipeline
-Objective
-Implement full retrieval → extraction → storage loop.
-Scope
-For each required datapoint:
-Retrieve top chunks.
-Call LLM extractor.
-Store assessment.
-Record:
-model name
-prompt hash
-retrieval parameters
-Definition of Done
-End-to-end sample run produces stored assessments.
-Tests
-Mocked LLM integration test.
-PR-042 — Verification Pass
-Objective
-Add post-extraction consistency checks.
-Scope
-Validate numeric values appear in cited chunks.
-Unit sanity checks.
-Period/year sanity checks.
-Ability to downgrade status if verification fails.
-Definition of Done
-Verification logic modifies invalid assessments predictably.
-Tests
-Crafted edge-case tests.
-PR-043 — Run Hashing + Cache
-Objective
-Guarantee reproducibility.
-Scope
-Compute run hash from:
-document hashes
-company profile
-materiality inputs
-bundle version
-retrieval params
-prompt hash
-If identical run exists:
-Return stored results.
-Skip reprocessing.
-Definition of Done
-Identical inputs produce identical output JSON.
-Tests
-Cache hit test.
-PHASE F — Reporting + Evidence Pack
-PR-050 — Deterministic HTML Report Generator
-Objective
-Generate structured compliance report.
-Scope
-HTML report with:
-Executive summary
-Coverage metrics
-Gap summary
-Datapoint table
-Inline citation references.
-Definition of Done
-HTML stable across identical runs.
-Tests
-Snapshot test (timestamp normalized).
-PR-051 — Evidence Pack ZIP Export
-Objective
-Produce audit-grade export.
-Scope
-ZIP containing:
-manifest.json
-assessments.jsonl
-evidence.jsonl
-referenced documents
-Ensure evidence hash integrity.
-Definition of Done
-ZIP reproducible for identical runs.
-Tests
-Validate manifest structure and integrity.
-PR-052 — Optional PDF Export (Feature-Flagged)
-Objective
-Add PDF rendering layer.
-Scope
-Convert HTML report to PDF.
-Feature flag if dependencies missing.
-Definition of Done
-PDF generated in containerized test environment.
-PHASE G — Green Finance Module
-PR-060 — Green Finance Requirements Bundle
-Objective
-Add ICMA GBP + EuGB obligations matrix.
-Scope
-Create green finance bundle:
-Obligations
-Required artifacts
-Required data elements
-Matrix output structure:
-Obligation
-Required
-Produced?
-Evidence
-Gap
-Definition of Done
-Matrix generated when green finance mode enabled.
-PR-061 — Green Finance Extraction Pipeline
-Objective
-Reuse datapoint engine for green finance.
-Scope
-Retrieval + extraction for obligations.
-Evidence gating identical to ESRS.
-Definition of Done
-Green finance assessments stored and reported.
-PHASE H — Frontend
-PR-070 — Minimal Next.js UI
-Objective
-Provide operational interface.
-Scope
-Pages:
-Company setup
-Upload docs
-Run configuration
-Run status
-Report download
-API client integration.
-Definition of Done
-End-to-end happy path works.
-PHASE I — Security + Audit Hardening
-PR-080 — API Key Auth + Tenant Isolation
-Objective
-Add multi-tenant security baseline.
-Scope
-API key auth.
-Tenant isolation in DB queries.
-Definition of Done
-Unauthorized access blocked.
-PR-082 — Structured Logging + Audit Trail
-Objective
-Harden run traceability.
-Scope
-Structured logs.
-Complete run event history.
-PHASE J — Regression Harness
-PR-090 — Golden Run + Contract Tests
-Objective
-Lock determinism.
-Scope
-Add golden sample documents.
-Snapshot expected outputs.
-CI fails on output drift.
-Definition of Done
-Identical run → identical output snapshot.
-PHASE K — Operations Hardening
-PR-100 — Tenant Key Management + Rotation Runbook
-Objective
-Operationalize tenant API key lifecycle with auditable rotation.
-Scope
-Add tenant key management runbook:
-Key generation
-Rotation cadence
-Revocation procedure
-Document required environment variable format and examples.
-Add validation utility:
-Checks auth key config format at startup.
-Fails fast on invalid tenant:key mappings.
-Definition of Done
-Tenant key lifecycle is documented and configuration validation prevents malformed key maps.
-Tests
-Unit tests for valid/invalid tenant key configuration parsing and validation.
-PR-110 — Run Lifecycle API Endpoints
-Objective
-Complete API support for run creation and workflow status/report retrieval.
-Scope
-Add run lifecycle endpoints:
-POST /runs (create queued run for tenant-scoped company)
-GET /runs/{run_id}/status
-GET /runs/{run_id}/report
-Enforce tenant isolation on all run lifecycle routes.
-Record structured audit events for lifecycle actions.
-Definition of Done
-Lifecycle endpoints provide deterministic responses and tenant-scoped access controls.
-Tests
-Integration tests for create/status/report happy path and cross-tenant denial.
-PR-120 — Company Management API
-Objective
-Support operational workflow with tenant-scoped company setup endpoints.
-Scope
-Add company lifecycle endpoints:
-POST /companies (create company profile)
-GET /companies (list tenant companies in deterministic order)
-Enforce tenant isolation for company operations.
-Record structured audit events for create/list operations.
-Definition of Done
-Company setup can be completed via API with tenant-safe behavior and deterministic list ordering.
-Tests
-Integration tests for create/list happy path and cross-tenant isolation.
-PR-130 — Run Execution API
-Objective
-Provide deterministic run execution trigger for configured runs.
-Scope
-Add endpoint:
-POST /runs/{run_id}/execute
-Run is tenant-scoped and transitions through lifecycle statuses.
-Execution records structured audit events for start/completion/failure.
-Use deterministic local extraction fallback for execution in non-LLM environments.
-Definition of Done
-Run execution endpoint stores assessments via existing pipeline and updates run status deterministically.
-Tests
-Integration tests for execute happy path and cross-tenant denial.
-PR-140 — Local LLM (LM Studio) Integration
-Objective
-Enable local LLM extraction using LM Studio OpenAI-compatible endpoint.
-Scope
-Add configurable local LLM settings:
-Base URL default `http://127.0.0.1:1234`
-Model default `ministral-3-8b-instruct-2512-mlx`
-API key field for OpenAI-compatible auth.
-Add extraction client provider wiring that can build a runtime client from settings.
-Allow run execution endpoint to select local LLM provider path.
-Definition of Done
-Run execution can use LM Studio local model path via configuration without external cloud dependency.
-Tests
-Unit tests for local LLM config/provider wiring and execute endpoint provider selection.
-PR-150 — Local LLM Health Check Endpoint
-Objective
-Provide explicit runtime visibility into local LLM availability and configuration.
-Scope
-Add system endpoint:
-GET /llm-health
-Returns configured local LLM base URL and model.
-Supports optional active probe (`probe=true`) against LM Studio-compatible endpoint.
-Probe result is reported deterministically as reachable/unreachable with detail.
-Definition of Done
-Operators can verify local LLM configuration and optionally probe runtime reachability via API.
-Tests
-Endpoint tests for non-probe response and probe-path behavior with mocked probe result.
-PR-160 — Frontend LLM Controls + Health Visibility
-Objective
-Expose local LLM provider controls and health visibility in the operational UI.
-Scope
-Update run configuration UI:
-Allow selecting execution provider (`deterministic_fallback` / `local_lm_studio`).
-Pass selected provider to run execute API.
-Add UI health panel:
-Read `/llm-health` config state.
-Support active probe request and display reachable/detail values.
-Definition of Done
-Operators can configure local LLM execution mode from UI and validate LM Studio health before execution.
-Tests
-UI scaffold tests validate provider wiring and LLM health panel route usage.
-PR-170 — Roadmap + State Normalization
-Objective
-Re-align roadmap and project state with implemented reality so autonomous PR execution can continue safely.
-Scope
-Normalize `PROJECT_STATE.md`:
-- Set `Next PR ID` to `PR-170` before execution, then advance to `PR-171` on completion.
-- Replace stale "(planned)" architecture notes with implemented status where already delivered.
-- Add planned PR index entries for PR-171 onward.
-Normalize `docs/PR_CONVEYOR_PLAN.md`:
-- Add the new PR sequence PR-170 through PR-180.
-- Keep scope boundaries explicit and deterministic-focused.
-Definition of Done
-Roadmap and project state are consistent, and `Next PR ID` points to the next executable roadmap item after this PR.
-Tests
-Run `make lint` and `make test` to confirm no regressions from documentation/state updates.
-PR-171 — Run Manifest Persistence + API Exposure
-Objective
-Persist and expose complete reproducibility manifests for each run.
-Scope
-Persist run manifest fields including document hashes, bundle versions, retrieval params, model identity, prompt hash, and git SHA.
-Add endpoint:
-GET `/runs/{run_id}/manifest`
-Enforce tenant scoping and deterministic field serialization.
-Definition of Done
-Operators can retrieve a complete reproducibility manifest for any authorized run.
-Tests
-Unit/integration tests for manifest completeness, deterministic serialization, and tenant isolation.
-PR-172 — Strict Run-Hash Cache Integration in Execute API
-Objective
-Make run execution endpoint cache-aware and reproducibility-first.
-Scope
-Integrate run-hash cache lookup into `POST /runs/{run_id}/execute`.
-On identical inputs, return cached outputs and skip recomputation.
-Ensure response contract is deterministic across cache-hit/cache-miss paths.
-Definition of Done
-Identical execution inputs deterministically return cached results.
-Tests
-Integration tests for cache hit/miss behavior and byte-identical normalized outputs.
-PR-173 — Evidence Pack Download Endpoint
-Objective
-Expose evidence pack export through a tenant-scoped API route.
-Scope
-Add endpoint:
-GET `/runs/{run_id}/evidence-pack`
-Wire deterministic ZIP export service to route handler.
-Enforce tenant isolation and stable artifact naming.
-Definition of Done
-Authorized users can download deterministic evidence packs for completed runs.
-Tests
-Integration tests for happy path, tenant isolation denial, and evidence pack contract checks.
-PR-174 — Frontend Workflow API Hardening
-Objective
-Remove remaining demo behavior in operational UI and rely on explicit backend workflow states.
-Scope
-Harden frontend workflow pages to use backend lifecycle APIs for run create/execute/status/report/evidence-pack states.
-Improve deterministic error state rendering and retry affordances.
-Definition of Done
-UI workflow behaves predictably against live API responses without opaque fallback behavior.
-Tests
-UI scaffold/integration tests asserting route usage and explicit error-state rendering.
-PR-175 — Background Job Runner for Run Execution
-Objective
-Move execution off request path while preserving deterministic run transitions.
-Scope
-Introduce background worker execution for run jobs.
-Ensure API returns queued/running/completed/failed transitions deterministically.
-Define idempotent retry behavior.
-Definition of Done
-Run execution is asynchronous with deterministic lifecycle state semantics.
-Tests
-Integration tests for queue lifecycle, retry idempotency, and status polling consistency.
-PR-176 — Tenant Isolation Hardening Audit
-Objective
-Close remaining multi-tenant data boundary gaps across storage and APIs.
-Scope
-Audit and enforce tenant filters/indexes for all run-related entities (assessments, cache, events, exports, retrieval artifacts).
-Add missing guards where needed.
-Definition of Done
-Cross-tenant data access is blocked for all relevant API and persistence paths.
-Tests
-Negative integration tests for cross-tenant access across all audited endpoints.
-PR-177 — Deterministic Retrieval Tuning Lock
-Objective
-Lock retrieval scoring/tie-break configuration as versioned runtime policy.
-Scope
-Version and persist retrieval policy parameters in run manifest.
-Ensure deterministic ranking/tie-break behavior remains stable under policy pinning.
-Definition of Done
-Retrieval behavior is reproducibly pinned by explicit policy version.
-Tests
-Determinism tests validating ordering stability and policy-version pin behavior.
-PR-178 — Security and Operations Baseline
-Objective
-Strengthen production-readiness controls without altering compliance logic.
-Scope
-Add request correlation IDs and structured redaction policy for sensitive fields.
-Add startup-time secret/config validation enhancements.
-Add basic route-level rate limiting for sensitive endpoints.
-Definition of Done
-Security and ops controls are present, deterministic, and covered by tests.
-Tests
-Tests for redaction, startup validation failure modes, and throttling behavior.
-PR-179 — CI and Autonomy Workflow Hardening
-Objective
-Stabilize GitHub automation pipelines that drive autonomous PR execution/review.
-Scope
-Harden Codex run/review/autofix workflows and add workflow validation checks.
-Enforce PR template checklist gating in CI.
-Definition of Done
-Workflow automation is reliable and failures are surfaced with actionable diagnostics.
-Tests
-Workflow lint/validation tests and failure-path assertions.
-PR-180 — UAT Pack + Golden End-to-End Harness
-Objective
-Provide a deterministic user-acceptance and regression harness for full workflow validation.
-Scope
-Add a single-command UAT harness that runs company->upload->execute->report->evidence-pack flow.
-Compare outputs against normalized golden artifacts.
-Document operator runbook for local execution.
-Definition of Done
-UAT harness can be run repeatedly with deterministic pass/fail outcomes.
-Tests
-End-to-end deterministic golden contract test in CI.
-END OF ROADMAP
+General rules:
+- Each PR is atomic (~30–90 minutes).
+- Implement ONLY the scope of the current PR.
+- Always add/adjust tests listed.
+- Always run: `make lint` and `make test`.
+- Preserve determinism, evidence gating, schema-first outputs, and reproducible manifests.
+
+For every PR:
+- Create/update `docs/prs/PR-XXX.md` with checklist + commands run + results.
+- Update `PROJECT_STATE.md` Completed Work + advance Next PR ID.
+
+---
+
+## PR-001 — Phase 0: Bootstrap Conveyor + Baseline Lock
+
+Objective:
+Bootstrap the PR conveyor workflow and lock baseline legacy behavior with a regression test.
+
+Scope:
+- Ensure: PROJECT_STATE.md, docs/PR_CONVEYOR_PLAN.md, .github/pull_request_template.md exist
+- Ensure: .github/codex/prompts/meta_next_pr.md exists and matches the meta prompt semantics
+- Ensure `docs/adr/0001-architecture.md` exists and contains ADR-0001 content
+- Ensure `make lint` and `make test` exist
+- Add a regression test for legacy requirements resolution path stability
+- Add docs/prs/PR-001.md execution log
+
+Definition of Done:
+- `make lint` and `make test` pass
+- Regression test added and passes
+- PROJECT_STATE updated, Next PR ID = PR-002
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-002 — A1 (Part 1): Regulatory Schema + Canonicalization
+
+Objective:
+Add validated regulatory bundle schema + deterministic canonical JSON hashing.
+
+Scope:
+- Add `app/regulatory/schema.py` (Pydantic models: RegulatoryBundle, Obligation, Element, PhaseInRule minimal v1)
+- Add `app/regulatory/canonical.py` for canonicalization + sha256 checksum
+- Add unit tests for schema validation + checksum stability
+
+Definition of Done:
+- Schema validates and rejects invalid payloads
+- Checksum stable across repeated loads
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-003 — A1 (Part 2): Bundle Loader + Sample Bundle
+Objective:
+Add filesystem loader and a tiny sample bundle for compile fixtures.
+
+Scope:
+- Add minimal EU sample bundle JSON under `app/regulatory/bundles/...`
+- Add `app/regulatory/loader.py` to load + validate + return `(bundle, checksum, source_path)`
+- Add loader tests
+
+Definition of Done:
+- Loader deterministic and rejects invalid bundles
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-004 — A2 (Part 1): DB Model + Migration for regulatory_bundle
+Objective:
+Create DB storage for regulatory bundles (JSONB payload + checksum + versioning).
+
+Scope:
+- ORM model for `regulatory_bundle` (repo conventions)
+- Migration create table + downgrade
+- Migration tests/smoke
+
+Definition of Done:
+- Migration upgrade/downgrade succeeds
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-005 — A2 (Part 2): Registry Store (upsert/get) + Checksums
+Objective:
+Implement DB store operations for bundles with checksum verification.
+
+Scope:
+- `apps/api/app/services/regulatory_registry.py`: upsert/get
+- Tests for idempotency and retrieval
+
+Definition of Done:
+- Upsert idempotent; checksum stored/returned
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-006 — A2 (Part 3): Sync From Filesystem (Idempotent)
+Objective:
+Deterministic sync from repo bundles → DB.
+
+Scope:
+- `sync_from_filesystem()` implementation + tests
+
+Definition of Done:
+- Sync idempotent, deterministic
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-007 — A2 (Part 4): Startup/CLI Sync Hook (Flagged)
+Objective:
+Run sync via startup hook or CLI/management command, behind a feature flag.
+
+Scope:
+- Add flagged hook/command
+- Tests verify it’s gated by flag
+
+Definition of Done:
+- Hook exists and is gated; defaults safe
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-008 — A3 (Part 1): Safe Evaluator Context Extension
+Objective:
+Extend safe evaluator to support structured context with strict whitelisting.
+
+Scope:
+- Update safe evaluator module
+- Add tests for whitelist and unknown symbol rejection
+
+Definition of Done:
+- Evaluator remains sandboxed
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-009 — A3 (Part 2): Compiler Core + Compiled Plan Schema
+Objective:
+Compile bundles → applicable obligations/elements with stable ordering; serialize compiled plan.
+
+Scope:
+- `app/regulatory/compiler.py` + `CompiledRegulatoryPlan` schema
+- Tests for deterministic ordering + phase-in behavior
+
+Definition of Done:
+- Compiler output stable; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-010 — A3 (Part 3): compile_from_db Adapter
+Objective:
+Load bundles from DB and compile into a plan.
+
+Scope:
+- `compile_from_db()` in registry service
+- DB integration test: sync → compile
+
+Definition of Done:
+- Adapter works end-to-end; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-011 — A4: Admin/Debug Interfaces OR CLI Preview
+Objective:
+Safe inspectability (admin endpoints if auth exists, otherwise CLI).
+
+Scope:
+- Admin endpoints OR CLI for list/sync/compile-preview (gated + safe)
+
+Definition of Done:
+- At least one safe interface exists; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-012 — B1: Requirements Bundle Extension + Bundle View Adapter
+Objective:
+Support obligations-native bundles while keeping legacy bundles working unchanged.
+
+Scope:
+- Optional obligations in schema OR adapter
+- `bundle_view.py` iterator API
+- Back-compat tests
+
+Definition of Done:
+- Legacy unchanged; obligations accessible; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-013 — B2 (Part 1): Company Jurisdictions + Run Config Mode (Defaults legacy)
+Objective:
+Add fields needed to select registry compiler mode safely.
+
+Scope:
+- Company jurisdictions/regimes default safe
+- Run compiler mode field default legacy
+- Tests for defaults and persistence
+
+Definition of Done:
+- Fields exist; legacy unaffected; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-014 — B2 (Part 2): P06 Registry Mode Generates Datapoints (Flagged)
+Objective:
+P06 branch uses compiled obligations to generate datapoints without changing P07–P10.
+
+Scope:
+- Feature flag `FEATURE_REGISTRY_COMPILER` default OFF
+- Registry mode: compile_from_db → generate datapoints with stable keys
+- Tests for deterministic generation
+
+Definition of Done:
+- Registry mode works behind flag; legacy unchanged; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-015 — B3 (Part 1): Manifest Registry Section + Run Hash Inputs
+Objective:
+Prevent cache collisions and ensure reproducibility in registry mode.
+
+Scope:
+- Manifest includes registry section (registry mode only)
+- Run hash includes compiler mode + checksums
+- Tests for hash/manifest
+
+Definition of Done:
+- No collisions; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-016 — B3 (Part 2): Audit Events for Sync + Compile
+Objective:
+Emit audit events for sync/compile.
+
+Scope:
+- Add `regulatory.sync.*` + `regulatory.compile.*` events
+- Tests for emission
+
+Definition of Done:
+- Events emitted; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-017 — B4 (Part 1): Coverage Matrix Computation + Report Rendering (Flagged)
+Objective:
+Compute obligation-level compliance deterministically and render report matrix behind flag.
+
+Scope:
+- Coverage computation
+- Report matrix section behind `FEATURE_REGISTRY_REPORT_MATRIX` default OFF
+- Tests
+
+Definition of Done:
+- Coverage deterministic; report conditional; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-018 — B4 (Part 2): Evidence Pack Includes Registry Artifacts
+Objective:
+Add compiled plan + coverage outputs to evidence pack ZIP.
+
+Scope:
+- Evidence pack includes registry artifacts in registry mode
+- Tests for ZIP contents
+
+Definition of Done:
+- Artifacts included; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-019 — B5: Seed Minimal Bundles + Sync→Compile End-to-End Tests
+Objective:
+Ship minimal EU/UK/NO + green finance bundles and end-to-end sync/compile tests.
+
+Scope:
+- Seed bundles
+- End-to-end test: FS → DB sync → compile plan determinism
+
+Definition of Done:
+- Bundles validate/sync/compile; tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
