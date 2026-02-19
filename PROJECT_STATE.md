@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-046
+Next PR ID: PR-047
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -230,6 +230,10 @@ Next PR ID: PR-046
 - Added migration `0018_embedding_vector_column.py` with Postgres `vector` column path and SQLite compatibility fallback.
 - Updated retrieval service to prefer `embedding_vector` payloads when available while preserving deterministic tie-break ordering.
 - Added/updated tests in `tests/test_hybrid_retrieval.py`, `tests/test_db_migrations.py`, and `tests/test_db_migrations_postgres.py`; execution log added at `docs/prs/PR-045.md`.
+- PR-046 completed (F6: Postgres end-to-end harness).
+- Added Postgres harness module `src/compliance_app/postgres_e2e.py` for deterministic company->upload->run->manifest/export flow checks.
+- Added CLI script `scripts/run_postgres_e2e.py` to run harness manually against a provided Postgres URL.
+- Added gated integration test `tests/test_postgres_e2e_harness.py` validating manifest/readiness/report/evidence contracts on Postgres; execution log added at `docs/prs/PR-046.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
