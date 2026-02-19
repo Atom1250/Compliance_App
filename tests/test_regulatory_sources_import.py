@@ -42,6 +42,15 @@ def _source_sheets_fixture_path() -> Path:
     return Path("tests/fixtures/regulatory_source_document_SOURCE_SHEETS_full.csv")
 
 
+def _write_mode_fixture(path: Path, notes: str | None) -> None:
+    note_value = "" if notes is None else notes
+    path.write_text(
+        "record_id,jurisdiction,document_name,notes_for_db_tagging\n"
+        f"EU-L1-CSRD,EU,CSRD,{note_value}\n",
+        encoding="utf-8",
+    )
+
+
 def test_normalization_tags_dates_and_url_validation() -> None:
     issues: list[ImportIssue] = []
     normalized = _normalize_row(
@@ -122,6 +131,51 @@ def test_source_sheets_fixture_import_uses_document_name_fallback_and_is_idempot
         by_record["EU-TAX-DA-CLIMATE"].document_name
         == "EU TAX DA CLIMATE (EU-TAX-DA-CLIMATE) - Commission Delegated Regulation (EU) 2021/2139"
     )
+
+
+def test_merge_mode_retains_existing_value_when_incoming_empty(tmp_path: Path) -> None:
+    first_csv = tmp_path / "first.csv"
+    second_csv = tmp_path / "second.csv"
+    _write_mode_fixture(first_csv, "test-update")
+    _write_mode_fixture(second_csv, None)
+
+    with _prepare_sqlite_session(tmp_path) as session:
+        first = import_regulatory_sources(session, file_path=first_csv, mode="merge")
+        second = import_regulatory_sources(session, file_path=second_csv, mode="merge")
+        row = session.scalar(
+            select(RegulatorySourceDocument).where(
+                RegulatorySourceDocument.record_id == "EU-L1-CSRD"
+            )
+        )
+
+    assert first.inserted == 1
+    assert second.inserted == 0
+    assert row is not None
+    assert row.notes_for_db_tagging == "test-update"
+
+
+def test_sync_mode_clears_empty_values_and_is_idempotent(tmp_path: Path) -> None:
+    first_csv = tmp_path / "first.csv"
+    second_csv = tmp_path / "second.csv"
+    _write_mode_fixture(first_csv, "test-update")
+    _write_mode_fixture(second_csv, None)
+
+    with _prepare_sqlite_session(tmp_path) as session:
+        import_regulatory_sources(session, file_path=first_csv, mode="merge")
+        sync_first = import_regulatory_sources(session, file_path=second_csv, mode="sync")
+        sync_second = import_regulatory_sources(session, file_path=second_csv, mode="sync")
+        row = session.scalar(
+            select(RegulatorySourceDocument).where(
+                RegulatorySourceDocument.record_id == "EU-L1-CSRD"
+            )
+        )
+
+    assert sync_first.updated == 1
+    assert sync_first.invalid_rows == 0
+    assert sync_second.updated == 0
+    assert sync_second.skipped == 1
+    assert row is not None
+    assert row.notes_for_db_tagging is None
 
 
 def test_missing_table_guard_returns_clear_error(tmp_path: Path) -> None:

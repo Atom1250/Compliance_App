@@ -15,6 +15,7 @@ def test_help_includes_csv_first_examples(capsys: pytest.CaptureFixture[str]) ->
     assert "Recommended (CSV)" in captured.out
     assert "Optional (XLSX)" in captured.out
     assert "Dry-run" in captured.out
+    assert "--mode sync" in captured.out
     assert "regulatory_source_document_SOURCE_SHEETS_full.csv" in captured.out
 
 

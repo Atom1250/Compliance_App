@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
@@ -40,6 +40,28 @@ CANONICAL_COLUMNS = (
     "source_sheets",
 )
 REQUIRED_COLUMNS = ("record_id", "jurisdiction")
+MUTABLE_COLUMNS = (
+    "jurisdiction",
+    "document_name",
+    "document_type",
+    "framework_level",
+    "legal_reference",
+    "issuing_body",
+    "supervisory_authority",
+    "official_source_url",
+    "source_format",
+    "language",
+    "scope_applicability",
+    "effective_date",
+    "last_checked_date",
+    "update_frequency",
+    "version_identifier",
+    "status",
+    "keywords_tags",
+    "notes_for_db_tagging",
+    "source_sheets",
+)
+ImportMode = Literal["merge", "sync"]
 
 
 def _fallback_document_name(record_id: str, legal_reference: str | None) -> str:
@@ -263,6 +285,20 @@ def _merge_rows(base: dict[str, Any], incoming: dict[str, Any], *, sheet: str) -
     return merged
 
 
+def _apply_row(
+    existing: RegulatorySourceDocument, incoming: dict[str, Any], *, mode: ImportMode
+) -> bool:
+    changed = False
+    for field in MUTABLE_COLUMNS:
+        candidate = incoming[field]
+        if mode == "merge" and candidate in (None, ""):
+            continue
+        if getattr(existing, field) != candidate:
+            setattr(existing, field, candidate)
+            changed = True
+    return changed
+
+
 def _normalized_csv_rows(file_path: Path) -> tuple[list[dict[str, Any]], set[str]]:
     with file_path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -355,10 +391,14 @@ def import_regulatory_sources(
     file_path: Path,
     sheets: tuple[str, ...] | None = None,
     jurisdiction: str | None = None,
+    mode: ImportMode = "merge",
     dry_run: bool = False,
     issues_out: Path | None = None,
 ) -> ImportSummary:
     """Import one curated source register file into regulatory_source_document."""
+    if mode not in {"merge", "sync"}:
+        raise ValueError("mode must be 'merge' or 'sync'")
+
     rows, _ = _load_source_rows(file_path, sheets=sheets)
     issues: list[ImportIssue] = []
     summary = ImportSummary(issues=issues)
@@ -413,28 +453,6 @@ def import_regulatory_sources(
     }
 
     now_utc = datetime.now(UTC)
-    updatable_fields = [
-        "jurisdiction",
-        "document_name",
-        "document_type",
-        "framework_level",
-        "legal_reference",
-        "issuing_body",
-        "supervisory_authority",
-        "official_source_url",
-        "source_format",
-        "language",
-        "scope_applicability",
-        "effective_date",
-        "last_checked_date",
-        "update_frequency",
-        "version_identifier",
-        "status",
-        "keywords_tags",
-        "notes_for_db_tagging",
-        "source_sheets",
-    ]
-
     for record_id in sorted(deduped):
         row = deduped[record_id]
         checksum = row["row_checksum"]
@@ -471,22 +489,17 @@ def import_regulatory_sources(
             summary.inserted += 1
             continue
 
-        if existing.row_checksum == checksum:
+        if mode == "merge" and existing.row_checksum == checksum:
             summary.skipped += 1
             continue
 
-        changed = False
-        for field in updatable_fields:
-            incoming_value = row[field]
-            if incoming_value in (None, ""):
-                continue
-            if getattr(existing, field) != incoming_value:
-                setattr(existing, field, incoming_value)
-                changed = True
-        if existing.row_checksum != checksum:
+        changed = _apply_row(existing, row, mode=mode)
+        checksum_changed = existing.row_checksum != checksum
+        raw_json_changed = existing.raw_row_json != row["raw_row_json"]
+        if checksum_changed:
             existing.row_checksum = checksum
             changed = True
-        if existing.raw_row_json != row["raw_row_json"]:
+        if raw_json_changed:
             existing.raw_row_json = row["raw_row_json"]
             changed = True
         if changed:
