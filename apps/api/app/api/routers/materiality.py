@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.requirements.applicability import resolve_required_datapoint_ids
+from app.requirements.routing import resolve_bundle_selection
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
@@ -51,8 +52,8 @@ class MaterialityUpsertResponse(BaseModel):
 
 
 class RequiredDatapointsRequest(BaseModel):
-    bundle_id: str = Field(min_length=1)
-    bundle_version: str = Field(min_length=1)
+    bundle_id: str = Field(default="esrs_mini", min_length=1)
+    bundle_version: str | None = Field(default=None, min_length=1)
 
 
 class RequiredDatapointsResponse(BaseModel):
@@ -121,8 +122,8 @@ class EvidencePackPreviewResponse(BaseModel):
 
 
 class RunExecuteRequest(BaseModel):
-    bundle_id: str = Field(min_length=1)
-    bundle_version: str = Field(min_length=1)
+    bundle_id: str = Field(default="esrs_mini", min_length=1)
+    bundle_version: str | None = Field(default=None, min_length=1)
     retrieval_top_k: int = Field(default=5, ge=1, le=100)
     retrieval_model_name: str = Field(default="default", min_length=1)
     llm_provider: str = Field(default="deterministic_fallback", min_length=1)
@@ -480,6 +481,13 @@ def execute_run(
     run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    resolved = resolve_bundle_selection(
+        db,
+        company_id=run.company_id,
+        requested_bundle_id=payload.bundle_id,
+        requested_bundle_version=payload.bundle_version,
+    )
+
     assessment_count = current_assessment_count(db, run_id=run.id, tenant_id=auth.tenant_id)
     latest_execution_event = db.scalar(
         select(RunEvent.event_type)
@@ -534,8 +542,8 @@ def execute_run(
         event_type="run.execution.queued",
         payload={
             "tenant_id": auth.tenant_id,
-            "bundle_id": payload.bundle_id,
-            "bundle_version": payload.bundle_version,
+            "bundle_id": resolved.bundle_id,
+            "bundle_version": resolved.bundle_version,
             "retry_failed": payload.retry_failed,
         },
     )
@@ -543,8 +551,8 @@ def execute_run(
         "run.execution.queued",
         run_id=run.id,
         tenant_id=auth.tenant_id,
-        bundle_id=payload.bundle_id,
-        bundle_version=payload.bundle_version,
+        bundle_id=resolved.bundle_id,
+        bundle_version=resolved.bundle_version,
         retry_failed=payload.retry_failed,
     )
     db.commit()
@@ -552,8 +560,8 @@ def execute_run(
     enqueue_run_execution(
         run.id,
         RunExecutionPayload(
-            bundle_id=payload.bundle_id,
-            bundle_version=payload.bundle_version,
+            bundle_id=resolved.bundle_id,
+            bundle_version=resolved.bundle_version,
             retrieval_top_k=payload.retrieval_top_k,
             retrieval_model_name=payload.retrieval_model_name,
             llm_provider=payload.llm_provider,
@@ -643,11 +651,18 @@ def required_datapoints_for_run(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
 
+    resolved = resolve_bundle_selection(
+        db,
+        company_id=run.company_id,
+        requested_bundle_id=payload.bundle_id,
+        requested_bundle_version=payload.bundle_version,
+    )
+
     required = resolve_required_datapoint_ids(
         db,
         company_id=run.company_id,
-        bundle_id=payload.bundle_id,
-        bundle_version=payload.bundle_version,
+        bundle_id=resolved.bundle_id,
+        bundle_version=resolved.bundle_version,
         run_id=run.id,
     )
     append_run_event(
@@ -657,8 +672,8 @@ def required_datapoints_for_run(
         event_type="required_datapoints.resolved",
         payload={
             "tenant_id": auth.tenant_id,
-            "bundle_id": payload.bundle_id,
-            "bundle_version": payload.bundle_version,
+            "bundle_id": resolved.bundle_id,
+            "bundle_version": resolved.bundle_version,
             "required_count": len(required),
         },
     )

@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-028
+Next PR ID: PR-029
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -141,6 +141,11 @@ Next PR ID: PR-028
 - Added detailed probe helper returning reachability + parse status for provider responses.
 - Added missing-cloud-key handling in matrix probe output (`missing_api_key`) without breaking existing single-provider endpoint behavior.
 - Added/updated tests in `tests/test_llm_health_service.py` and `tests/test_llm_health_endpoint.py`; execution log added at `docs/prs/PR-027.md`.
+- PR-028 completed (C8: ruleset version routing with pre-2026 support).
+- Added deterministic routing helper `app/requirements/routing.py` for bundle/version resolution using reporting year/range.
+- Wired routing into `/runs/{run_id}/execute` and `/runs/{run_id}/required-datapoints` while preserving explicit bundle/version overrides.
+- Added tests in `tests/test_bundle_routing.py` and `tests/test_materiality.py` for pre-2026 routing, post-2026 routing, and explicit override behavior.
+- Added PR execution log: `docs/prs/PR-028.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
