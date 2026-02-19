@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-031
+Next PR ID: PR-032
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -156,6 +156,11 @@ Next PR ID: PR-031
 - Extended `run.execution.failed` event payload/logging with `failure_category` and `retryable`.
 - Added retry gating in execute API so `retry_failed=true` only requeues retryable failures; non-retryable cases emit `run.execution.retry.skipped`.
 - Added/updated tests in `tests/test_run_execute_api.py`; execution log added at `docs/prs/PR-030.md`.
+- PR-031 completed (D1: report data model refactor).
+- Added typed report DTOs in `apps/api/app/services/reporting.py` and refactored HTML rendering to use typed data.
+- Coverage denominator semantics now explicitly exclude `NA` datapoints and report excluded count.
+- Added/updated report tests in `tests/test_reporting.py` and refreshed deterministic golden snapshots (`tests/golden/golden_run_snapshot.json`, `tests/golden/uat_harness_snapshot.json`).
+- Added PR execution log: `docs/prs/PR-031.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

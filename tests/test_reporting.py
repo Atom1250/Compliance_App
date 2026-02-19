@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from apps.api.app.db.models import DatapointAssessment
 from apps.api.app.services.reporting import (
+    build_report_data,
     compute_registry_coverage_matrix,
     generate_html_report,
     normalize_report_html,
@@ -55,9 +56,11 @@ def test_html_report_snapshot_normalized_timestamp() -> None:
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
         "<title>Compliance Report</title></head>"
         "<body><h1>Compliance Report for Run 99</h1><section id=\"executive-summary\">"
-        "<h2>Executive Summary</h2><p>Coverage: 1/2 datapoints (50.0%).</p></section>"
+        "<h2>Executive Summary</h2>"
+        "<p>Coverage: 1/2 applicable datapoints (50.0%). NA excluded: 0.</p></section>"
         "<section id=\"coverage-metrics\"><h2>Coverage Metrics</h2><ul>"
         "<li>Present: 1</li><li>Partial: 0</li><li>Absent: 1</li><li>NA: 0</li>"
+        "<li>Denominator (excludes NA): 2</li>"
         "</ul></section><section id=\"gap-summary\"><h2>Gap Summary</h2><ul>"
         "<li><strong>ESRS-E1-1</strong>: Absent</li></ul></section><section id=\"datapoint-table\">"
         "<h2>Datapoint Table</h2><table><thead><tr><th>Datapoint</th><th>Status</th><th>Value</th>"
@@ -90,6 +93,35 @@ def test_html_report_is_stable_for_identical_inputs() -> None:
     first = normalize_report_html(generate_html_report(run_id=1, assessments=assessments))
     second = normalize_report_html(generate_html_report(run_id=1, assessments=assessments))
     assert first == second
+
+
+def test_report_data_denominator_excludes_na() -> None:
+    assessments = [
+        _assessment(
+            datapoint_key="D1",
+            status="Present",
+            value="x",
+            evidence_chunk_ids='["chunk-1"]',
+        ),
+        _assessment(
+            datapoint_key="D2",
+            status="NA",
+            value=None,
+            evidence_chunk_ids="[]",
+        ),
+        _assessment(
+            datapoint_key="D3",
+            status="Absent",
+            value=None,
+            evidence_chunk_ids="[]",
+        ),
+    ]
+    report = build_report_data(run_id=1, assessments=assessments)
+    assert report.total_datapoints == 3
+    assert report.denominator_datapoints == 2
+    assert report.excluded_na_count == 1
+    assert report.covered == 1
+    assert report.coverage_pct == 50.0
 
 
 def test_registry_coverage_matrix_is_deterministic() -> None:

@@ -28,6 +28,30 @@ class RegistryCoverageRow:
     status: str
 
 
+@dataclass(frozen=True)
+class ReportRow:
+    datapoint_key: str
+    status: str
+    value: str | None
+    evidence_chunk_ids: str
+    rationale: str
+
+
+@dataclass(frozen=True)
+class ReportData:
+    run_id: int
+    rows: list[ReportRow]
+    total_datapoints: int
+    denominator_datapoints: int
+    excluded_na_count: int
+    present: int
+    partial: int
+    absent: int
+    na: int
+    covered: int
+    coverage_pct: float
+
+
 def _to_generated_at(timestamp: datetime | None) -> str:
     value = timestamp or datetime.now(UTC)
     return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -87,6 +111,40 @@ def compute_registry_coverage_matrix(
     return rows
 
 
+def build_report_data(*, run_id: int, assessments: Sequence[DatapointAssessment]) -> ReportData:
+    rows = [
+        ReportRow(
+            datapoint_key=item.datapoint_key,
+            status=item.status,
+            value=item.value,
+            evidence_chunk_ids=item.evidence_chunk_ids,
+            rationale=item.rationale,
+        )
+        for item in sorted(assessments, key=lambda item: item.datapoint_key)
+    ]
+    total = len(rows)
+    present = sum(1 for item in rows if item.status == "Present")
+    partial = sum(1 for item in rows if item.status == "Partial")
+    absent = sum(1 for item in rows if item.status == "Absent")
+    na = sum(1 for item in rows if item.status == "NA")
+    covered = present + partial
+    denominator = total - na
+    coverage_pct = (covered / denominator * 100.0) if denominator else 0.0
+    return ReportData(
+        run_id=run_id,
+        rows=rows,
+        total_datapoints=total,
+        denominator_datapoints=denominator,
+        excluded_na_count=na,
+        present=present,
+        partial=partial,
+        absent=absent,
+        na=na,
+        covered=covered,
+        coverage_pct=coverage_pct,
+    )
+
+
 def generate_html_report(
     *,
     run_id: int,
@@ -95,16 +153,9 @@ def generate_html_report(
     include_registry_report_matrix: bool = False,
 ) -> str:
     """Render deterministic HTML report content from datapoint assessments."""
-    ordered = sorted(assessments, key=lambda item: item.datapoint_key)
-    total = len(ordered)
-    present = sum(1 for item in ordered if item.status == "Present")
-    partial = sum(1 for item in ordered if item.status == "Partial")
-    absent = sum(1 for item in ordered if item.status == "Absent")
-    na = sum(1 for item in ordered if item.status == "NA")
-    covered = present + partial
-    coverage_pct = (covered / total * 100.0) if total else 0.0
+    report = build_report_data(run_id=run_id, assessments=assessments)
 
-    gap_items = [item for item in ordered if item.status in {"Absent", "Partial"}]
+    gap_items = [item for item in report.rows if item.status in {"Absent", "Partial"}]
     gap_summary_items = "".join(
         f"<li><strong>{html.escape(item.datapoint_key)}</strong>: {html.escape(item.status)}</li>"
         for item in gap_items
@@ -122,12 +173,12 @@ def generate_html_report(
             f"<td>{html.escape(item.rationale)}</td>"
             "</tr>"
         )
-        for item in ordered
+        for item in report.rows
     )
 
     registry_section = ""
     if include_registry_report_matrix:
-        rows = compute_registry_coverage_matrix(ordered)
+        rows = compute_registry_coverage_matrix(assessments)
         matrix_rows = "".join(
             (
                 "<tr>"
@@ -166,18 +217,21 @@ def generate_html_report(
         "<html lang=\"en\">"
         "<head><meta charset=\"utf-8\"><title>Compliance Report</title></head>"
         "<body>"
-        f"<h1>Compliance Report for Run {run_id}</h1>"
+        f"<h1>Compliance Report for Run {report.run_id}</h1>"
         "<section id=\"executive-summary\">"
         "<h2>Executive Summary</h2>"
-        f"<p>Coverage: {covered}/{total} datapoints ({coverage_pct:.1f}%).</p>"
+        f"<p>Coverage: {report.covered}/{report.denominator_datapoints} "
+        f"applicable datapoints ({report.coverage_pct:.1f}%). "
+        f"NA excluded: {report.excluded_na_count}.</p>"
         "</section>"
         "<section id=\"coverage-metrics\">"
         "<h2>Coverage Metrics</h2>"
         "<ul>"
-        f"<li>Present: {present}</li>"
-        f"<li>Partial: {partial}</li>"
-        f"<li>Absent: {absent}</li>"
-        f"<li>NA: {na}</li>"
+        f"<li>Present: {report.present}</li>"
+        f"<li>Partial: {report.partial}</li>"
+        f"<li>Absent: {report.absent}</li>"
+        f"<li>NA: {report.na}</li>"
+        f"<li>Denominator (excludes NA): {report.denominator_datapoints}</li>"
         "</ul>"
         "</section>"
         "<section id=\"gap-summary\">"
