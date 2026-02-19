@@ -127,3 +127,57 @@ def test_openai_transport_falls_back_to_chat_completions(monkeypatch) -> None:
     assert calls[0].endswith("/responses")
     assert calls[1].endswith("/chat/completions")
     assert payload["output"][0]["content"][0]["type"] == "output_text"
+
+
+def test_extraction_client_parses_chat_completions_shape() -> None:
+    transport = MockTransport(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"status":"Absent","value":null,"evidence_chunk_ids":[],'
+                            '"rationale":"chat-shape"}'
+                        )
+                    }
+                }
+            ]
+        }
+    )
+    client = ExtractionClient(transport=transport, model="gpt-5")
+    result = client.extract(datapoint_key="ESRS-E1-6", context_chunks=["chunk text"])
+    assert result.status == ExtractionStatus.ABSENT
+
+
+def test_extraction_client_normalizes_provider_error() -> None:
+    class _FailingTransport:
+        def create_response(self, *, model, input_text, temperature, json_schema):
+            del model, input_text, temperature, json_schema
+            raise RuntimeError("connection dropped")
+
+    client = ExtractionClient(transport=_FailingTransport(), model="gpt-5")
+    with pytest.raises(ValueError, match="llm_provider_error: RuntimeError: connection dropped"):
+        client.extract(datapoint_key="ESRS-E1-6", context_chunks=["chunk text"])
+
+
+def test_extraction_client_normalizes_schema_parse_error() -> None:
+    transport = MockTransport({"output": []})
+    client = ExtractionClient(transport=transport, model="gpt-5")
+    with pytest.raises(ValueError, match="llm_schema_parse_error"):
+        client.extract(datapoint_key="ESRS-E1-6", context_chunks=["chunk text"])
+
+
+def test_extraction_client_normalizes_schema_validation_error() -> None:
+    transport = MockTransport(
+        _response_with_json(
+            {
+                "status": "Present",
+                "value": "42",
+                "evidence_chunk_ids": [],
+                "rationale": "missing evidence for present",
+            }
+        )
+    )
+    client = ExtractionClient(transport=transport, model="gpt-5")
+    with pytest.raises(ValueError, match="llm_schema_validation_error"):
+        client.extract(datapoint_key="ESRS-E1-6", context_chunks=["chunk text"])

@@ -31,3 +31,12 @@ def test_openai_cloud_provider_requires_api_key() -> None:
         assert False, "expected ValueError"
     except ValueError as exc:
         assert "openai_api_key is required" in str(exc)
+
+
+def test_provider_rejects_unknown_provider() -> None:
+    settings = Settings()
+    try:
+        build_extraction_client_from_settings(settings, provider="unknown")
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "unsupported llm provider" in str(exc)

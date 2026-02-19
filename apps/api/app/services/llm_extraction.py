@@ -158,14 +158,25 @@ class ExtractionClient:
 
     def extract(self, *, datapoint_key: str, context_chunks: list[str]) -> ExtractionResult:
         prompt = self.build_prompt(datapoint_key=datapoint_key, context_chunks=context_chunks)
-        response_payload = self._transport.create_response(
-            model=self._model,
-            input_text=prompt,
-            temperature=0.0,
-            json_schema=ExtractionResult.model_json_schema(),
-        )
-        parsed = self._extract_json_text(response_payload)
-        return ExtractionResult.model_validate(parsed)
+        try:
+            response_payload = self._transport.create_response(
+                model=self._model,
+                input_text=prompt,
+                temperature=0.0,
+                json_schema=ExtractionResult.model_json_schema(),
+            )
+        except Exception as exc:
+            raise ValueError(f"llm_provider_error: {type(exc).__name__}: {exc}") from exc
+
+        try:
+            parsed = self._extract_json_text(response_payload)
+        except Exception as exc:
+            raise ValueError(f"llm_schema_parse_error: {type(exc).__name__}: {exc}") from exc
+
+        try:
+            return ExtractionResult.model_validate(parsed)
+        except Exception as exc:
+            raise ValueError(f"llm_schema_validation_error: {type(exc).__name__}: {exc}") from exc
 
     @staticmethod
     def build_prompt(*, datapoint_key: str, context_chunks: list[str]) -> str:
@@ -177,6 +188,7 @@ class ExtractionClient:
 
     @staticmethod
     def _extract_json_text(response_payload: dict[str, Any]) -> dict[str, Any]:
+        # `/responses` API shape.
         output_items = response_payload.get("output", [])
         for item in output_items:
             if item.get("type") != "message":
@@ -184,4 +196,16 @@ class ExtractionClient:
             for content in item.get("content", []):
                 if content.get("type") == "output_text" and isinstance(content.get("text"), str):
                     return json.loads(content["text"])
-        raise ValueError("No JSON output_text found in response payload")
+
+        # Native `/chat/completions` shape.
+        choices = response_payload.get("choices", [])
+        if choices:
+            content = choices[0].get("message", {}).get("content", "")
+            if isinstance(content, list):
+                content = "".join(
+                    str(item.get("text", "")) for item in content if isinstance(item, dict)
+                )
+            if isinstance(content, str) and content.strip():
+                return json.loads(content)
+
+        raise ValueError("No JSON extraction payload found in provider response")

@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-026
+Next PR ID: PR-027
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -131,6 +131,11 @@ Next PR ID: PR-026
 - Retrieval trace payload now includes retrieval policy metadata with explicit tie-break (`chunk_id`).
 - Added/updated tests in `tests/test_assessment_pipeline.py` and `tests/test_run_execute_api.py` for artifact existence and stability.
 - Added PR execution log: `docs/prs/PR-025.md`.
+- PR-026 completed (C6: LLM provider adapter normalization).
+- Added explicit supported-provider validation and local/cloud provider config guardrails in `llm_provider`.
+- Extended extraction parsing to support both `/responses` and native `/chat/completions` payload shapes.
+- Added normalized extraction error taxonomy (`llm_provider_error`, `llm_schema_parse_error`, `llm_schema_validation_error`) for clearer failure diagnostics.
+- Added/updated tests in `tests/test_llm_provider.py` and `tests/test_llm_extraction.py`; execution log added at `docs/prs/PR-026.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
