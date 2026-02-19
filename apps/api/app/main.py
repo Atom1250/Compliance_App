@@ -6,6 +6,7 @@ import threading
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI
@@ -23,6 +24,8 @@ from apps.api.app.api.routers.system import router as system_router
 from apps.api.app.core.auth import validate_auth_configuration
 from apps.api.app.core.config import get_settings
 from apps.api.app.core.ops import validate_runtime_configuration
+from apps.api.app.db.session import get_session_factory
+from apps.api.app.services.regulatory_registry import sync_from_filesystem
 
 
 def _is_sensitive_path(path: str) -> bool:
@@ -101,6 +104,22 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(RequestOpsMiddleware)
+
+    @app.on_event("startup")
+    def _sync_regulatory_registry_on_startup() -> None:
+        runtime_settings = get_settings()
+        if not runtime_settings.regulatory_registry_sync_enabled:
+            return
+        session_factory = get_session_factory()
+        session = session_factory()
+        try:
+            sync_from_filesystem(
+                session,
+                bundles_root=Path(runtime_settings.regulatory_registry_bundles_root),
+            )
+        finally:
+            session.close()
+
     app.include_router(system_router)
     app.include_router(companies_router)
     app.include_router(documents_router)

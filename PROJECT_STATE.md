@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-007
+Next PR ID: PR-008
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -33,6 +33,11 @@ Next PR ID: PR-007
 - Ensured deterministic processing order and idempotent behavior through sorted file traversal and upsert semantics.
 - Added tests in `tests/test_regulatory_registry_sync.py` for repeatable sync outputs and stable ordering.
 - Added PR execution log: `docs/prs/PR-006.md`.
+- PR-007 completed (A2 Part 4: flagged startup sync hook).
+- Added runtime config flags: `regulatory_registry_sync_enabled` and `regulatory_registry_bundles_root`.
+- Added FastAPI startup hook that runs registry sync only when explicitly enabled.
+- Added tests in `tests/test_regulatory_sync_startup.py` verifying the hook is off by default and executes when enabled.
+- Added PR execution log: `docs/prs/PR-007.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
