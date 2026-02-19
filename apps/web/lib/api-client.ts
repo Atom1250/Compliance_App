@@ -48,6 +48,10 @@ export type AutoDiscoverResponse = {
 export type EvidencePackPreviewResponse = {
   run_id: number;
   entries: string[];
+  pack_files: Array<{
+    path: string;
+    sha256: string;
+  }>;
   pack_file_count: number;
   document_count: number;
   has_assessments: boolean;

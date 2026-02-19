@@ -4,58 +4,72 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { autoDiscoverDocuments, uploadDocument } from "../../lib/api-client";
+import { stateLabel, StepState, transitionOrStay } from "../../lib/flow-state";
 
 export default function UploadPage() {
-  const [status, setStatus] = useState("Idle");
+  const [stepState, setStepState] = useState<StepState>("idle");
+  const [status, setStatus] = useState(stateLabel("idle"));
   const [error, setError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isAutoDiscovering, setIsAutoDiscovering] = useState(false);
   const [title, setTitle] = useState("Annual ESG Report");
 
   async function runUpload(form: FormData) {
+    setStepState((state) => transitionOrStay(state, "validating"));
+    setStatus(stateLabel("validating"));
     const file = form.get("file");
     const companyId = Number(localStorage.getItem("company_id") ?? "0");
     if (!(file instanceof File) || !companyId) {
-      setStatus("Upload blocked.");
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
       setError("Missing file or company id.");
       return;
     }
     setIsUploading(true);
     setError("");
-    setStatus("Uploading...");
+    setStepState((state) => transitionOrStay(state, "submitting"));
+    setStatus(stateLabel("submitting"));
     try {
       const uploaded = await uploadDocument({ companyId, file, title });
       if (!uploaded?.documentId) {
         throw new Error("Missing document id in API response.");
       }
-      setStatus(`Uploaded document ${uploaded.documentId}`);
+      setStepState((state) => transitionOrStay(state, "success"));
+      setStatus(`Completed: uploaded document ${uploaded.documentId}`);
     } catch (caught) {
-      setStatus("Upload failed.");
-      setError(`Upload failed: ${String(caught)}`);
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
+      setError(`Upload failed: ${String(caught)}. Confirm title/file and API connectivity.`);
     } finally {
       setIsUploading(false);
     }
   }
 
   async function runAutoDiscovery() {
+    setStepState((state) => transitionOrStay(state, "validating"));
+    setStatus(stateLabel("validating"));
     const companyId = Number(localStorage.getItem("company_id") ?? "0");
     if (!companyId) {
-      setStatus("Auto-discovery blocked.");
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
       setError("Missing company id.");
       return;
     }
     setIsAutoDiscovering(true);
     setError("");
-    setStatus("Searching for ESG documents...");
+    setStepState((state) => transitionOrStay(state, "submitting"));
+    setStatus(stateLabel("submitting"));
     try {
       const result = await autoDiscoverDocuments(companyId, 3);
+      setStepState((state) => transitionOrStay(state, "success"));
       setStatus(
-        `Auto-discovery complete: ${result.ingested_count} documents ingested ` +
+        `Completed: auto-discovery ingested ${result.ingested_count} documents ` +
           `(from ${result.candidates_considered} candidates).`
       );
     } catch (caught) {
-      setStatus("Auto-discovery failed.");
-      setError(`Auto-discovery failed: ${String(caught)}`);
+      setStepState((state) => transitionOrStay(state, "error"));
+      setStatus(stateLabel("error"));
+      setError(`Auto-discovery failed: ${String(caught)}. Check Tavily key and network settings.`);
     } finally {
       setIsAutoDiscovering(false);
     }
@@ -90,6 +104,7 @@ export default function UploadPage() {
         {isAutoDiscovering ? "Discovering..." : "Auto-Find ESG Documents"}
       </button>
       <p>{status}</p>
+      <p>Step Key: {stepState}</p>
       {error ? (
         <div className="panel">
           <p>{error}</p>

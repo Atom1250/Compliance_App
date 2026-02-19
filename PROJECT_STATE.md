@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-034
+Next PR ID: PR-035
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -171,6 +171,11 @@ Next PR ID: PR-034
 - Added preview validation that ZIP entries and manifest file list match, with checksum verification for each previewed artifact.
 - Added/updated tests in `tests/test_evidence_pack_api.py` validating preview metadata and preview-to-ZIP manifest consistency.
 - Added PR execution log: `docs/prs/PR-033.md`.
+- PR-034 completed (D4: UI step-state hardening).
+- Added explicit UI transition helper (`apps/web/lib/flow-state.ts`) with allowed stage transitions and state labels.
+- Applied step-state transitions and clearer API-error messaging in run setup pages (`company`, `upload`, `run-config`, `run-status`, `report`).
+- Added frontend transition coverage in `tests/test_web_ui_step_state.py` and aligned web API types with evidence preview checksum payload (`pack_files`).
+- Added PR execution log: `docs/prs/PR-034.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
