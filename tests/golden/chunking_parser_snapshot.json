@@ -1,0 +1,52 @@
+{
+  "chunking_case": {
+    "document_hash": "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123ab",
+    "page_number": 2,
+    "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    "chunk_size": 40,
+    "chunk_overlap": 10,
+    "chunks": [
+      {
+        "chunk_id": "f964111d57e5ff8c40a0cbead15c388dd1b3acfb9de3841c5b1c56e527259bdd",
+        "page_number": 2,
+        "start_offset": 0,
+        "end_offset": 40,
+        "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCD"
+      },
+      {
+        "chunk_id": "d11c35d40aa68f773173790908eba6c9f89e5616b6a144eebe77ef041218d536",
+        "page_number": 2,
+        "start_offset": 30,
+        "end_offset": 70,
+        "text": "456789ABCDEFGHIJKLMNOPQRSTUVWXYZ01234567"
+      },
+      {
+        "chunk_id": "59edf2d2b6e575a48500d3f27a56da66b1980278ab75e91d789c1ae84ada51c6",
+        "page_number": 2,
+        "start_offset": 60,
+        "end_offset": 100,
+        "text": "YZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ01"
+      },
+      {
+        "chunk_id": "37eeb60feb09dd03327b856046daa30ecbe5d6557e271cd665d1082bc90f16db",
+        "page_number": 2,
+        "start_offset": 90,
+        "end_offset": 130,
+        "text": "STUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUV"
+      },
+      {
+        "chunk_id": "9074c75e678dc05aa0db645e29e477397d4906a5a215a9433476fd6e87ac5991",
+        "page_number": 2,
+        "start_offset": 120,
+        "end_offset": 144,
+        "text": "MNOPQRSTUVWXYZ0123456789"
+      }
+    ]
+  },
+  "parser_versions": {
+    "pdf": "pdf-pypdf-v1",
+    "docx": "docx-xml-v1",
+    "fallback": "raw-bytes-v1"
+  }
+}
+

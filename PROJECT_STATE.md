@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-024
+Next PR ID: PR-025
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -121,6 +121,11 @@ Next PR ID: PR-024
 - Added title normalization (`strip`) before document persistence.
 - Added integration tests in `tests/test_document_upload_integration.py` for consistent 422 behavior and normalized successful upload persistence.
 - Added PR execution log: `docs/prs/PR-023.md`.
+- PR-024 completed (C4: parser + chunk determinism golden tests).
+- Added golden snapshot fixture `tests/golden/chunking_parser_snapshot.json` for chunk IDs/offsets and parser-version expectations.
+- Added tests in `tests/test_chunking_golden.py` covering golden chunk snapshot matching, persisted chunk stability across rebuilds, and parser-version pin checks for PDF/DOCX/fallback paths.
+- Verified deterministic chunking and extraction contracts remain stable under repeated execution.
+- Added PR execution log: `docs/prs/PR-024.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
