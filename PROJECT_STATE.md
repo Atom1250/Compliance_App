@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-027
+Next PR ID: PR-028
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -136,6 +136,11 @@ Next PR ID: PR-027
 - Extended extraction parsing to support both `/responses` and native `/chat/completions` payload shapes.
 - Added normalized extraction error taxonomy (`llm_provider_error`, `llm_schema_parse_error`, `llm_schema_validation_error`) for clearer failure diagnostics.
 - Added/updated tests in `tests/test_llm_provider.py` and `tests/test_llm_extraction.py`; execution log added at `docs/prs/PR-026.md`.
+- PR-027 completed (C7: multi-provider LLM health endpoint).
+- Added `/llm-health-matrix` endpoint returning deterministic health rows for `local_lm_studio` and `openai_cloud`.
+- Added detailed probe helper returning reachability + parse status for provider responses.
+- Added missing-cloud-key handling in matrix probe output (`missing_api_key`) without breaking existing single-provider endpoint behavior.
+- Added/updated tests in `tests/test_llm_health_service.py` and `tests/test_llm_health_endpoint.py`; execution log added at `docs/prs/PR-027.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

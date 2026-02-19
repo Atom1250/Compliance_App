@@ -69,3 +69,70 @@ def test_llm_health_openai_provider_uses_cloud_config(monkeypatch) -> None:
         "reachable": None,
         "detail": "probe_not_requested",
     }
+
+
+def test_llm_health_matrix_probes_both_providers(monkeypatch) -> None:
+    monkeypatch.setenv("COMPLIANCE_APP_LLM_BASE_URL", "http://127.0.0.1:1234")
+    monkeypatch.setenv("COMPLIANCE_APP_LLM_MODEL", "ministral-local")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_API_KEY", "secret")
+
+    from apps.api.app.api.routers import system as system_router_module
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        system_router_module,
+        "probe_openai_compatible_detailed",
+        lambda **kwargs: (True, True, "ok"),
+    )
+
+    client = TestClient(app)
+    response = client.get("/llm-health-matrix")
+    assert response.status_code == 200
+    assert response.json() == {
+        "providers": [
+            {
+                "provider": "local_lm_studio",
+                "base_url": "http://127.0.0.1:1234",
+                "model": "ministral-local",
+                "reachable": True,
+                "parse_ok": True,
+                "detail": "ok",
+            },
+            {
+                "provider": "openai_cloud",
+                "base_url": "https://api.openai.com/v1",
+                "model": "gpt-4o-mini",
+                "reachable": True,
+                "parse_ok": True,
+                "detail": "ok",
+            },
+        ]
+    }
+
+
+def test_llm_health_matrix_reports_missing_openai_key(monkeypatch) -> None:
+    monkeypatch.setenv("COMPLIANCE_APP_LLM_BASE_URL", "http://127.0.0.1:1234")
+    monkeypatch.setenv("COMPLIANCE_APP_LLM_MODEL", "ministral-local")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("COMPLIANCE_APP_OPENAI_API_KEY", "")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+    response = client.get("/llm-health-matrix")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["providers"][1] == {
+        "provider": "openai_cloud",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "reachable": False,
+        "parse_ok": False,
+        "detail": "missing_api_key",
+    }
