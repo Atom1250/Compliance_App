@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from alembic.config import Config
-from apps.api.app.db.models import Chunk, Company, Document, Embedding
+from apps.api.app.db.models import Chunk, Company, CompanyDocumentLink, Document, Embedding
 from apps.api.app.services.retrieval import RetrievalPolicy, retrieve_chunks
 from apps.api.main import app
 
@@ -181,3 +181,50 @@ def test_hybrid_retrieval_prefers_embedding_vector_payload(tmp_path: Path) -> No
         )
 
     assert results[0].chunk_id == "aaa"
+
+
+def test_hybrid_retrieval_company_scope_includes_linked_docs_and_excludes_others(
+    tmp_path: Path,
+) -> None:
+    db_url = _prepare_db(tmp_path)
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        company_a = session.query(Company).filter(Company.name == "Retrieval Co").one()
+        company_b = Company(name="Other Co", tenant_id="default")
+        session.add(company_b)
+        session.flush()
+        doc_b = Document(company_id=company_b.id, tenant_id="default", title="Doc B")
+        session.add(doc_b)
+        session.flush()
+        session.add(
+            Chunk(
+                document_id=doc_b.id,
+                chunk_id="zzz",
+                page_number=1,
+                start_offset=0,
+                end_offset=10,
+                text="other company only",
+                content_tsv="other company only",
+            )
+        )
+        # Link company 1 to doc_b so it becomes in-scope through link table.
+        session.add(
+            CompanyDocumentLink(
+                company_id=company_a.id,
+                document_id=doc_b.id,
+                tenant_id="default",
+            )
+        )
+        session.commit()
+
+        results = retrieve_chunks(
+            session,
+            query="other company",
+            query_embedding=None,
+            top_k=10,
+            tenant_id="default",
+            company_id=company_a.id,
+            model_name="default",
+        )
+    chunk_ids = [item.chunk_id for item in results]
+    assert "zzz" in chunk_ids

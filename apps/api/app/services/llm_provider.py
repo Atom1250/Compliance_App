@@ -40,5 +40,7 @@ def build_extraction_client_from_settings(
     transport = OpenAICompatibleTransport(
         base_url=settings.llm_base_url,
         api_key=settings.llm_api_key,
+        timeout_seconds=90.0,
+        prefer_chat_completions=True,
     )
     return ExtractionClient(transport=transport, model=settings.llm_model)

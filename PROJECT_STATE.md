@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-051
+Next PR ID: PR-062
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -250,6 +250,11 @@ Next PR ID: PR-051
 - Updated Postgres-first operator docs and added `docs/runbooks/postgres_cutover_validation.md` checklist.
 - Added transition guard tests in `tests/test_postgres_phase_down_docs.py`.
 - Fixed Postgres migration/runtime blockers discovered during live E2E validation (Alembic revision ID length constraints and `chunk.content_tsv` type compatibility) via migration chain updates and `0019_chunk_content_tsv_text.py`; execution log added at `docs/prs/PR-050.md`.
+- PR-051..PR-061 completed as a consolidated gold-standard upgrade stream.
+- Added gold-standard report contract artifact `docs/GOLD_STANDARD_REPORT_TEMPLATE_v1.md` and mapped PR conveyor sections `PR-051` through `PR-061`.
+- Added manifest/report contract upgrades: `report_template_version` persisted in `run_manifest`, `REPORT_TEMPLATE_VERSION = "gold_standard_v1"`, and deterministic report section anchors aligned to template structure.
+- Implemented discovery and ingestion hardening: year-range Tavily multi-query merge/dedupe, fetch-time PDF validation with retries/headers, larger default document-size cap, and cross-company duplicate document linking via `company_document_link`.
+- Implemented retrieval and observability upgrades: company-scoped retrieval support, discovery diagnostics fields, UI diagnostics panel, benchmark harness script (`scripts/run_discovery_analysis_benchmark.py`), and supporting tests (`tests/test_company_document_link.py`, updated discovery/reporting/golden tests).
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

@@ -319,6 +319,221 @@ Scope:
 - Report matrix section behind `FEATURE_REGISTRY_REPORT_MATRIX` default OFF
 - Tests
 
+---
+
+## PR-051 — Gold Standard Contract + Manifest Versioning
+Objective:
+Adopt `gold_standard_v1` report template contract and persist template version in manifest.
+
+Scope:
+- Add report contract reference and code constant `REPORT_TEMPLATE_VERSION = "gold_standard_v1"`
+- Extend `run_manifest` persistence and APIs with `report_template_version`
+- Add structural tests for deterministic section presence
+
+Definition of Done:
+- Manifest stores report template version
+- Report rendering includes deterministic gold-standard section anchors
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-052 — Discovery Recall Upgrade (Year-Range + Multi-Query)
+Objective:
+Improve ESG document discovery recall for multi-year periods.
+
+Scope:
+- Query Tavily across reporting year range and merge deterministically
+- Deterministic dedupe/tie-break for candidates
+- Expand diagnostics for candidate funnel visibility
+
+Definition of Done:
+- Discovery considers year range and returns stable ordering
+- Candidate funnel metrics available in response/logs
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-053 — Download Robustness + PDF Validation
+Objective:
+Increase ingestion success for discovered candidates while keeping PDF-only MVP policy.
+
+Scope:
+- Replace URL-suffix-only filtering with fetch-time PDF validation
+- Add deterministic retry + headers for hostile hosts
+- Raise configurable document size limit for large ESG reports
+
+Definition of Done:
+- More candidate downloads succeed; failures are structured
+- Non-PDF payloads are still blocked deterministically
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-054 — Duplicate Ingestion Correctness (Cross-Company)
+Objective:
+Prevent duplicate-hash ingestion from orphaning company document inventories.
+
+Scope:
+- Add deterministic company-document link model
+- On duplicate hash, link existing canonical document to requesting company
+- Update document hash and retrieval inputs to include linked documents
+
+Definition of Done:
+- Duplicate documents are accessible for new company runs
+- No cross-company leakage; deterministic behavior preserved
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-055 — Retrieval Isolation + Ranking Quality
+Objective:
+Ensure run retrieval only uses run-company documents and keeps deterministic ranking.
+
+Scope:
+- Add company-scoped retrieval filtering
+- Keep explicit tie-breaks and deterministic ordering
+- Persist retrieval trace with source document ids
+
+Definition of Done:
+- Retrieval scope excludes unrelated tenant documents
+- Ordering remains stable and test-covered
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-056 — Anti-Truncation Context Budgeting
+Objective:
+Protect analysis quality from silent context truncation.
+
+Scope:
+- Deterministic context budgeting metadata (`context_tokens`, `truncation_applied`)
+- Explicit downgrade/fail-closed behavior when evidence context is truncated
+- Add run diagnostics coverage for truncation flags
+
+Definition of Done:
+- Truncation is explicit, auditable, and tested
+- No silent quality degradation path
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-057 — Gold Standard Renderer Mapping
+Objective:
+Map report generator sections to the gold standard template.
+
+Scope:
+- Deterministic assembly of metadata, applicability, inventory, coverage matrices, appendices
+- Narrative placeholders constrained to validated facts only
+- Keep evidence traceability appendix deterministic
+
+Definition of Done:
+- Output contains required gold-standard sections with deterministic ordering
+- Tests validate structure and stable normalization
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-058 — Deterministic Rating Engine
+Objective:
+Compute compliance ratings from datapoint/obligation coverage, not free text.
+
+Scope:
+- Implement deterministic overall rating rules
+- Surface rating in report summary section
+- Add tests for Full/Partial/Absent/NA edge cases
+
+Definition of Done:
+- Ratings are rule-based and reproducible
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-059 — Side-by-Side A/B Benchmark Harness
+Objective:
+Operationalize local-vs-cloud benchmark runs with normalized outputs.
+
+Scope:
+- Add benchmark harness for predefined company/year ranges
+- Produce side-by-side discovery and report quality metrics
+- Persist normalized artifacts for regression review
+
+Definition of Done:
+- One command produces comparable A/B benchmark artifacts
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-060 — UI Quality Diagnostics
+Objective:
+Expose discovery and report-readiness quality diagnostics in the UI.
+
+Scope:
+- Add discovery funnel and skip-reason visibility
+- Add report quality gates/warnings before download
+- Preserve existing flow and deterministic API contracts
+
+Definition of Done:
+- Users can inspect failures pre-export from UI
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-061 — CI Regression Gates for Gold Standard
+Objective:
+Guard discovery/analysis/report quality with CI regression checks.
+
+Scope:
+- Add golden structure checks for report template sections
+- Add deterministic benchmark threshold checks
+- Integrate checks into CI workflow
+
+Definition of Done:
+- CI fails on structural/determinism regressions
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
 Definition of Done:
 - Coverage deterministic; report conditional; tests pass
 

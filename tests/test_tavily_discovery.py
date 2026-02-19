@@ -5,7 +5,9 @@ from apps.api.app.services.tavily_discovery import (
 )
 
 
-def test_search_tavily_documents_filters_non_pdf(monkeypatch) -> None:
+def test_search_tavily_documents_keeps_non_pdf_candidates_for_download_validation(
+    monkeypatch,
+) -> None:
     class _Resp:
         def raise_for_status(self) -> None:
             return None
@@ -30,16 +32,23 @@ def test_search_tavily_documents_filters_non_pdf(monkeypatch) -> None:
     candidates = search_tavily_documents(
         company_name="Nordea",
         reporting_year=2025,
+        reporting_year_start=None,
+        reporting_year_end=None,
         api_key="test-key",
         base_url="https://api.tavily.com/search",
         timeout_seconds=5.0,
         max_results=5,
     )
 
-    assert [candidate.url for candidate in candidates] == ["https://example.com/report.pdf"]
+    assert [candidate.url for candidate in candidates] == [
+        "https://example.com/reports",
+        "https://example.com/report.pdf",
+    ]
 
 
-def test_search_tavily_documents_has_deterministic_tie_break(monkeypatch) -> None:
+def test_search_tavily_documents_uses_reporting_year_range_and_dedupes(monkeypatch) -> None:
+    calls: list[str] = []
+
     class _Resp:
         def raise_for_status(self) -> None:
             return None
@@ -47,29 +56,33 @@ def test_search_tavily_documents_has_deterministic_tie_break(monkeypatch) -> Non
         def json(self) -> dict[str, object]:
             return {
                 "results": [
-                    {"title": "B", "url": "https://example.com/b.pdf", "score": 0.9},
                     {"title": "A", "url": "https://example.com/a.pdf", "score": 0.9},
-                    {"title": "C", "url": "https://example.com/c.PDF", "score": 0.9},
+                    {"title": "B", "url": "https://example.com/b.pdf", "score": 0.8},
+                    {"title": "A2", "url": "https://example.com/a.pdf", "score": 0.95},
                 ]
             }
 
-    monkeypatch.setattr(
-        "apps.api.app.services.tavily_discovery.httpx.post",
-        lambda *args, **kwargs: _Resp(),
-    )
+    def _post(*args, **kwargs):
+        calls.append(kwargs["json"]["query"])
+        return _Resp()
+
+    monkeypatch.setattr("apps.api.app.services.tavily_discovery.httpx.post", _post)
     candidates = search_tavily_documents(
         company_name="Nordea",
         reporting_year=2025,
+        reporting_year_start=2024,
+        reporting_year_end=2025,
         api_key="test-key",
         base_url="https://api.tavily.com/search",
         timeout_seconds=5.0,
         max_results=5,
     )
+    assert len(calls) == 6
     assert [candidate.url for candidate in candidates] == [
         "https://example.com/a.pdf",
         "https://example.com/b.pdf",
-        "https://example.com/c.PDF",
     ]
+    assert candidates[0].score == 0.95
 
 
 def test_download_discovery_candidate_rejects_non_pdf_content(monkeypatch) -> None:
@@ -81,6 +94,7 @@ def test_download_discovery_candidate_rejects_non_pdf_content(monkeypatch) -> No
         def raise_for_status(self) -> None:
             return None
 
+    monkeypatch.setattr("apps.api.app.services.tavily_discovery.time.sleep", lambda *_: None)
     monkeypatch.setattr(
         "apps.api.app.services.tavily_discovery.httpx.get",
         lambda *args, **kwargs: _Resp(),

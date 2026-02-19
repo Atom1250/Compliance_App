@@ -32,6 +32,7 @@ export type LLMHealthResponse = {
 export type AutoDiscoverResponse = {
   company_id: number;
   candidates_considered: number;
+  raw_candidates: number;
   ingested_count: number;
   ingested_documents: Array<{
     document_id: number;

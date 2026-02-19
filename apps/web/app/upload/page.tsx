@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { autoDiscoverDocuments, orchestrateDiscoveryAndRun, uploadDocument } from "../../lib/api-client";
+import {
+  autoDiscoverDocuments,
+  AutoDiscoverResponse,
+  orchestrateDiscoveryAndRun,
+  uploadDocument
+} from "../../lib/api-client";
 import { stateLabel, StepState, transitionOrStay } from "../../lib/flow-state";
 
 export default function UploadPage() {
@@ -16,6 +21,7 @@ export default function UploadPage() {
   const [isAutoDiscovering, setIsAutoDiscovering] = useState(false);
   const [isGuidedRunning, setIsGuidedRunning] = useState(false);
   const [title, setTitle] = useState("Annual ESG Report");
+  const [autoDiscoveryResult, setAutoDiscoveryResult] = useState<AutoDiscoverResponse | null>(null);
 
   async function runUpload(form: FormData) {
     setStepState((state) => transitionOrStay(state, "validating"));
@@ -63,11 +69,12 @@ export default function UploadPage() {
     setStepState((state) => transitionOrStay(state, "submitting"));
     setStatus(stateLabel("submitting"));
     try {
-      const result = await autoDiscoverDocuments(companyId, 3);
+      const result = await autoDiscoverDocuments(companyId, 8);
+      setAutoDiscoveryResult(result);
       setStepState((state) => transitionOrStay(state, "success"));
       setStatus(
         `Completed: auto-discovery ingested ${result.ingested_count} documents ` +
-          `(from ${result.candidates_considered} candidates).`
+          `(from ${result.candidates_considered}/${result.raw_candidates} candidates).`
       );
     } catch (caught) {
       setStepState((state) => transitionOrStay(state, "error"));
@@ -100,7 +107,7 @@ export default function UploadPage() {
         bundleId: "esrs_mini",
         bundleVersion,
         llmProvider: "deterministic_fallback",
-        maxDocuments: 3
+        maxDocuments: 8
       });
       if (!result.runId) {
         throw new Error("Missing run id in guided flow response.");
@@ -157,6 +164,25 @@ export default function UploadPage() {
         <div className="panel">
           <p>{error}</p>
           <p>Retry upload after fixing the issue.</p>
+        </div>
+      ) : null}
+      {autoDiscoveryResult ? (
+        <div className="panel">
+          <h2>Discovery Diagnostics</h2>
+          <p>
+            Raw candidates: {autoDiscoveryResult.raw_candidates}; considered:{" "}
+            {autoDiscoveryResult.candidates_considered}; ingested: {autoDiscoveryResult.ingested_count}; skipped:{" "}
+            {autoDiscoveryResult.skipped.length}
+          </p>
+          {autoDiscoveryResult.skipped.length > 0 ? (
+            <ul>
+              {autoDiscoveryResult.skipped.slice(0, 8).map((item) => (
+                <li key={`${item.source_url}-${item.reason}`}>
+                  {item.reason}: {item.source_url}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
       <p>

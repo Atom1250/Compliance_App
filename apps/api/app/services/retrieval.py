@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.app.db.models import Chunk, Document, Embedding
+from apps.api.app.services.company_documents import list_company_document_ids
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,7 @@ def retrieve_chunks(
     query_embedding: list[float] | None,
     top_k: int,
     tenant_id: str | None = None,
+    company_id: int | None = None,
     document_id: int | None = None,
     model_name: str = "default",
     policy: RetrievalPolicy | None = None,
@@ -120,6 +122,13 @@ def retrieve_chunks(
     stmt = select(Chunk).join(Document, Document.id == Chunk.document_id).order_by(Chunk.chunk_id)
     if tenant_id is not None:
         stmt = stmt.where(Document.tenant_id == tenant_id)
+    if company_id is not None and tenant_id is not None:
+        company_document_ids = list_company_document_ids(
+            db, company_id=company_id, tenant_id=tenant_id
+        )
+        if not company_document_ids:
+            return []
+        stmt = stmt.where(Chunk.document_id.in_(company_document_ids))
     if document_id is not None:
         stmt = stmt.where(Chunk.document_id == document_id)
 

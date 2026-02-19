@@ -17,8 +17,6 @@ from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
     Company,
     DatapointAssessment,
-    Document,
-    DocumentFile,
     RegulatoryBundle,
     Run,
     RunMateriality,
@@ -29,6 +27,7 @@ from apps.api.app.services.assessment_pipeline import (
     execute_assessment_pipeline,
 )
 from apps.api.app.services.audit import append_run_event, log_structured_event
+from apps.api.app.services.company_documents import list_company_document_hashes
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
 from apps.api.app.services.regulatory_registry import compile_from_db
@@ -165,13 +164,9 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             ).all()
             materiality_inputs = {row.topic: row.is_material for row in materiality_rows}
 
-            document_hashes = db.scalars(
-                select(DocumentFile.sha256_hash)
-                .join(Document, Document.id == DocumentFile.document_id)
-                .where(Document.company_id == run.company_id, Document.tenant_id == run.tenant_id)
-                .order_by(DocumentFile.sha256_hash)
-            ).all()
-            document_hashes = sorted(set(document_hashes))
+            document_hashes = list_company_document_hashes(
+                db, company_id=run.company_id, tenant_id=run.tenant_id
+            )
             retrieval_policy = get_retrieval_policy()
 
             retrieval_params = {

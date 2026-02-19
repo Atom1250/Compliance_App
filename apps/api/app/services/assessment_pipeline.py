@@ -172,6 +172,7 @@ def execute_assessment_pipeline(
             query_embedding=None,
             top_k=config.retrieval_top_k,
             tenant_id=run.tenant_id,
+            company_id=run.company_id,
             model_name=config.retrieval_model_name,
             policy=get_retrieval_policy(),
         )

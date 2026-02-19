@@ -110,6 +110,7 @@ class RunManifestResponse(BaseModel):
     retrieval_params: dict[str, object]
     model_name: str
     prompt_hash: str
+    report_template_version: str
     git_sha: str
 
 
@@ -611,6 +612,7 @@ def run_manifest(
         retrieval_params=json.loads(manifest.retrieval_params),
         model_name=manifest.model_name,
         prompt_hash=manifest.prompt_hash,
+        report_template_version=manifest.report_template_version,
         git_sha=manifest.git_sha,
     )
 

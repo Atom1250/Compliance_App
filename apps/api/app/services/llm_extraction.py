@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from enum import Enum
 from typing import Any, Protocol
 
@@ -54,18 +55,27 @@ class LLMTransport(Protocol):
 class OpenAICompatibleTransport:
     """HTTP transport for OpenAI-compatible `/responses` API."""
 
-    def __init__(self, *, base_url: str, api_key: str, timeout_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        timeout_seconds: float = 30.0,
+        prefer_chat_completions: bool = False,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds
+        self._prefer_chat_completions = prefer_chat_completions
 
-    def create_response(
-        self,
-        *,
-        model: str,
-        input_text: str,
-        temperature: float,
-        json_schema: dict[str, Any],
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _request_responses(
+        self, *, model: str, input_text: str, temperature: float, json_schema: dict[str, Any]
     ) -> dict[str, Any]:
         payload = {
             "model": model,
@@ -79,23 +89,18 @@ class OpenAICompatibleTransport:
                 }
             },
         }
-
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
-        }
-
         response = httpx.post(
             f"{self._base_url}/responses",
-            headers=headers,
+            headers=self._headers(),
             json=payload,
             timeout=self._timeout_seconds,
         )
-        if response.status_code < 400:
-            return response.json()
+        response.raise_for_status()
+        return response.json()
 
-        # Some OpenAI models/accounts reject `/responses` payload variants.
-        # Fall back to `/chat/completions` with JSON schema response format.
+    def _request_chat_completions(
+        self, *, model: str, input_text: str, temperature: float, json_schema: dict[str, Any]
+    ) -> dict[str, Any]:
         chat_payload = {
             "model": model,
             "messages": [{"role": "user", "content": input_text}],
@@ -110,39 +115,72 @@ class OpenAICompatibleTransport:
         }
         chat_response = httpx.post(
             f"{self._base_url}/chat/completions",
-            headers=headers,
+            headers=self._headers(),
             json=chat_payload,
             timeout=self._timeout_seconds,
         )
-        if chat_response.status_code < 400:
-            chat_json = chat_response.json()
-            content_text = (
-                chat_json.get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "")
+        chat_response.raise_for_status()
+        chat_json = chat_response.json()
+        content_text = chat_json.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if isinstance(content_text, list):
+            content_text = "".join(
+                str(item.get("text", "")) for item in content_text if isinstance(item, dict)
             )
-            if isinstance(content_text, list):
-                content_text = "".join(
-                    str(item.get("text", "")) for item in content_text if isinstance(item, dict)
-                )
-            return {
-                "output": [
-                    {
-                        "type": "message",
-                        "content": [{"type": "output_text", "text": str(content_text)}],
-                    }
-                ]
-            }
+        return {
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": str(content_text)}],
+                }
+            ]
+        }
 
-        detail = (
-            f"/responses {response.status_code}: {response.text}; "
-            f"/chat/completions {chat_response.status_code}: {chat_response.text}"
+    def create_response(
+        self,
+        *,
+        model: str,
+        input_text: str,
+        temperature: float,
+        json_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        endpoint_order = (
+            ("chat", "responses") if self._prefer_chat_completions else ("responses", "chat")
         )
-        raise httpx.HTTPStatusError(
-            f"LLM request failed: {detail}",
-            request=chat_response.request,
-            response=chat_response,
+        errors: dict[str, str] = {}
+        last_exc: Exception | None = None
+        for endpoint in endpoint_order:
+            try:
+                if endpoint == "responses":
+                    return self._request_responses(
+                        model=model,
+                        input_text=input_text,
+                        temperature=temperature,
+                        json_schema=json_schema,
+                    )
+                return self._request_chat_completions(
+                    model=model,
+                    input_text=input_text,
+                    temperature=temperature,
+                    json_schema=json_schema,
+                )
+            except Exception as exc:  # pragma: no cover - network/runtime behavior
+                last_exc = exc
+                errors[endpoint] = f"{type(exc).__name__}: {exc}"
+                continue
+
+        detail = "; ".join(
+            [
+                f"/responses {errors.get('responses', 'not attempted')}",
+                f"/chat/completions {errors.get('chat', 'not attempted')}",
+            ]
         )
+        if isinstance(last_exc, httpx.HTTPStatusError):
+            raise httpx.HTTPStatusError(
+                f"LLM request failed: {detail}",
+                request=last_exc.request,
+                response=last_exc.response,
+            ) from last_exc
+        raise RuntimeError(f"LLM request failed: {detail}") from last_exc
 
 
 class ExtractionClient:
@@ -179,6 +217,59 @@ class ExtractionClient:
             raise ValueError(f"llm_schema_validation_error: {type(exc).__name__}: {exc}") from exc
 
     @staticmethod
+    def _json_from_text(text: str) -> dict[str, Any]:
+        text = text.strip()
+        if not text:
+            raise ValueError("empty text payload")
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        fenced_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, flags=re.DOTALL)
+        if fenced_match:
+            parsed = json.loads(fenced_match.group(1))
+            if isinstance(parsed, dict):
+                return parsed
+
+        first = text.find("{")
+        last = text.rfind("}")
+        if first != -1 and last != -1 and first < last:
+            parsed = json.loads(text[first : last + 1])
+            if isinstance(parsed, dict):
+                return parsed
+
+        raise ValueError("text payload does not contain a JSON object")
+
+    @staticmethod
+    def _coerce_content_text(value: Any) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            parts: list[str] = []
+            for item in value:
+                if isinstance(item, dict):
+                    text_value = item.get("text")
+                    if isinstance(text_value, str):
+                        parts.append(text_value)
+                    elif isinstance(text_value, dict) and isinstance(text_value.get("value"), str):
+                        parts.append(text_value["value"])
+                    elif isinstance(item.get("content"), str):
+                        parts.append(item["content"])
+            return "".join(parts)
+        if isinstance(value, dict):
+            text_value = value.get("text")
+            if isinstance(text_value, str):
+                return text_value
+            if isinstance(text_value, dict) and isinstance(text_value.get("value"), str):
+                return text_value["value"]
+            if isinstance(value.get("content"), str):
+                return value["content"]
+        return ""
+
+    @staticmethod
     def build_prompt(*, datapoint_key: str, context_chunks: list[str]) -> str:
         chunks_text = "\n\n".join(context_chunks)
         return (
@@ -188,24 +279,33 @@ class ExtractionClient:
 
     @staticmethod
     def _extract_json_text(response_payload: dict[str, Any]) -> dict[str, Any]:
+        # Top-level OpenAI-compatible output text variant.
+        if isinstance(response_payload.get("output_text"), str):
+            return ExtractionClient._json_from_text(response_payload["output_text"])
+
         # `/responses` API shape.
         output_items = response_payload.get("output", [])
         for item in output_items:
+            if item.get("type") == "output_text":
+                text = ExtractionClient._coerce_content_text(item.get("text", ""))
+                if text.strip():
+                    return ExtractionClient._json_from_text(text)
             if item.get("type") != "message":
                 continue
             for content in item.get("content", []):
-                if content.get("type") == "output_text" and isinstance(content.get("text"), str):
-                    return json.loads(content["text"])
+                text = ExtractionClient._coerce_content_text(content)
+                if content.get("type") in {"output_text", "text"} and text.strip():
+                    return ExtractionClient._json_from_text(text)
 
         # Native `/chat/completions` shape.
         choices = response_payload.get("choices", [])
         if choices:
-            content = choices[0].get("message", {}).get("content", "")
-            if isinstance(content, list):
-                content = "".join(
-                    str(item.get("text", "")) for item in content if isinstance(item, dict)
-                )
-            if isinstance(content, str) and content.strip():
-                return json.loads(content)
+            message = choices[0].get("message", {})
+            if isinstance(message.get("parsed"), dict):
+                return message["parsed"]
+
+            content = ExtractionClient._coerce_content_text(message.get("content", ""))
+            if content.strip():
+                return ExtractionClient._json_from_text(content)
 
         raise ValueError("No JSON extraction payload found in provider response")

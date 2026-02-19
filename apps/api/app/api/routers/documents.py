@@ -14,7 +14,6 @@ from apps.api.app.db.session import get_db_session
 from apps.api.app.services.document_ingestion import ingest_document_bytes
 from apps.api.app.services.tavily_discovery import (
     download_discovery_candidate,
-    is_pdf_candidate_url,
     search_tavily_documents,
 )
 
@@ -41,6 +40,7 @@ class AutoDiscoverSkipItem(BaseModel):
 class AutoDiscoverResponse(BaseModel):
     company_id: int
     candidates_considered: int
+    raw_candidates: int
     ingested_count: int
     ingested_documents: list[AutoDiscoverItem]
     skipped: list[AutoDiscoverSkipItem]
@@ -115,11 +115,14 @@ def auto_discover_documents(
     candidates = search_tavily_documents(
         company_name=company.name,
         reporting_year=company.reporting_year_end or company.reporting_year,
+        reporting_year_start=company.reporting_year_start,
+        reporting_year_end=company.reporting_year_end,
         api_key=settings.tavily_api_key,
         base_url=settings.tavily_base_url,
         timeout_seconds=settings.tavily_timeout_seconds,
         max_results=settings.tavily_max_results,
     )
+    raw_candidates = len(candidates)
     ingested: list[AutoDiscoverItem] = []
     skipped: list[AutoDiscoverSkipItem] = []
 
@@ -144,17 +147,6 @@ def auto_discover_documents(
         )
 
     for candidate in candidates:
-        if not is_pdf_candidate_url(candidate.url):
-            reason = "non_pdf_candidate"
-            skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
-            _record_decision(
-                source_url=candidate.url,
-                title=candidate.title,
-                score=candidate.score,
-                accepted=False,
-                reason=reason,
-            )
-            continue
         if len(ingested) >= payload.max_documents:
             reason = "max_documents_reached"
             skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
@@ -217,6 +209,7 @@ def auto_discover_documents(
     return AutoDiscoverResponse(
         company_id=company.id,
         candidates_considered=len(candidates),
+        raw_candidates=raw_candidates,
         ingested_count=len(ingested),
         ingested_documents=ingested,
         skipped=skipped,

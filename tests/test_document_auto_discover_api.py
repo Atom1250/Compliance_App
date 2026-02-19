@@ -75,6 +75,7 @@ def test_auto_discover_ingests_documents(monkeypatch, tmp_path: Path) -> None:
     payload = response.json()
     assert payload["ingested_count"] == 1
     assert payload["candidates_considered"] == 2
+    assert payload["raw_candidates"] == 2
     assert payload["ingested_documents"][0]["source_url"] == "https://example.com/a.pdf"
 
     engine = create_engine(db_url)
@@ -108,7 +109,9 @@ def test_auto_discover_requires_enabled_tavily(monkeypatch, tmp_path: Path) -> N
     assert response.json()["detail"] == "tavily discovery is disabled"
 
 
-def test_auto_discover_persists_non_pdf_rejection_reason(monkeypatch, tmp_path: Path) -> None:
+def test_auto_discover_persists_download_validation_rejection_reason(
+    monkeypatch, tmp_path: Path
+) -> None:
     db_url, company_id = _prepare_database(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
     monkeypatch.setenv("COMPLIANCE_APP_OBJECT_STORAGE_ROOT", str(tmp_path / "object_store"))
@@ -127,11 +130,15 @@ def test_auto_discover_persists_non_pdf_rejection_reason(monkeypatch, tmp_path: 
     monkeypatch.setattr(
         documents_router,
         "download_discovery_candidate",
-        lambda **_: DownloadedDocument(
-            content=b"%PDF-1.7 mock",
-            filename="report.pdf",
-            title="Report",
-            source_url="https://example.com/report.pdf",
+        lambda **kwargs: (
+            (_ for _ in ()).throw(ValueError("downloaded content is not a PDF"))
+            if kwargs["candidate"].url.endswith("/listing")
+            else DownloadedDocument(
+                content=b"%PDF-1.7 mock",
+                filename="report.pdf",
+                title="Report",
+                source_url="https://example.com/report.pdf",
+            )
         ),
     )
 
@@ -144,11 +151,17 @@ def test_auto_discover_persists_non_pdf_rejection_reason(monkeypatch, tmp_path: 
     assert response.status_code == 200
     payload = response.json()
     assert payload["ingested_count"] == 1
-    assert any(item["reason"] == "non_pdf_candidate" for item in payload["skipped"])
+    assert any(
+        item["reason"] == "ValueError: downloaded content is not a PDF"
+        for item in payload["skipped"]
+    )
 
     engine = create_engine(db_url)
     with Session(engine) as session:
         decisions = session.scalars(
             select(DocumentDiscoveryCandidate).order_by(DocumentDiscoveryCandidate.id)
         ).all()
-    assert [row.reason for row in decisions] == ["non_pdf_candidate", "ingested"]
+    assert [row.reason for row in decisions] == [
+        "ValueError: downloaded content is not a PDF",
+        "ingested",
+    ]

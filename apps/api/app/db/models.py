@@ -41,6 +41,18 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class CompanyDocumentLink(Base):
+    __tablename__ = "company_document_link"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("document.id"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class DocumentFile(Base):
     __tablename__ = "document_file"
 
@@ -213,6 +225,9 @@ class RunManifest(Base):
     retrieval_params: Mapped[str] = mapped_column(Text, nullable=False)
     model_name: Mapped[str] = mapped_column(String(256), nullable=False)
     prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_template_version: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="legacy_v1"
+    )
     git_sha: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 

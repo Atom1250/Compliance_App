@@ -15,6 +15,8 @@ _TIMESTAMP_PATTERN = re.compile(
     r"<span id=\"generated-at\">[^<]+</span>",
 )
 
+REPORT_TEMPLATE_VERSION = "gold_standard_v1"
+
 
 @dataclass(frozen=True)
 class RegistryCoverageRow:
@@ -50,6 +52,8 @@ class ReportData:
     na: int
     covered: int
     coverage_pct: float
+    overall_rating: str
+    final_determination: str
 
 
 def _to_generated_at(timestamp: datetime | None) -> str:
@@ -130,6 +134,18 @@ def build_report_data(*, run_id: int, assessments: Sequence[DatapointAssessment]
     covered = present + partial
     denominator = total - na
     coverage_pct = (covered / denominator * 100.0) if denominator else 0.0
+    if denominator == 0:
+        overall_rating = "INCOMPLETE DATA"
+        final_determination = "INCOMPLETE"
+    elif absent == 0 and partial == 0:
+        overall_rating = "COMPLIANT"
+        final_determination = "COMPLIANT"
+    elif covered > 0:
+        overall_rating = "PARTIALLY COMPLIANT"
+        final_determination = "PARTIAL"
+    else:
+        overall_rating = "NON-COMPLIANT"
+        final_determination = "HIGH RISK"
     return ReportData(
         run_id=run_id,
         rows=rows,
@@ -142,6 +158,8 @@ def build_report_data(*, run_id: int, assessments: Sequence[DatapointAssessment]
         na=na,
         covered=covered,
         coverage_pct=coverage_pct,
+        overall_rating=overall_rating,
+        final_determination=final_determination,
     )
 
 
@@ -218,11 +236,54 @@ def generate_html_report(
         "<head><meta charset=\"utf-8\"><title>Compliance Report</title></head>"
         "<body>"
         f"<h1>Compliance Report for Run {report.run_id}</h1>"
+        f"<section id=\"report-metadata\"><h2>Report Metadata</h2>"
+        "<table><tbody>"
+        f"<tr><th>Run ID</th><td>{report.run_id}</td></tr>"
+        f"<tr><th>Generated On</th><td>{generated_at_text}</td></tr>"
+        f"<tr><th>Report Template Version</th><td>{REPORT_TEMPLATE_VERSION}</td></tr>"
+        "<tr><th>Requirements Bundles</th><td>n/a</td></tr>"
+        "<tr><th>Regulatory Registry Version</th><td>n/a</td></tr>"
+        "<tr><th>Compiler Version</th><td>n/a</td></tr>"
+        "<tr><th>Model Used</th><td>n/a</td></tr>"
+        "<tr><th>Retrieval Parameters</th><td>n/a</td></tr>"
+        "<tr><th>Git SHA</th><td>n/a</td></tr>"
+        "</tbody></table></section>"
         "<section id=\"executive-summary\">"
         "<h2>Executive Summary</h2>"
         f"<p>Coverage: {report.covered}/{report.denominator_datapoints} "
         f"applicable datapoints ({report.coverage_pct:.1f}%). "
         f"NA excluded: {report.excluded_na_count}.</p>"
+        f"<p>Overall Compliance Rating: <strong>{report.overall_rating}</strong></p>"
+        f"<p>Final Determination: <strong>{report.final_determination}</strong></p>"
+        "</section>"
+        "<section id=\"regulatory-framework-applicability\">"
+        "<h2>Regulatory Framework &amp; Applicability</h2>"
+        "<p>No evidence was identified in reviewed materials.</p>"
+        "</section>"
+        "<section id=\"public-filing-inventory\">"
+        "<h2>Public Filing &amp; Disclosure Inventory</h2>"
+        "<table><thead><tr><th>Document Title</th><th>Publication Date</th>"
+        "<th>Document Type</th><th>Regime Linkage</th><th>Evidence Source ID</th>"
+        "</tr></thead><tbody></tbody></table>"
+        "</section>"
+        "<section id=\"material-topics-esrs-mapping\">"
+        "<h2>Material Topics &amp; ESRS Mapping</h2>"
+        "<p>No evidence was identified in reviewed materials.</p>"
+        "</section>"
+        "<section id=\"quantitative-performance-targets\">"
+        "<h2>Quantitative Performance &amp; Targets</h2>"
+        "<table><thead><tr><th>Target Area</th><th>Baseline Year</th><th>Baseline Value</th>"
+        "<th>Latest Value</th><th>Target</th><th>Progress %</th><th>Status</th>"
+        "</tr></thead><tbody></tbody></table>"
+        "</section>"
+        "<section id=\"esrs-disclosure-compliance-matrix\">"
+        "<h2>ESRS Disclosure Compliance Matrix</h2>"
+        "</section>"
+        "<section id=\"jurisdiction-specific-compliance\">"
+        "<h2>Jurisdiction-Specific Compliance</h2>"
+        "</section>"
+        "<section id=\"assurance-framework-alignment\">"
+        "<h2>Assurance &amp; External Framework Alignment</h2>"
         "</section>"
         "<section id=\"coverage-metrics\">"
         "<h2>Coverage Metrics</h2>"
@@ -244,6 +305,16 @@ def generate_html_report(
         "<thead><tr><th>Datapoint</th><th>Status</th><th>Value</th><th>Citations</th><th>Rationale</th></tr></thead>"
         f"<tbody>{table_rows}</tbody>"
         "</table>"
+        "</section>"
+        "<section id=\"conclusion\">"
+        "<h2>Conclusion</h2>"
+        f"<p>Final Determination: <strong>{report.final_determination}</strong></p>"
+        "</section>"
+        "<section id=\"appendix-evidence-traceability\">"
+        "<h2>Appendix A — Evidence Traceability</h2>"
+        "</section>"
+        "<section id=\"appendix-manifest-snapshot\">"
+        "<h2>Appendix B — Run Manifest Snapshot</h2>"
         "</section>"
         f"{registry_section}"
         f"<footer>Generated at <span id=\"generated-at\">{generated_at_text}</span></footer>"
