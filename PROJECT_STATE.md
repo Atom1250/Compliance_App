@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-044
+Next PR ID: PR-045
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -221,6 +221,11 @@ Next PR ID: PR-044
 - Updated README run instructions to Postgres-first flow with explicit SQLite override for transitional local runs.
 - Added defaults contract tests in `tests/test_dev_defaults_postgres.py`.
 - Added PR execution log: `docs/prs/PR-043.md`.
+- PR-044 completed (F4: Postgres migration smoke gates).
+- Added Postgres migration smoke test `tests/test_db_migrations_postgres.py` covering Alembic upgrade/downgrade/upgrade and pgvector extension presence.
+- Added CI `postgres-migration-smoke` job in `.github/workflows/ci.yml` using pgvector Postgres service and explicit Postgres test URL env.
+- Updated workflow hardening invariants in `tests/test_workflow_hardening.py` for new Postgres migration gate.
+- Added PR execution log: `docs/prs/PR-044.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
