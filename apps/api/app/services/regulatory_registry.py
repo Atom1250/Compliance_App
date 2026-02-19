@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.regulatory.canonical import sha256_checksum
+from app.regulatory.compiler import CompiledRegulatoryPlan, compile_bundle
 from app.regulatory.loader import load_bundle
 from app.regulatory.schema import RegulatoryBundle as RegulatoryBundleSchema
 from apps.api.app.db.models import RegulatoryBundle
@@ -79,3 +81,18 @@ def sync_from_filesystem(
         upsert_bundle(db, bundle=bundle)
         synced.append((bundle.bundle_id, bundle.version, checksum))
     return sorted(synced)
+
+
+def compile_from_db(
+    db: Session,
+    *,
+    bundle_id: str,
+    version: str,
+    context: dict[str, Any],
+) -> CompiledRegulatoryPlan:
+    """Load bundle payload from registry and compile deterministic plan."""
+    row = get_bundle(db, bundle_id=bundle_id, version=version)
+    if row is None:
+        raise ValueError(f"Bundle not found: {bundle_id}@{version}")
+    bundle = RegulatoryBundleSchema.model_validate(row.payload)
+    return compile_bundle(bundle, context=context)

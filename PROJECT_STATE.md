@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-010
+Next PR ID: PR-011
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -49,6 +49,11 @@ Next PR ID: PR-010
 - Added phase-in rule handling through strict safe-eval evaluation.
 - Added tests in `tests/test_regulatory_compiler.py` for deterministic ordering and phase-in behavior.
 - Added PR execution log: `docs/prs/PR-009.md`.
+- PR-010 completed (A3 Part 3: compile-from-DB adapter).
+- Added `compile_from_db()` in `apps/api/app/services/regulatory_registry.py` to load stored payloads and compile plans.
+- Added integration tests in `tests/test_regulatory_compile_from_db.py` covering sync->compile flow and missing-bundle failure.
+- Preserved deterministic compile behavior by reusing schema validation + compiler ordering logic.
+- Added PR execution log: `docs/prs/PR-010.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
