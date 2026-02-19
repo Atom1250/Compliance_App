@@ -47,7 +47,7 @@ def test_normalization_tags_dates_and_url_validation() -> None:
             "document_name": " Sample ",
             "keywords_tags": " climate | climate ; risks ",
             "effective_date": "2024",
-            "last_checked_date": "2024-12-31",
+            "last_checked_date": "2024-99-99",
             "official_source_url": "ftp://invalid.example",
         },
         row_number=2,
@@ -57,10 +57,48 @@ def test_normalization_tags_dates_and_url_validation() -> None:
     assert normalized is not None
     assert normalized["keywords_tags"] == "climate|risks"
     assert normalized["effective_date"].isoformat() == "2024-01-01"
-    assert normalized["last_checked_date"].isoformat() == "2024-12-31"
+    assert normalized["last_checked_date"] is None
     assert normalized["official_source_url"] == "ftp://invalid.example"
-    assert len(issues) == 1
-    assert issues[0].field == "official_source_url"
+    assert len(issues) == 2
+    issue_fields = {issue.field for issue in issues}
+    assert issue_fields == {"official_source_url", "last_checked_date"}
+
+
+def test_source_sheets_csv_import_has_zero_invalid_rows(tmp_path: Path) -> None:
+    source_sheets_csv = tmp_path / "regulatory_source_document_SOURCE_SHEETS_full.csv"
+    source_sheets_csv.write_text(
+        "record_id,jurisdiction,document_name,effective_date,last_checked_date,official_source_url\n"
+        "EU-L1-CSRD,EU,CSRD,2022,2025/01/15,https://eur-lex.europa.eu\n"
+        "EU-L2-ESRS-DA,EU,ESRS DA,2023-07-31,2025-99-99,https://eur-lex.europa.eu\n",
+        encoding="utf-8",
+    )
+    with _prepare_sqlite_session(tmp_path) as session:
+        summary = import_regulatory_sources(
+            session,
+            file_path=source_sheets_csv,
+            dry_run=True,
+            issues_out=tmp_path / "issues.csv",
+        )
+    assert summary.rows_seen == 2
+    assert summary.rows_deduped == 2
+    assert summary.invalid_rows == 0
+
+
+def test_missing_table_guard_returns_clear_error(tmp_path: Path) -> None:
+    source_csv = tmp_path / "regulatory_source_document_SOURCE_SHEETS_full.csv"
+    source_csv.write_text(
+        "record_id,jurisdiction,document_name\nEU-L1-CSRD,EU,CSRD\n",
+        encoding="utf-8",
+    )
+    engine = create_engine("sqlite:///:memory:")
+    with Session(engine, expire_on_commit=False) as session:
+        with pytest.raises(ValueError) as exc:
+            import_regulatory_sources(session, file_path=source_csv, dry_run=False)
+    assert (
+        "Table regulatory_source_document does not exist. "
+        "Apply migrations (alembic upgrade head) then retry."
+        in str(exc.value)
+    )
 
 
 def test_checksum_is_deterministic_for_canonical_row() -> None:

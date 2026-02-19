@@ -64,3 +64,44 @@ def test_xlsx_emits_csv_recommendation_note(
     captured = capsys.readouterr()
     assert code == 0
     assert "CSV is recommended for deterministic ingestion" in captured.out
+
+
+def test_cli_missing_table_guard_is_user_friendly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    csv_path = tmp_path / "regulatory_source_document_SOURCE_SHEETS_full.csv"
+    csv_path.write_text(
+        "record_id,jurisdiction,document_name\nEU-L1-CSRD,EU,CSRD\n",
+        encoding="utf-8",
+    )
+
+    class _DummySession:
+        def __enter__(self) -> _DummySession:
+            return self
+
+        def __exit__(self, *_args: object) -> bool:
+            return False
+
+    class _DummyFactory:
+        def __call__(self) -> _DummySession:
+            return _DummySession()
+
+    def _fake_get_session_factory() -> _DummyFactory:
+        return _DummyFactory()
+
+    def _fake_import(*_args: object, **_kwargs: object) -> object:
+        raise ValueError(
+            "Table regulatory_source_document does not exist. "
+            "Apply migrations (alembic upgrade head) then retry."
+        )
+
+    monkeypatch.setattr(cli, "get_session_factory", _fake_get_session_factory)
+    monkeypatch.setattr(cli, "import_regulatory_sources", _fake_import)
+
+    code = cli.main(["--file", str(csv_path)])
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "Table regulatory_source_document does not exist." in captured.err
+    assert "Traceback" not in captured.err

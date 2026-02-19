@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from apps.api.app.db.models import RegulatorySourceDocument
@@ -112,6 +112,34 @@ def _parse_date(value: Any) -> date | None:
     raise ValueError(f"invalid date: {text}")
 
 
+def _coerce_optional_date(
+    *,
+    raw_value: Any,
+    date_field: str,
+    row_number: int,
+    sheet: str,
+    record_id: str,
+    issues: list[ImportIssue],
+) -> date | None:
+    text = _normalize_text(raw_value)
+    if text is None:
+        return None
+    try:
+        return _parse_date(text)
+    except ValueError:
+        # Optional date fields should not fail ingestion; keep provenance in issues report.
+        issues.append(
+            ImportIssue(
+                row_number=row_number,
+                sheet=sheet,
+                record_id=record_id,
+                field=date_field,
+                message=f"unparsed date retained as null: {text}",
+            )
+        )
+        return None
+
+
 def _normalize_url(value: Any) -> tuple[str | None, str | None]:
     text = _normalize_text(value)
     if text is None:
@@ -152,39 +180,6 @@ def _normalize_row(
 
     normalized["keywords_tags"] = _normalize_tags(normalized.get("keywords_tags"))
 
-    for date_field in ("effective_date", "last_checked_date"):
-        raw = normalized.get(date_field)
-        if raw is None:
-            normalized[date_field] = None
-            continue
-        try:
-            normalized[date_field] = _parse_date(raw)
-        except ValueError as exc:
-            issues.append(
-                ImportIssue(
-                    row_number=row_number,
-                    sheet=sheet,
-                    record_id=normalized.get("record_id") or "",
-                    field=date_field,
-                    message=str(exc),
-                )
-            )
-            return None
-
-    normalized["official_source_url"], url_issue = _normalize_url(
-        normalized.get("official_source_url")
-    )
-    if url_issue is not None:
-        issues.append(
-            ImportIssue(
-                row_number=row_number,
-                sheet=sheet,
-                record_id=normalized.get("record_id") or "",
-                field="official_source_url",
-                message=url_issue,
-            )
-        )
-
     missing_required = [field for field in REQUIRED_COLUMNS if not normalized.get(field)]
     if missing_required:
         issues.append(
@@ -197,6 +192,31 @@ def _normalize_row(
             )
         )
         return None
+
+    record_id = normalized["record_id"]
+    for date_field in ("effective_date", "last_checked_date"):
+        normalized[date_field] = _coerce_optional_date(
+            raw_value=normalized.get(date_field),
+            date_field=date_field,
+            row_number=row_number,
+            sheet=sheet,
+            record_id=record_id,
+            issues=issues,
+        )
+
+    normalized["official_source_url"], url_issue = _normalize_url(
+        normalized.get("official_source_url")
+    )
+    if url_issue is not None:
+        issues.append(
+            ImportIssue(
+                row_number=row_number,
+                sheet=sheet,
+                record_id=record_id,
+                field="official_source_url",
+                message=url_issue,
+            )
+        )
     return normalized
 
 
@@ -357,6 +377,12 @@ def import_regulatory_sources(
         if issues_out is not None:
             write_issues_report(issues_out, issues)
         return summary
+
+    if not inspect(db.get_bind()).has_table("regulatory_source_document"):
+        raise ValueError(
+            "Table regulatory_source_document does not exist. "
+            "Apply migrations (alembic upgrade head) then retry."
+        )
 
     existing_records = {
         record.record_id: record

@@ -97,3 +97,4 @@ If older runs/documents are missing chunks, backfill them without resetting the 
 - Recommended CLI (CSV): `python -m apps.api.app.scripts.import_regulatory_sources --file regulatory_source_document_SOURCE_SHEETS_full.csv`
 - EU-only CSV: `python -m apps.api.app.scripts.import_regulatory_sources --file regulatory_source_document_SOURCE_SHEETS_EU_only.csv --jurisdiction EU`
 - Optional XLSX convenience remains supported via `--sheets ...`
+- Prefer `SOURCE_SHEETS_*` CSV artifacts; avoid `regulatory_source_document_full.csv` unless you preprocess non-data tabs.

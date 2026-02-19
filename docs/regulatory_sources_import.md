@@ -10,6 +10,11 @@ Use this importer to seed and maintain the source register with deterministic, i
 
 ## Recommended Ingestion (CSV-first)
 
+Use `SOURCE_SHEETS_*` CSVs to avoid non-data tabs
+(`Ops_Checklist`, `JSON_Schema`, `Lists`).
+Avoid `regulatory_source_document_full.csv` unless you intentionally preprocess
+non-data tabs first.
+
 EU-only import:
 
 ```bash
