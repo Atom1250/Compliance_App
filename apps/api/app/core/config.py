@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    startup_validate_providers: str = ""
     git_sha: str = "unknown"
     security_enabled: bool = True
     auth_api_keys: str = "dev-key"

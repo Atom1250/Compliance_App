@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-038
+Next PR ID: PR-039
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -191,6 +191,11 @@ Next PR ID: PR-038
 - Standardized report/evidence lifecycle gating with shared readiness logic, preserving 404 tenant scoping and predictable 409 not-ready contract semantics.
 - Added lifecycle integration tests in `tests/test_export_lifecycle_api.py` and updated report lifecycle fixtures to satisfy manifest readiness checks.
 - Added PR execution log: `docs/prs/PR-037.md`.
+- PR-038 completed (E3: security and secrets baseline).
+- Added startup provider validation selector `startup_validate_providers` (env: `COMPLIANCE_APP_STARTUP_VALIDATE_PROVIDERS`) for fail-fast runtime checks.
+- Added provider-specific required-config validation for `local_lm_studio`, `openai_cloud`, and `tavily` in runtime configuration validation.
+- Hardened sensitive log-field redaction for mixed-case and hyphenated key variants (for example `Authorization`, `X-Api-Key`, `openaiApiKey`).
+- Added/updated tests in `tests/test_auth_config_validation.py` and `tests/test_audit_trail.py`; execution log added at `docs/prs/PR-038.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
