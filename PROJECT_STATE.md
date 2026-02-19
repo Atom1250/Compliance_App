@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-003
+Next PR ID: PR-004
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -13,6 +13,11 @@ Next PR ID: PR-003
 - Added `app/regulatory/canonical.py` with deterministic canonical JSON and SHA-256 checksum helpers.
 - Added unit tests in `tests/test_regulatory_schema_and_canonical.py` for schema acceptance/rejection and checksum stability/change sensitivity.
 - Added PR execution log: `docs/prs/PR-002.md`.
+- PR-003 completed (A1 Part 2: loader + sample bundle).
+- Added sample fixture bundle `app/regulatory/bundles/eu_csrd_sample.json` for registry/compiler test scaffolding.
+- Added `app/regulatory/loader.py` to load + validate + return `(bundle, checksum, source_path)` deterministically.
+- Added loader tests in `tests/test_regulatory_loader.py` covering deterministic checksum/path behavior and invalid payload rejection.
+- Added PR execution log: `docs/prs/PR-003.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)

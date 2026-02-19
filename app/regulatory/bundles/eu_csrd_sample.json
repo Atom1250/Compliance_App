@@ -1,0 +1,27 @@
+{
+  "bundle_id": "eu_csrd_sample",
+  "version": "2026.01",
+  "jurisdiction": "EU",
+  "regime": "CSRD_ESRS",
+  "obligations": [
+    {
+      "obligation_id": "ESRS-E1-1",
+      "title": "Transition plan disclosure",
+      "standard_reference": "ESRS E1-1",
+      "elements": [
+        {
+          "element_id": "E1-1-narrative",
+          "label": "Transition plan narrative",
+          "required": true,
+          "phase_in_rules": [
+            {
+              "key": "reporting_year",
+              "operator": ">=",
+              "value": 2025
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
