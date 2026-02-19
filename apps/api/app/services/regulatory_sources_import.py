@@ -39,7 +39,21 @@ CANONICAL_COLUMNS = (
     "notes_for_db_tagging",
     "source_sheets",
 )
-REQUIRED_COLUMNS = ("record_id", "jurisdiction", "document_name")
+REQUIRED_COLUMNS = ("record_id", "jurisdiction")
+
+
+def _fallback_document_name(record_id: str, legal_reference: str | None) -> str:
+    base = re.sub(r"[-_]+", " ", record_id).strip()
+    name = f"{base} ({record_id})"
+    legal = _normalize_text(legal_reference)
+    if legal:
+        suffix = f" - {legal}"
+        # Keep deterministic and bounded for storage/UI readability.
+        if len(name) + len(suffix) <= 160:
+            return f"{name}{suffix}"
+        allowed = max(0, 160 - len(name) - 3)
+        return f"{name} - {legal[:allowed].rstrip()}"
+    return name
 
 
 @dataclass(slots=True)
@@ -194,6 +208,11 @@ def _normalize_row(
         return None
 
     record_id = normalized["record_id"]
+    if not normalized.get("document_name"):
+        normalized["document_name"] = _fallback_document_name(
+            record_id=record_id,
+            legal_reference=normalized.get("legal_reference"),
+        )
     for date_field in ("effective_date", "last_checked_date"):
         normalized[date_field] = _coerce_optional_date(
             raw_value=normalized.get(date_field),

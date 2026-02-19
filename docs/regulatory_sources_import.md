@@ -55,3 +55,6 @@ python -m apps.api.app.scripts.import_regulatory_sources \
 - Batch dedup key: `record_id`.
 - Upsert key: `record_id` primary key.
 - Second import of unchanged content yields only `skipped` rows.
+- Required fields: `record_id`, `jurisdiction`.
+- Recommended fields: `document_name`, `official_source_url`.
+- If `document_name` is missing, importer derives a deterministic fallback from `record_id`.
