@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-008
+Next PR ID: PR-009
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -38,6 +38,11 @@ Next PR ID: PR-008
 - Added FastAPI startup hook that runs registry sync only when explicitly enabled.
 - Added tests in `tests/test_regulatory_sync_startup.py` verifying the hook is off by default and executes when enabled.
 - Added PR execution log: `docs/prs/PR-007.md`.
+- PR-008 completed (A3 Part 1: safe evaluator context extension).
+- Added `app/regulatory/safe_eval.py` with strict AST sandboxing for structured context expressions.
+- Added explicit symbol whitelist enforcement and unknown symbol/attribute rejection behavior.
+- Added tests in `tests/test_regulatory_safe_eval.py` for positive evaluation and rejection paths.
+- Added PR execution log: `docs/prs/PR-008.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
