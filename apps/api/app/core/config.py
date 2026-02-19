@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     app_name: str = "Compliance App API"
     app_version: str = "0.1.0"
     database_url: str = "postgresql+psycopg://compliance:compliance@localhost:5432/compliance_app"
+    runtime_environment: str = "development"
+    allow_sqlite_transitional: bool = False
     object_storage_root: Path = Path(".data/object_store")
     object_storage_uri_prefix: str = "file://"
     evidence_pack_output_root: Path = Path("outputs/evidence_packs")

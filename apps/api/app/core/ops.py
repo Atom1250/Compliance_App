@@ -37,6 +37,15 @@ def redact_sensitive_fields(value: Any) -> Any:
 
 
 def validate_runtime_configuration(settings: Settings) -> None:
+    db_url = settings.database_url.lower()
+    if db_url.startswith("sqlite"):
+        is_test_env = settings.runtime_environment.lower() == "test"
+        if not is_test_env and not settings.allow_sqlite_transitional:
+            raise ValueError(
+                "Invalid runtime configuration: sqlite backend is transitional only; "
+                "use Postgres or set allow_sqlite_transitional=true"
+            )
+
     if settings.request_rate_limit_window_seconds <= 0:
         raise ValueError("Invalid runtime configuration: rate limit window must be > 0")
     if settings.request_rate_limit_max_requests <= 0:

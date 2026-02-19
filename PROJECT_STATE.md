@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-049
+Next PR ID: PR-050
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -242,6 +242,10 @@ Next PR ID: PR-049
 - Added parity harness utilities in `src/compliance_app/backend_parity.py` with normalization for backend-specific artifact shapes.
 - Added regression tests in `tests/test_backend_parity.py` for normalization behavior and Postgres-gated SQLite-vs-Postgres parity.
 - Extended Postgres E2E summary metadata in `src/compliance_app/postgres_e2e.py`; execution log added at `docs/prs/PR-048.md`.
+- PR-049 completed (F9: Postgres SoR runtime cutover).
+- Added runtime settings `runtime_environment` and `allow_sqlite_transitional` to enforce Postgres-first policy outside test mode.
+- Updated runtime validation in `apps/api/app/core/ops.py` to reject SQLite unless test mode or explicit transitional override is enabled.
+- Added enforcement tests in `tests/test_postgres_sor_enforcement.py` and test-suite SQLite guard in `tests/conftest.py`; execution log added at `docs/prs/PR-049.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
