@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-036
+Next PR ID: PR-037
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -181,6 +181,11 @@ Next PR ID: PR-036
 - Updated upload flow with `Auto-Find + Start Run`, deterministic stage updates, and automatic navigation to run status on success.
 - Added API integration coverage in `tests/test_guided_flow_api_integration.py` and updated frontend contract tests (`tests/test_web_ui_scaffold.py`, `tests/test_web_ui_step_state.py`).
 - Added PR execution log: `docs/prs/PR-035.md`.
+- PR-036 completed (E1: evidence-gating enforcement audit pass).
+- Added centralized evidence-gating enforcement in `apps/api/app/services/verification.py`.
+- `Present/Partial` assessments without `evidence_chunk_ids` now downgrade to `Absent` with explicit rationale annotation.
+- Added downgrade-path tests in `tests/test_verification.py` covering `Present` and `Partial` missing-evidence cases.
+- Added PR execution log: `docs/prs/PR-036.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
