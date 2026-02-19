@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-005
+Next PR ID: PR-006
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -23,6 +23,11 @@ Next PR ID: PR-005
 - Added Alembic migration `0013_regulatory_bundle_table.py` to create/drop `regulatory_bundle` table and indexes.
 - Extended migration tests to include regulatory table presence and explicit upgrade/downgrade smoke path.
 - Added PR execution log: `docs/prs/PR-004.md`.
+- PR-005 completed (A2 Part 2: registry store operations).
+- Added `apps/api/app/services/regulatory_registry.py` with deterministic `upsert_bundle()` and `get_bundle()` operations.
+- Implemented checksum-based idempotency/update behavior keyed by `bundle_id` + `version`.
+- Added registry tests in `tests/test_regulatory_registry.py` for idempotent upsert, retrieval, and changed-payload checksum update.
+- Added PR execution log: `docs/prs/PR-005.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
