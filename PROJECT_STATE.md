@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-021 (TBD in docs/PR_CONVEYOR_PLAN.md)
+Next PR ID: PR-022
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -106,6 +106,11 @@ Next PR ID: PR-021 (TBD in docs/PR_CONVEYOR_PLAN.md)
 - Registry-mode run execution now persists compiled plan + coverage matrix as run-scoped artifacts.
 - Evidence pack now reads registry artifacts from run-scoped storage (no compile-time dependency on current registry bundle rows).
 - Added/updated tests in `tests/test_run_execute_api.py`, `tests/test_evidence_pack.py`, and `tests/test_db_migrations.py`; execution log added at `docs/prs/PR-020.md`.
+- PR-021 completed (C1: deterministic run diagnostics API).
+- Added `GET /runs/{run_id}/diagnostics` with deterministic metrics for manifest presence, required datapoints, assessment status counts, retrieval hit count, and stage outcomes.
+- Added latest failure-reason extraction from `run.execution.failed` events for failure triage.
+- Added tests in `tests/test_run_diagnostics_api.py` for completed run diagnostics, failed run diagnostics, and tenant scoping.
+- Added PR execution log: `docs/prs/PR-021.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -121,7 +126,6 @@ Next PR ID: PR-021 (TBD in docs/PR_CONVEYOR_PLAN.md)
 - [ ] Confirm where feature flags/config lives and naming conventions.
 - [ ] Confirm test DB strategy (sqlite? postgres? docker service?).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
-- [ ] `docs/PR_CONVEYOR_PLAN.md` currently defines PRs through PR-020 only; PR-021+ scope needs to be drafted before next auto-select run.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`

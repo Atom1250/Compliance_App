@@ -383,3 +383,390 @@ Definition of Done:
 Tests:
 - `make lint`
 - `make test`
+
+---
+
+## PR-021 — C1: Deterministic Run Diagnostics API
+Objective:
+Add a deterministic diagnostics endpoint to expose run pipeline stage outcomes and failure context.
+
+Scope:
+- Add `GET /runs/{run_id}/diagnostics` (tenant scoped)
+- Include deterministic fields:
+  - run status
+  - manifest presence
+  - required datapoints count (when derivable)
+  - assessment count and status histogram
+  - retrieval hit count (unique cited chunks)
+  - latest failure reason from run events
+- Add API contract tests including failure-run coverage
+
+Definition of Done:
+- Endpoint returns stable diagnostics payload for identical DB state
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-022 — C2: Discovery Hardening (PDF-only + Deterministic Ranking)
+Objective:
+Ensure document auto-discovery is strict, auditable, and deterministic.
+
+Scope:
+- Enforce PDF-only candidate acceptance
+- Add deterministic ranking and explicit tie-break
+- Persist accepted/rejected candidate reasons
+- Add tests for file-type filtering and ranking determinism
+
+Definition of Done:
+- Non-PDF pages rejected by design
+- Ranking stable across repeated runs
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-023 — C3: Ingestion Contract Stabilization
+Objective:
+Stabilize manual and auto-ingestion contracts to prevent upload path regressions.
+
+Scope:
+- Normalize required upload metadata validation across endpoints
+- Improve 4xx error detail consistency for missing/invalid fields
+- Add integration tests for 422 and successful upload paths
+
+Definition of Done:
+- Upload APIs fail clearly and consistently for invalid payloads
+- Existing happy-path behavior preserved
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-024 — C4: Parser + Chunk Determinism Golden Tests
+Objective:
+Lock deterministic parsing/chunking behavior with repeatable goldens.
+
+Scope:
+- Add golden test fixtures for chunk ID stability
+- Validate deterministic offsets/order for repeated ingestion
+- Add parser-version pin checks in tests
+
+Definition of Done:
+- Determinism regressions in chunk IDs/ordering are caught by tests
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-025 — C5: Retrieval Explainability Artifacts
+Objective:
+Persist deterministic retrieval traces for auditability.
+
+Scope:
+- Store per-datapoint retrieval candidate lists and selected chunk IDs
+- Include tie-break metadata in stored retrieval trace
+- Add tests for ordering stability and artifact persistence
+
+Definition of Done:
+- Retrieval decisions are reproducible from stored artifacts
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-026 — C6: LLM Provider Adapter Normalization
+Objective:
+Normalize local/cloud provider response handling and deterministic schema parsing.
+
+Scope:
+- Refactor provider adapters into consistent response contract
+- Improve error mapping for provider and schema failures
+- Add adapter unit tests for valid/invalid payloads
+
+Definition of Done:
+- Local and cloud paths share stable extraction contract
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-027 — C7: Multi-Provider LLM Health Endpoint
+Objective:
+Expose deterministic health probes for both local and cloud providers.
+
+Scope:
+- Extend health endpoint to probe `local_lm_studio` and `openai_cloud`
+- Return per-provider reachability + parse status
+- Add tests with mocked transports
+
+Definition of Done:
+- Health endpoint gives actionable provider-level status
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-028 — C8: Ruleset Version Routing (Pre-2026 Support)
+Objective:
+Add deterministic ruleset selection for historical reporting periods.
+
+Scope:
+- Add routing logic for bundle/ruleset based on reporting year or range
+- Preserve explicit override behavior
+- Add tests for pre-2026 and post-2026 routing paths
+
+Definition of Done:
+- Historical runs can resolve applicable ruleset deterministically
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-029 — C9: Run Input Snapshot Freezing
+Objective:
+Freeze fully resolved run inputs for replay and audit reproducibility.
+
+Scope:
+- Persist immutable run input snapshot at execution start
+- Include resolved datapoint universe and retrieval settings
+- Add replay equivalence tests
+
+Definition of Done:
+- Run replay uses frozen inputs and reproduces output behavior
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-030 — C10: Failure Taxonomy + Retry Policy
+Objective:
+Standardize execution failure classes and deterministic retry semantics.
+
+Scope:
+- Introduce typed failure categories
+- Add deterministic retry policy for retryable categories only
+- Add tests for transitions and event logging
+
+Definition of Done:
+- Failure handling is explicit and test-covered
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-031 — D1: Report Data Model Refactor
+Objective:
+Move report generation onto typed DTOs with explicit denominator semantics.
+
+Scope:
+- Add typed report model
+- Ensure coverage denominator/exclusions are explicit
+- Update report generation tests/snapshots
+
+Definition of Done:
+- Report contract is explicit and deterministic
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-032 — D2: Report Preview API
+Objective:
+Provide in-app pre-download report preview payload.
+
+Scope:
+- Add preview endpoint returning rendered report + structured sections
+- Preserve tenant scoping and run completion constraints
+- Add API tests
+
+Definition of Done:
+- UI can preview report before download/export
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-033 — D3: Evidence Pack Preview API
+Objective:
+Provide deterministic preview of evidence pack contents before download.
+
+Scope:
+- Add endpoint listing evidence-pack files/checksums
+- Validate preview matches ZIP manifest content
+- Add integration tests
+
+Definition of Done:
+- Preview output and downloaded ZIP manifest are consistent
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-034 — D4: UI Step-State Hardening
+Objective:
+Stabilize frontend orchestration states and error handling for run setup.
+
+Scope:
+- Introduce explicit UI step-state transitions
+- Improve user-visible errors for API failures
+- Add frontend tests for stage transitions
+
+Definition of Done:
+- Setup flow avoids silent stalls/regressions
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-035 — D5: UI Discovery → Ingestion → Run Orchestration
+Objective:
+Wire discovery-driven flow into guided UI orchestration.
+
+Scope:
+- Connect company setup to discovery, ingestion, and run start
+- Add deterministic progress stage updates
+- Add frontend/API integration tests
+
+Definition of Done:
+- End-to-end guided flow works in local environment
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-036 — E1: Evidence-Gating Enforcement Audit Pass
+Objective:
+Enforce evidence gating invariants at persistence and verification boundaries.
+
+Scope:
+- Add hard guardrails rejecting Present/Partial without evidence IDs
+- Extend tests for invariant enforcement and downgrade paths
+
+Definition of Done:
+- Evidence-gating invariant is enforced centrally and tested
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-037 — E2: Export Lifecycle Contract Hardening
+Objective:
+Eliminate export/report lifecycle edge cases (404/ambiguous readiness).
+
+Scope:
+- Standardize 409/404 semantics for report/evidence readiness
+- Add deterministic readiness checks
+- Add lifecycle integration tests
+
+Definition of Done:
+- Export/report endpoints return predictable contract states
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-038 — E3: Security and Secrets Baseline
+Objective:
+Finalize local security baseline for key/config handling.
+
+Scope:
+- Harden `.env` validation + startup fail-fast for required keys by provider
+- Add sensitive log redaction checks
+- Add tests for config validation and redaction
+
+Definition of Done:
+- Secrets handling baseline established and test-covered
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-039 — E4: CI Determinism Gates Expansion
+Objective:
+Expand CI checks for determinism-critical pathways.
+
+Scope:
+- Add CI jobs/subsets for chunking, retrieval ordering, run hash, report/export snapshots
+- Validate migrations and workflow syntax in CI
+
+Definition of Done:
+- CI catches deterministic regressions earlier
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-040 — E5: UAT Harness and Golden Scenario Pack
+Objective:
+Ship reproducible UAT scenarios for local and cloud provider modes.
+
+Scope:
+- Add scenario fixtures and expected outputs
+- Add harness checks for determinism and contract compliance
+- Document operator runbook for UAT execution
+
+Definition of Done:
+- End-to-end UAT harness is reproducible and versioned
+- Tests pass
+
+Tests:
+- `make lint`
+- `make test`

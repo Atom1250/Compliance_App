@@ -71,6 +71,21 @@ class RunEventsResponse(BaseModel):
     events: list[RunEventItem]
 
 
+class RunDiagnosticsResponse(BaseModel):
+    run_id: int
+    status: str
+    compiler_mode: str
+    manifest_present: bool
+    required_datapoints_count: int | None
+    required_datapoints_error: str | None
+    assessment_count: int
+    assessment_status_counts: dict[str, int]
+    retrieval_hit_count: int
+    latest_failure_reason: str | None
+    stage_outcomes: dict[str, bool]
+    stage_event_counts: dict[str, int]
+
+
 class RunCreateRequest(BaseModel):
     company_id: int = Field(ge=1)
 
@@ -344,6 +359,114 @@ def run_manifest(
         model_name=manifest.model_name,
         prompt_hash=manifest.prompt_hash,
         git_sha=manifest.git_sha,
+    )
+
+
+@router.get("/{run_id}/diagnostics", response_model=RunDiagnosticsResponse)
+def run_diagnostics(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunDiagnosticsResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+
+    manifest = db.scalar(
+        select(RunManifest).where(
+            RunManifest.run_id == run.id, RunManifest.tenant_id == auth.tenant_id
+        )
+    )
+    manifest_present = manifest is not None
+
+    required_datapoints_count: int | None = None
+    required_datapoints_error: str | None = None
+    if manifest is not None:
+        try:
+            required = resolve_required_datapoint_ids(
+                db,
+                company_id=run.company_id,
+                bundle_id=manifest.bundle_id,
+                bundle_version=manifest.bundle_version,
+                run_id=run.id,
+            )
+            required_datapoints_count = len(required)
+        except Exception as exc:  # pragma: no cover - defensive endpoint path
+            required_datapoints_error = str(exc)
+
+    assessments = db.scalars(
+        select(DatapointAssessment)
+        .where(
+            DatapointAssessment.run_id == run.id,
+            DatapointAssessment.tenant_id == auth.tenant_id,
+        )
+        .order_by(DatapointAssessment.datapoint_key)
+    ).all()
+    assessment_status_counts = {
+        status_name: sum(1 for row in assessments if row.status == status_name)
+        for status_name in ["Present", "Partial", "Absent", "NA"]
+    }
+    assessment_count = len(assessments)
+    retrieval_hit_count = len(
+        {
+            chunk_id
+            for row in assessments
+            for chunk_id in json.loads(row.evidence_chunk_ids)
+        }
+    )
+
+    events = list_run_events(db, run_id=run.id, tenant_id=auth.tenant_id)
+    stage_events = [
+        "run.created",
+        "run.execution.queued",
+        "run.execution.started",
+        "assessment.pipeline.started",
+        "assessment.pipeline.completed",
+        "run.execution.completed",
+        "run.execution.failed",
+    ]
+    stage_event_counts = {
+        event_type: sum(1 for event in events if event.event_type == event_type)
+        for event_type in stage_events
+    }
+    stage_outcomes = {
+        event_type: stage_event_counts[event_type] > 0 for event_type in stage_events
+    }
+
+    latest_failure_reason: str | None = None
+    for event in reversed(events):
+        if event.event_type == "run.execution.failed":
+            payload = json.loads(event.payload)
+            latest_failure_reason = str(payload.get("error")) if payload.get("error") else None
+            break
+
+    append_run_event(
+        db,
+        run_id=run.id,
+        tenant_id=auth.tenant_id,
+        event_type="run.diagnostics.requested",
+        payload={"tenant_id": auth.tenant_id},
+    )
+    log_structured_event(
+        "run.diagnostics.requested",
+        run_id=run.id,
+        tenant_id=auth.tenant_id,
+    )
+    db.commit()
+
+    return RunDiagnosticsResponse(
+        run_id=run.id,
+        status=run.status,
+        compiler_mode=run.compiler_mode,
+        manifest_present=manifest_present,
+        required_datapoints_count=required_datapoints_count,
+        required_datapoints_error=required_datapoints_error,
+        assessment_count=assessment_count,
+        assessment_status_counts=assessment_status_counts,
+        retrieval_hit_count=retrieval_hit_count,
+        latest_failure_reason=latest_failure_reason,
+        stage_outcomes=stage_outcomes,
+        stage_event_counts=stage_event_counts,
     )
 
 
