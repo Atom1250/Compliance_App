@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-019
+Next PR ID: PR-020 (TBD in docs/PR_CONVEYOR_PLAN.md)
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -96,6 +96,11 @@ Next PR ID: PR-019
 - Compiled plan artifact is generated from DB registry bundle + run company context and checksum-stamped in payload.
 - Added tests in `tests/test_evidence_pack.py` to verify registry artifact inclusion and deterministic coverage matrix contents.
 - Added PR execution log: `docs/prs/PR-018.md`.
+- PR-019 completed (B5: seeded bundles + sync/compile end-to-end determinism tests).
+- Added seeded minimal bundles for EU/UK/NO and green finance under `app/regulatory/bundles/`.
+- Added end-to-end determinism test in `tests/test_regulatory_registry_end_to_end.py` covering filesystem sync idempotency and repeated compile stability.
+- Verified seeded bundles compile with deterministic ordering and non-empty obligations for a stable company context.
+- Added PR execution log: `docs/prs/PR-019.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -111,6 +116,7 @@ Next PR ID: PR-019
 - [ ] Confirm where feature flags/config lives and naming conventions.
 - [ ] Confirm test DB strategy (sqlite? postgres? docker service?).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
+- [ ] `docs/PR_CONVEYOR_PLAN.md` currently ends at PR-019; PR-020+ scope must be defined before further auto-select execution.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`

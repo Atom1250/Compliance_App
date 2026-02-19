@@ -1,0 +1,22 @@
+{
+  "bundle_id": "eu_green_bond_sample",
+  "version": "2026.01",
+  "jurisdiction": "EU",
+  "regime": "EU_GB_ICMA",
+  "obligations": [
+    {
+      "obligation_id": "EU-GB-ALLOCATION-1",
+      "title": "Annual allocation reporting",
+      "standard_reference": "EU Green Bond Standard Article 10",
+      "elements": [
+        {
+          "element_id": "allocation-breakdown",
+          "label": "Allocation breakdown by project category",
+          "required": true,
+          "phase_in_rules": []
+        }
+      ]
+    }
+  ]
+}
+
