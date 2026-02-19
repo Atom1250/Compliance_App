@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-047
+Next PR ID: PR-048
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -234,6 +234,10 @@ Next PR ID: PR-047
 - Added Postgres harness module `src/compliance_app/postgres_e2e.py` for deterministic company->upload->run->manifest/export flow checks.
 - Added CLI script `scripts/run_postgres_e2e.py` to run harness manually against a provided Postgres URL.
 - Added gated integration test `tests/test_postgres_e2e_harness.py` validating manifest/readiness/report/evidence contracts on Postgres; execution log added at `docs/prs/PR-046.md`.
+- PR-047 completed (F7: SQLite to Postgres migration tooling).
+- Added migration utility `src/compliance_app/sqlite_to_postgres.py` for deterministic transfer of core tables with stable hash verification.
+- Added CLI script `scripts/migrate_sqlite_to_postgres.py` emitting structured migration report output.
+- Added idempotency test coverage in `tests/test_sqlite_to_postgres_migration.py`; execution log added at `docs/prs/PR-047.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
