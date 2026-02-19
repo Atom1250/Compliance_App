@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-012
+Next PR ID: PR-013
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -59,6 +59,11 @@ Next PR ID: PR-012
 - Added `app/regulatory/__main__.py` entrypoint exposing `list`, `sync`, and `compile-preview` commands.
 - Added tests in `tests/test_regulatory_cli.py` for sync/list/preview behavior and safe context JSON parsing.
 - Added PR execution log: `docs/prs/PR-011.md`.
+- PR-012 completed (B1: requirements extension + bundle-view adapter).
+- Extended `app/requirements/schema.py` with optional obligations support while preserving legacy datapoint contracts.
+- Added `app/requirements/bundle_view.py` with deterministic adapters for legacy datapoints and flattened obligation elements.
+- Added back-compat tests in `tests/test_requirements_bundle_view.py` covering legacy bundle stability and obligations-native views.
+- Added PR execution log: `docs/prs/PR-012.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
