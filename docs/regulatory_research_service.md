@@ -15,6 +15,10 @@ The Regulatory Research Service is a workflow utility layer for citation-backed 
 - `COMPLIANCE_APP_FEATURE_NOTEBOOKLM_FAIL_OPEN` (default: `false`)
 - `COMPLIANCE_APP_NOTEBOOKLM_CACHE_TTL_DAYS` (default: `14`)
 - `COMPLIANCE_APP_NOTEBOOKLM_CACHE_FAILURE_TTL_MINUTES` (default: `30`)
+- `COMPLIANCE_APP_NOTEBOOKLM_MCP_BASE_URL` (default: `http://127.0.0.1:3000`)
+- `COMPLIANCE_APP_NOTEBOOKLM_NOTEBOOK_MAP_JSON` (default includes `EU-CSRD-ESRS`)
+- `COMPLIANCE_APP_NOTEBOOKLM_MCP_TIMEOUT_SECONDS` (default: `30`)
+- `COMPLIANCE_APP_NOTEBOOKLM_MCP_RETRIES` (default: `1`)
 
 ## NotebookLM rollout reference
 - https://notebooklm.google.com/notebook/7bbf7d0b-db30-488e-8d2d-e7cbad3dbbe5

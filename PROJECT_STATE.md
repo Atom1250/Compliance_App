@@ -1,8 +1,13 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-NBLM-006
+Next PR ID: PR-NBLM-007
 
 ## Completed Work
+- PR-NBLM-006 completed (NotebookLM MCP provider integration).
+- Added NotebookLM integration modules in `apps/api/app/integrations/notebooklm/` (`mcp_client`, `provider`, `parser`, typed errors).
+- Added MCP config fields and defaults for base URL, notebook map JSON, timeout, and retries.
+- Added parser/provider/client contract tests (`tests/test_notebooklm_parser.py`, `tests/test_notebooklm_provider.py`, `tests/test_notebooklm_mcp_client.py`).
+- Updated docs and env examples for NotebookLM MCP runtime settings.
 - PR-NBLM-000..PR-NBLM-005 completed (NotebookLM MCP regulatory research service foundation).
 - Added ADR `docs/adr/0003-notebooklm-regulatory-research-service.md` formalizing workflow-only usage, kill-switch controls, and breakage response plan.
 - Added feature-flagged research service modules under `apps/api/app/services/regulatory_research/` (types, provider interface, deterministic request hashing, orchestrator, citation validation).

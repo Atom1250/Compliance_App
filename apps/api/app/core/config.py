@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     feature_notebooklm_fail_open: bool = False
     notebooklm_cache_ttl_days: int = 14
     notebooklm_cache_failure_ttl_minutes: int = 30
+    notebooklm_mcp_base_url: str = "http://127.0.0.1:3000"
+    notebooklm_notebook_map_json: str = (
+        '{"EU-CSRD-ESRS":"7bbf7d0b-db30-488e-8d2d-e7cbad3dbbe5"}'
+    )
+    notebooklm_mcp_timeout_seconds: float = 30.0
+    notebooklm_mcp_retries: int = 1
 
     model_config = SettingsConfigDict(
         env_prefix="COMPLIANCE_APP_",

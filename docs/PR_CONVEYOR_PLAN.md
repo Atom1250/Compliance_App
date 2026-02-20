@@ -1581,14 +1581,60 @@ Definition of Done:
 
 ---
 
-## PR-NBLM-006 — NotebookLM Provider Adapter (Planned)
+## PR-NBLM-006 — NotebookLM Provider Adapter (Completed)
 Objective:
 Implement concrete NotebookLM MCP provider adapter wiring into `ResearchProvider`.
 
-Scope (planned):
-- Add provider implementation with robust error taxonomy.
-- Add provider health probe endpoint/command.
-- Add integration tests with deterministic fixture stubs for provider outputs.
+Scope:
+- Added HTTP JSON-RPC MCP client with timeout/retry controls and typed error handling.
+- Added NotebookLM provider implementation with corpus-key notebook resolution and ordered tool calls.
+- Added citation parser for trailing `CITATIONS:` markdown block.
+- Added tests for MCP retry behavior, provider call order, parser extraction, and default notebook mapping.
+
+Definition of Done:
+- Provider can be injected into `RegulatoryResearchService`.
+- Default notebook mapping includes `EU-CSRD-ESRS -> 7bbf7d0b-db30-488e-8d2d-e7cbad3dbbe5`.
+- Errors are typed and workflow-safe.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-007 — Provider Wiring Endpoint/CLI (Planned)
+Objective:
+Expose an internal API/CLI path to exercise NotebookLM research queries using feature-flag gates.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-008 — Research Observability + Audit Events (Planned)
+Objective:
+Add deterministic event/audit records for research requests, cache hits, validation outcomes, and failures.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-009 — NotebookLM Health Probe + Diagnostics (Planned)
+Objective:
+Add MCP/provider health probing with actionable diagnostics and non-fatal workflow behavior.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-010 — UI/Workflow Research Assist Hooks (Planned)
+Objective:
+Add internal workflow hooks to request and view requirement-linked research notes without touching scoring paths.
 
 Tests:
 - `make lint`
