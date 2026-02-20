@@ -18,7 +18,6 @@ from apps.api.app.db.models import (
     Chunk,
     Company,
     DatapointAssessment,
-    Document,
     ExtractionDiagnostics,
     RegulatoryBundle,
     Run,
@@ -30,7 +29,10 @@ from apps.api.app.services.assessment_pipeline import (
     execute_assessment_pipeline,
 )
 from apps.api.app.services.audit import append_run_event, log_structured_event
-from apps.api.app.services.company_documents import list_company_document_hashes
+from apps.api.app.services.company_documents import (
+    list_company_document_hashes,
+    list_company_document_ids,
+)
 from apps.api.app.services.compiled_plan_persistence import (
     persist_compiled_plan,
     persist_obligation_coverage,
@@ -121,6 +123,50 @@ def _classify_failure(exc: Exception) -> tuple[str, bool]:
     return "internal_error", False
 
 
+def _materialize_assessments_from_cache(
+    db: Session,
+    *,
+    run_id: int,
+    tenant_id: str,
+    output_json: str,
+) -> list[DatapointAssessment]:
+    payload = json.loads(output_json)
+    if not isinstance(payload, list):
+        raise ValueError("invalid_cached_output_format")
+    rows: list[DatapointAssessment] = []
+    for item in sorted(payload, key=lambda row: str(row.get("datapoint_key", ""))):
+        datapoint_key = str(item.get("datapoint_key") or "").strip()
+        status = str(item.get("status") or "").strip()
+        if not datapoint_key or not status:
+            continue
+        evidence_chunk_ids = item.get("evidence_chunk_ids") or []
+        if not isinstance(evidence_chunk_ids, list):
+            evidence_chunk_ids = []
+        retrieval_params = item.get("retrieval_params") or {}
+        if not isinstance(retrieval_params, dict):
+            retrieval_params = {}
+        rows.append(
+            DatapointAssessment(
+                run_id=run_id,
+                tenant_id=tenant_id,
+                datapoint_key=datapoint_key,
+                status=status,
+                value=item.get("value"),
+                evidence_chunk_ids=json.dumps(sorted(set(map(str, evidence_chunk_ids)))),
+                rationale=str(item.get("rationale") or ""),
+                model_name=str(item.get("model_name") or "deterministic-local-v1"),
+                prompt_hash=str(item.get("prompt_hash") or ""),
+                retrieval_params=json.dumps(
+                    retrieval_params, sort_keys=True, separators=(",", ":")
+                ),
+            )
+        )
+    for row in rows:
+        db.add(row)
+    db.flush()
+    return rows
+
+
 def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
     session_factory = get_session_factory()
     with session_factory() as db:
@@ -176,17 +222,10 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             ).all()
             materiality_inputs = {row.topic: row.is_material for row in materiality_rows}
 
-            document_count = int(
-                db.scalar(
-                    select(func.count())
-                    .select_from(Document)
-                    .where(
-                        Document.company_id == run.company_id,
-                        Document.tenant_id == run.tenant_id,
-                    )
-                )
-                or 0
+            company_document_ids = list_company_document_ids(
+                db, company_id=run.company_id, tenant_id=run.tenant_id
             )
+            document_count = len(company_document_ids)
             if document_count == 0:
                 append_run_event(
                     db,
@@ -196,6 +235,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     payload={
                         "tenant_id": run.tenant_id,
                         "reason": "document_universe_empty",
+                        "company_document_count": document_count,
                     },
                 )
 
@@ -311,12 +351,6 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 },
             )
 
-            company_document_ids = db.scalars(
-                select(Document.id).where(
-                    Document.company_id == run.company_id,
-                    Document.tenant_id == run.tenant_id,
-                )
-            ).all()
             chunk_count = (
                 int(
                     db.scalar(
@@ -330,7 +364,10 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 else 0
             )
             if chunk_count == 0:
-                raise ValueError("chunk_table_empty_for_run")
+                raise ValueError(
+                    "chunk_table_empty_for_run "
+                    f"(documents_in_scope={document_count}, chunks={chunk_count})"
+                )
 
             computed_assessments: list[DatapointAssessment] | None = None
 
@@ -372,6 +409,13 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 ),
                 compute_assessments=_compute_assessments,
             )
+            if cache_hit and computed_assessments is None:
+                computed_assessments = _materialize_assessments_from_cache(
+                    db,
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    output_json=output_json,
+                )
             assessment_count = len(json.loads(output_json))
 
             persist_run_manifest(

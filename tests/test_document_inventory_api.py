@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from alembic.config import Config
-from apps.api.app.db.models import Company, Document, DocumentFile
+from apps.api.app.db.models import Company, CompanyDocumentLink, Document, DocumentFile
 from apps.api.main import app
 
 AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
@@ -66,3 +66,51 @@ def test_document_inventory_returns_classified_rows(monkeypatch, tmp_path: Path)
     assert row["reporting_year"] == 2024
     assert row["classification_confidence"] == "deterministic"
     assert row["checksum"] == "b" * 64
+
+
+def test_document_inventory_includes_linked_documents(monkeypatch, tmp_path: Path) -> None:
+    db_url, company_id = _prepare_database(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        other = Company(name="Other Co", reporting_year=2024, tenant_id="default")
+        session.add(other)
+        session.flush()
+        linked_doc = Document(
+            company_id=other.id,
+            tenant_id="default",
+            title="Factbook 2024",
+            doc_type="Factbook",
+            reporting_year=2024,
+            source_url="https://example.com/factbook.pdf",
+            classification_confidence="deterministic",
+        )
+        session.add(linked_doc)
+        session.flush()
+        session.add(
+            DocumentFile(
+                document_id=linked_doc.id,
+                sha256_hash="c" * 64,
+                storage_uri="file:///tmp/factbook.pdf",
+            )
+        )
+        session.add(
+            CompanyDocumentLink(
+                company_id=company_id,
+                document_id=linked_doc.id,
+                tenant_id="default",
+            )
+        )
+        session.commit()
+
+    client = TestClient(app)
+    response = client.get(f"/documents/inventory/{company_id}", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    payload = response.json()
+    titles = [item["title"] for item in payload]
+    assert "Annual Sustainability Report 2024" in titles
+    assert "Factbook 2024" in titles

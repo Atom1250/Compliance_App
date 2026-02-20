@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.app.db.models import Document
+from apps.api.app.services.company_documents import company_document_scope_clause
 
 _DOC_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"annual.*(20\d{2})", re.IGNORECASE), "Annual Report"),
@@ -74,10 +75,13 @@ def list_document_inventory(
 ) -> list[DocumentInventoryItem]:
     rows = db.scalars(
         select(Document)
-        .where(Document.company_id == company_id, Document.tenant_id == tenant_id)
+        .where(company_document_scope_clause(company_id=company_id, tenant_id=tenant_id))
         .order_by(Document.created_at, Document.id)
     ).all()
     from apps.api.app.db.models import DocumentFile
+
+    if not rows:
+        return []
 
     checksums = {
         row.document_id: row.sha256_hash
