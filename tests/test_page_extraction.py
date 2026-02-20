@@ -128,3 +128,12 @@ def test_docx_basic_extraction() -> None:
     assert pages[0].text == "Line A\nLine B"
     assert pages[0].char_count == len("Line A\nLine B")
     assert pages[0].parser_version == "docx-xml-v1"
+
+
+def test_fallback_extraction_strips_nul_bytes() -> None:
+    content = b"abc\x00def"
+    pages = extract_pages_for_document(content, "sample.bin")
+    assert len(pages) == 1
+    assert pages[0].text == "abcdef"
+    assert pages[0].char_count == len("abcdef")
+    assert pages[0].parser_version == "raw-bytes-v1"

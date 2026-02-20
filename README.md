@@ -18,7 +18,8 @@ Initial project scaffold.
   - `COMPLIANCE_APP_DATABASE_URL=sqlite:///outputs/dev/compliance_app.sqlite make dev`
   - `COMPLIANCE_APP_ALLOW_SQLITE_TRANSITIONAL=true`
 - `make dev`, `make dev-api`, and `make dev-web` auto-load `.env` when present.
-- `make dev` and `make dev-api` also auto-import requirements bundles (`esrs_mini`, `green_finance_mini`) so run execution can start without manual DB seeding.
+- `make dev` and `make dev-api` also auto-import requirements bundles (`esrs_mini`, `esrs_mini_legacy`, `green_finance_icma_eugb`) so run execution can start without manual DB seeding.
+- `make dev` expects a reachable Docker daemon when `DEV_USE_COMPOSE=true` (default). If Docker is unavailable, set `DEV_USE_COMPOSE=false` and provide a reachable `COMPLIANCE_APP_DATABASE_URL`.
 
 ## UAT Harness
 

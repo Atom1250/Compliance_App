@@ -109,6 +109,16 @@ dev: setup
 	fi; \
 	echo "Starting local dependencies..."; \
 	if [ "$(DEV_USE_COMPOSE)" = "true" ]; then \
+		if ! command -v docker >/dev/null 2>&1; then \
+			echo "Docker CLI is not installed or not on PATH."; \
+			echo "Install/start Docker, or run with DEV_USE_COMPOSE=false and a reachable DB."; \
+			exit 1; \
+		fi; \
+		if ! docker info >/dev/null 2>&1; then \
+			echo "Docker daemon is not reachable."; \
+			echo "Start Docker Desktop (or daemon), or run with DEV_USE_COMPOSE=false and a reachable DB."; \
+			exit 1; \
+		fi; \
 		docker compose up -d postgres minio >/dev/null; \
 		postgres_ready=0; \
 		set +e; \
