@@ -26,6 +26,7 @@ class RunManifestPayload:
     model_name: str
     prompt_hash: str
     git_sha: str
+    regulatory_plan_id: int | None = None
     regulatory_registry_version: dict[str, Any] | None = None
     regulatory_compiler_version: str | None = None
     regulatory_plan_json: dict[str, Any] | None = None
@@ -86,6 +87,7 @@ def persist_run_manifest(
     if existing is None:
         manifest = RunManifest(
             run_id=payload.run_id,
+            regulatory_plan_id=payload.regulatory_plan_id,
             tenant_id=payload.tenant_id,
             document_hashes=document_hashes_json,
             bundle_id=payload.bundle_id,
@@ -106,6 +108,7 @@ def persist_run_manifest(
         return manifest
 
     existing.document_hashes = document_hashes_json
+    existing.regulatory_plan_id = payload.regulatory_plan_id
     existing.bundle_id = payload.bundle_id
     existing.bundle_version = payload.bundle_version
     existing.retrieval_params = retrieval_params_json

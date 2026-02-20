@@ -13,6 +13,8 @@ from app.requirements.importer import import_bundle, load_bundle
 from apps.api.app.db.models import (
     Chunk,
     Company,
+    CompiledObligation,
+    CompiledPlan,
     DatapointAssessment,
     Document,
     DocumentFile,
@@ -140,6 +142,29 @@ def test_run_execute_happy_path_stores_assessments(monkeypatch, tmp_path: Path) 
     assert len(stored) == 2
 
 
+def test_run_execute_fails_when_chunk_table_empty(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        session.query(Chunk).delete()
+        session.commit()
+
+    client = TestClient(app)
+    response = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert response.status_code == 200
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "failed"
+
+
 def test_run_execute_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
@@ -256,8 +281,18 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
         "top_k": 7,
     }
     assert payload["model_name"] == "deterministic-local-v1"
+    assert payload["regulatory_plan_id"] is not None
     assert len(payload["prompt_hash"]) == 64
     assert payload["git_sha"] == "deadbeef" * 5
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        plan = session.get(CompiledPlan, payload["regulatory_plan_id"])
+        assert plan is not None
+        obligations = session.scalars(
+            select(CompiledObligation).where(CompiledObligation.compiled_plan_id == plan.id)
+        ).all()
+    assert isinstance(obligations, list)
 
     engine = create_engine(db_url)
     with Session(engine) as session:

@@ -1465,3 +1465,22 @@ Definition of Done:
 Tests:
 - `make lint`
 - `make test`
+
+---
+
+## PR-REG-015 — Discovery Recall and Source Ranking Uplift (Planned)
+Objective:
+Improve deterministic discovery recall/precision for ESG filing retrieval while preserving reproducibility.
+
+Scope (planned):
+- Expand deterministic search query templates by filing taxonomy and period.
+- Add source-ranking policy with explicit tie-breaks and provenance metadata.
+- Add benchmark fixtures and acceptance gates for recall/precision drift.
+
+Definition of Done:
+- Deterministic discovery benchmark improves document recall on reference fixtures.
+- All ranking/tie-break behavior remains explicit and test-covered.
+
+Tests:
+- `make lint`
+- `make test`

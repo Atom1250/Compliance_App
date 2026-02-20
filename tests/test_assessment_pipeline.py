@@ -14,6 +14,7 @@ from apps.api.app.db.models import (
     DatapointAssessment,
     DatapointDefinition,
     Document,
+    ExtractionDiagnostics,
     RequirementBundle,
     Run,
     RunRegistryArtifact,
@@ -164,6 +165,11 @@ def test_assessment_pipeline_stores_extraction_outputs_with_manifest_fields(tmp_
             select(DatapointAssessment).where(DatapointAssessment.run_id == run.id)
         ).all()
         assert len(persisted) == 1
+        diagnostics = session.scalars(
+            select(ExtractionDiagnostics).where(ExtractionDiagnostics.run_id == run.id)
+        ).all()
+        assert len(diagnostics) == 1
+        assert diagnostics[0].diagnostics_json["failure_reason_code"] is None
         assert transport.calls[0]["temperature"] == 0.0
         retrieval_trace = session.scalar(
             select(RunRegistryArtifact).where(
@@ -260,7 +266,7 @@ def test_assessment_pipeline_applies_verification_downgrade(tmp_path: Path) -> N
 
         assert len(stored) == 1
         assessment = stored[0]
-        assert assessment.status == "Partial"
+        assert assessment.status == "Absent"
         assert "Verification downgraded" in assessment.rationale
 
 

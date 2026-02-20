@@ -1,6 +1,6 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-REG-009
+Next PR ID: PR-REG-015
 
 ## Completed Work
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
@@ -261,6 +261,12 @@ Next PR ID: PR-REG-009
 - Added minimal EU core bundle `csrd_esrs_core@2026.02` with ESRS E1-1/E1-6 and Norway overlay example, plus bundle sync CLI (`merge|sync`) and documentation.
 - Wired run execution to persist compiler outputs into manifest and updated report metadata rendering to read manifest-backed regulatory values.
 - Added read-only regulatory context APIs: `/regulatory/sources`, `/regulatory/bundles`, and `/runs/{run_id}/regulatory-plan`.
+- PR-REG-009..PR-REG-014 completed (Regulatory Context Activation + Discovery/Verification Quality).
+- Added relational persistence for regulatory execution context: `compiled_plan`, `compiled_obligation`, `obligation_coverage`, and `run_manifest.regulatory_plan_id`.
+- Added deterministic document inventory classification/storage and API surface via `/documents/inventory/{company_id}`.
+- Added extraction diagnostics persistence and stricter evidence/metric verification contracts with deterministic failure codes and downgrade semantics.
+- Added orchestration guardrails for missing compiled obligations/chunks, plus diagnostics-threshold integrity warning events.
+- Added PR execution logs: `docs/prs/PR-REG-009.md` through `docs/prs/PR-REG-014.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -312,4 +318,4 @@ Next PR ID: PR-REG-009
   - Record any new blockers/risks
 
 ## Planned Workstream (Next)
-- Next execution stream is `PR-REG-009` through `PR-REG-014` to implement discovery quality, metric typing, obligation-level coverage persistence, and orchestration guardrails.
+- Next execution stream should start at `PR-REG-015` (scope to be defined in `docs/PR_CONVEYOR_PLAN.md`).

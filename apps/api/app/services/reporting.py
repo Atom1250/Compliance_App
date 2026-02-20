@@ -203,6 +203,7 @@ def generate_html_report(
     generated_at: datetime | None = None,
     include_registry_report_matrix: bool = False,
     metadata: ReportManifestMetadata | None = None,
+    obligation_coverage_rows: Sequence[dict[str, object]] | None = None,
 ) -> str:
     """Render deterministic HTML report content from datapoint assessments."""
     report = build_report_data(run_id=run_id, assessments=assessments)
@@ -227,6 +228,34 @@ def generate_html_report(
         )
         for item in report.rows
     )
+    quantitative_rows = []
+    for item in report.rows:
+        value = item.value
+        if not value:
+            continue
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if "value" not in payload or "unit" not in payload or "year" not in payload:
+            continue
+        quantitative_rows.append(
+            "<tr>"
+            f"<td>{html.escape(item.datapoint_key)}</td>"
+            f"<td>{html.escape(str(payload.get('baseline_year', '-')))}</td>"
+            f"<td>{html.escape(str(payload.get('baseline_value', '-')))}</td>"
+            f"<td>{html.escape(str(payload.get('value')))} "
+            f"{html.escape(str(payload.get('unit')))}</td>"
+            "<td>-</td>"
+            "<td>-</td>"
+            f"<td>{html.escape(item.status)}</td>"
+            "</tr>"
+        )
+    quantitative_table_rows = "".join(quantitative_rows)
+    if not quantitative_table_rows:
+        quantitative_table_rows = ""
 
     metadata = metadata or ReportManifestMetadata()
     registry_section = ""
@@ -269,6 +298,46 @@ def generate_html_report(
         )
 
     generated_at_text = _to_generated_at(generated_at)
+    coverage_items = list(obligation_coverage_rows or [])
+    sections = {
+        "Cross-cutting": [
+            item
+            for item in coverage_items
+            if str(item.get("obligation_code", "")).startswith("ESRS-1")
+            or str(item.get("obligation_code", "")).startswith("ESRS-2")
+        ],
+        "E1": [
+            item
+            for item in coverage_items
+            if str(item.get("obligation_code", "")).startswith("ESRS-E1")
+        ],
+        "S1": [
+            item
+            for item in coverage_items
+            if str(item.get("obligation_code", "")).startswith("ESRS-S1")
+        ],
+        "G1": [
+            item
+            for item in coverage_items
+            if str(item.get("obligation_code", "")).startswith("ESRS-G1")
+        ],
+    }
+    matrix_section_rows = ""
+    for name in ["Cross-cutting", "E1", "S1", "G1"]:
+        matrix_section_rows += (
+            f"<tr><td colspan=\"4\"><strong>{html.escape(name)}</strong></td></tr>"
+        )
+        for item in sections[name]:
+            matrix_section_rows += (
+                "<tr>"
+                f"<td>{html.escape(str(item.get('obligation_code', '-')))}</td>"
+                f"<td>{html.escape(str(item.get('coverage_status', 'Absent')))}</td>"
+                f"<td>{html.escape(str(item.get('full_count', 0)))}</td>"
+                f"<td>{html.escape(str(item.get('partial_count', 0)))}</td>"
+                "</tr>"
+            )
+    if not matrix_section_rows:
+        matrix_section_rows = "<tr><td colspan=\"4\">No obligations compiled.</td></tr>"
     return (
         "<!doctype html>"
         "<html lang=\"en\">"
@@ -319,10 +388,13 @@ def generate_html_report(
         "<h2>Quantitative Performance &amp; Targets</h2>"
         "<table><thead><tr><th>Target Area</th><th>Baseline Year</th><th>Baseline Value</th>"
         "<th>Latest Value</th><th>Target</th><th>Progress %</th><th>Status</th>"
-        "</tr></thead><tbody></tbody></table>"
+        f"</tr></thead><tbody>{quantitative_table_rows}</tbody></table>"
         "</section>"
         "<section id=\"esrs-disclosure-compliance-matrix\">"
         "<h2>ESRS Disclosure Compliance Matrix</h2>"
+        "<table><thead><tr><th>ESRS Standard</th><th>Compliance Level</th>"
+        "<th>Full</th><th>Partial</th></tr></thead>"
+        f"<tbody>{matrix_section_rows}</tbody></table>"
         "</section>"
         "<section id=\"jurisdiction-specific-compliance\">"
         "<h2>Jurisdiction-Specific Compliance</h2>"

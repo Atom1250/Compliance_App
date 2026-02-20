@@ -173,6 +173,9 @@ def test_run_diagnostics_returns_deterministic_metrics(monkeypatch, tmp_path: Pa
         "NA": 0,
     }
     assert payload["retrieval_hit_count"] == 3
+    assert payload["diagnostics_count"] == 0
+    assert payload["diagnostics_failures"] == 0
+    assert payload["integrity_warning"] is False
     assert payload["latest_failure_reason"] is None
     assert payload["stage_outcomes"] == {
         "run.created": True,
@@ -200,6 +203,9 @@ def test_run_diagnostics_exposes_latest_failure_reason(monkeypatch, tmp_path: Pa
     assert payload["status"] == "failed"
     assert payload["manifest_present"] is False
     assert payload["required_datapoints_count"] is None
+    assert payload["diagnostics_count"] == 0
+    assert payload["diagnostics_failures"] == 0
+    assert payload["integrity_warning"] is False
     assert payload["latest_failure_reason"] == "provider timeout"
     assert payload["stage_outcomes"]["run.execution.failed"] is True
 

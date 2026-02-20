@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     tavily_download_timeout_seconds: float = 30.0
     tavily_max_document_bytes: int = 50000000
     tavily_discovery_budget_seconds: float = 60.0
+    integrity_warning_failure_threshold: float = 0.4
     feature_registry_compiler: bool = False
     feature_registry_report_matrix: bool = False
     regulatory_registry_sync_enabled: bool = False

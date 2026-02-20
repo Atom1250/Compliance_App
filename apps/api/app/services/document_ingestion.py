@@ -14,6 +14,7 @@ from apps.api.app.services.document_extraction import (
     extract_pages_for_document,
     persist_document_pages,
 )
+from apps.api.app.services.document_universe import classify_document
 from apps.api.app.services.object_storage import ensure_bytes_stored
 from compliance_app.document_identity import sha256_bytes
 
@@ -26,6 +27,7 @@ def ingest_document_bytes(
     title: str,
     filename: str,
     content: bytes,
+    source_url: str | None = None,
 ) -> dict[str, str | int | bool]:
     """Ingest bytes immutably with hash dedupe and deterministic extraction/chunking."""
     content_hash = sha256_bytes(content)
@@ -54,7 +56,16 @@ def ingest_document_bytes(
     stored_path = ensure_bytes_stored(settings.object_storage_root, content_hash, content)
     storage_uri = f"{settings.object_storage_uri_prefix}{stored_path.resolve()}"
 
-    document = Document(company_id=company_id, tenant_id=tenant_id, title=title)
+    classification = classify_document(title=title, filename=filename, source_url=source_url)
+    document = Document(
+        company_id=company_id,
+        tenant_id=tenant_id,
+        title=title,
+        doc_type=classification.doc_type,
+        reporting_year=classification.reporting_year,
+        source_url=source_url,
+        classification_confidence=classification.classification_confidence,
+    )
     db.add(document)
     db.flush()
     ensure_company_document_link(

@@ -16,6 +16,7 @@ from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import Company, Document, DocumentDiscoveryCandidate, DocumentFile
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.document_ingestion import ingest_document_bytes
+from apps.api.app.services.document_universe import list_document_inventory
 from apps.api.app.services.tavily_discovery import (
     download_discovery_candidate,
     is_pdf_candidate_url,
@@ -49,6 +50,17 @@ class AutoDiscoverResponse(BaseModel):
     ingested_count: int
     ingested_documents: list[AutoDiscoverItem]
     skipped: list[AutoDiscoverSkipItem]
+
+
+class DocumentInventoryItemResponse(BaseModel):
+    document_id: int
+    company_id: int
+    title: str
+    doc_type: str
+    reporting_year: int | None
+    source_url: str | None
+    checksum: str | None
+    classification_confidence: str
 
 
 def _summarize_discovery_error(exc: Exception) -> str:
@@ -224,6 +236,7 @@ def auto_discover_documents(
                 title=title[:255],
                 filename=downloaded.filename,
                 content=downloaded.content,
+                source_url=downloaded.source_url,
             )
             ingested.append(
                 AutoDiscoverItem(
@@ -295,3 +308,30 @@ def get_document(
         "sha256_hash": document_file.sha256_hash,
         "storage_uri": document_file.storage_uri,
     }
+
+
+@router.get("/inventory/{company_id}", response_model=list[DocumentInventoryItemResponse])
+def document_inventory(
+    company_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> list[DocumentInventoryItemResponse]:
+    company = db.scalar(
+        select(Company).where(Company.id == company_id, Company.tenant_id == auth.tenant_id)
+    )
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="company not found")
+    rows = list_document_inventory(db, company_id=company_id, tenant_id=auth.tenant_id)
+    return [
+        DocumentInventoryItemResponse(
+            document_id=row.document_id,
+            company_id=row.company_id,
+            title=row.title,
+            doc_type=row.doc_type,
+            reporting_year=row.reporting_year,
+            source_url=row.source_url,
+            checksum=row.checksum,
+            classification_confidence=row.classification_confidence,
+        )
+        for row in rows
+    ]

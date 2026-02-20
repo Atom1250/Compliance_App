@@ -20,6 +20,8 @@ from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
     Company,
     DatapointAssessment,
+    ExtractionDiagnostics,
+    ObligationCoverage,
     Run,
     RunEvent,
     RunManifest,
@@ -87,6 +89,9 @@ class RunDiagnosticsResponse(BaseModel):
     assessment_count: int
     assessment_status_counts: dict[str, int]
     retrieval_hit_count: int
+    diagnostics_count: int
+    diagnostics_failures: int
+    integrity_warning: bool
     latest_failure_reason: str | None
     stage_outcomes: dict[str, bool]
     stage_event_counts: dict[str, int]
@@ -108,6 +113,7 @@ class RunStatusResponse(BaseModel):
 
 class RunManifestResponse(BaseModel):
     run_id: int
+    regulatory_plan_id: int | None = None
     document_hashes: list[str]
     bundle_id: str
     bundle_version: str
@@ -394,6 +400,7 @@ def _render_report_html(db: Session, *, run: Run, tenant_id: str) -> str:
         select(RunManifest).where(RunManifest.run_id == run.id, RunManifest.tenant_id == tenant_id)
     )
     metadata = ReportManifestMetadata()
+    obligation_coverage_rows: list[dict[str, object]] = []
     if manifest is not None:
         retrieval_params = json.loads(manifest.retrieval_params)
         plan_json = (
@@ -423,11 +430,29 @@ def _render_report_html(db: Session, *, run: Run, tenant_id: str) -> str:
             applied_overlays=", ".join(overlays) if overlays else "none",
             obligations_applied_count=len(plan_json.get("obligations_applied", [])),
         )
+        if manifest.regulatory_plan_id is not None:
+            rows = db.scalars(
+                select(ObligationCoverage)
+                .where(ObligationCoverage.compiled_plan_id == manifest.regulatory_plan_id)
+                .order_by(ObligationCoverage.obligation_code)
+            ).all()
+            obligation_coverage_rows = [
+                {
+                    "obligation_code": item.obligation_code,
+                    "coverage_status": item.coverage_status,
+                    "full_count": item.full_count,
+                    "partial_count": item.partial_count,
+                    "absent_count": item.absent_count,
+                    "na_count": item.na_count,
+                }
+                for item in rows
+            ]
     return generate_html_report(
         run_id=run.id,
         assessments=assessments,
         include_registry_report_matrix=settings.feature_registry_report_matrix,
         metadata=metadata,
+        obligation_coverage_rows=obligation_coverage_rows,
     )
 
 
@@ -450,6 +475,7 @@ def _render_report_preview(
         select(RunManifest).where(RunManifest.run_id == run.id, RunManifest.tenant_id == tenant_id)
     )
     metadata = ReportManifestMetadata()
+    obligation_coverage_rows: list[dict[str, object]] = []
     if manifest is not None:
         retrieval_params = json.loads(manifest.retrieval_params)
         plan_json = (
@@ -471,11 +497,29 @@ def _render_report_preview(
             applied_overlays="none",
             obligations_applied_count=len(plan_json.get("obligations_applied", [])),
         )
+        if manifest.regulatory_plan_id is not None:
+            rows = db.scalars(
+                select(ObligationCoverage)
+                .where(ObligationCoverage.compiled_plan_id == manifest.regulatory_plan_id)
+                .order_by(ObligationCoverage.obligation_code)
+            ).all()
+            obligation_coverage_rows = [
+                {
+                    "obligation_code": item.obligation_code,
+                    "coverage_status": item.coverage_status,
+                    "full_count": item.full_count,
+                    "partial_count": item.partial_count,
+                    "absent_count": item.absent_count,
+                    "na_count": item.na_count,
+                }
+                for item in rows
+            ]
     html = generate_html_report(
         run_id=run.id,
         assessments=assessments,
         include_registry_report_matrix=settings.feature_registry_report_matrix,
         metadata=metadata,
+        obligation_coverage_rows=obligation_coverage_rows,
     )
     report = build_report_data(run_id=run.id, assessments=assessments)
     return ReportPreviewResponse(
@@ -681,6 +725,7 @@ def run_manifest(
 
     return RunManifestResponse(
         run_id=run.id,
+        regulatory_plan_id=manifest.regulatory_plan_id,
         document_hashes=json.loads(manifest.document_hashes),
         bundle_id=manifest.bundle_id,
         bundle_version=manifest.bundle_version,
@@ -779,6 +824,21 @@ def run_diagnostics(
             for chunk_id in json.loads(row.evidence_chunk_ids)
         }
     )
+    diagnostics_rows = db.scalars(
+        select(ExtractionDiagnostics)
+        .where(
+            ExtractionDiagnostics.run_id == run.id,
+            ExtractionDiagnostics.tenant_id == auth.tenant_id,
+        )
+        .order_by(ExtractionDiagnostics.datapoint_key)
+    ).all()
+    diagnostics_count = len(diagnostics_rows)
+    diagnostics_failures = sum(
+        1
+        for row in diagnostics_rows
+        if isinstance(row.diagnostics_json, dict)
+        and row.diagnostics_json.get("failure_reason_code")
+    )
 
     events = list_run_events(db, run_id=run.id, tenant_id=auth.tenant_id)
     stage_events = [
@@ -799,11 +859,14 @@ def run_diagnostics(
     }
 
     latest_failure_reason: str | None = None
+    integrity_warning = False
     for event in reversed(events):
         if event.event_type == "run.execution.failed":
             payload = json.loads(event.payload)
             latest_failure_reason = str(payload.get("error")) if payload.get("error") else None
             break
+        if event.event_type == "run.execution.integrity_warning":
+            integrity_warning = True
 
     append_run_event(
         db,
@@ -829,6 +892,9 @@ def run_diagnostics(
         assessment_count=assessment_count,
         assessment_status_counts=assessment_status_counts,
         retrieval_hit_count=retrieval_hit_count,
+        diagnostics_count=diagnostics_count,
+        diagnostics_failures=diagnostics_failures,
+        integrity_warning=integrity_warning,
         latest_failure_reason=latest_failure_reason,
         stage_outcomes=stage_outcomes,
         stage_event_counts=stage_event_counts,

@@ -15,8 +15,11 @@ from app.regulatory.datapoint_generation import generate_registry_datapoints
 from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
+    Chunk,
     Company,
     DatapointAssessment,
+    Document,
+    ExtractionDiagnostics,
     RegulatoryBundle,
     Run,
     RunMateriality,
@@ -28,6 +31,10 @@ from apps.api.app.services.assessment_pipeline import (
 )
 from apps.api.app.services.audit import append_run_event, log_structured_event
 from apps.api.app.services.company_documents import list_company_document_hashes
+from apps.api.app.services.compiled_plan_persistence import (
+    persist_compiled_plan,
+    persist_obligation_coverage,
+)
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
 from apps.api.app.services.regulatory_compiler import compile_company_regulatory_plan
@@ -103,6 +110,10 @@ def _classify_failure(exc: Exception) -> tuple[str, bool]:
         return "config_error", False
     if "Bundle not found:" in message:
         return "bundle_not_found", False
+    if "compiled_obligations_empty_for_csrd_entity" in message:
+        return "compiled_plan_empty", False
+    if "chunk_table_empty_for_run" in message:
+        return "chunk_prerequisite_missing", False
     if "llm_schema_parse_error" in message:
         return "schema_parse_error", False
     if "llm_schema_validation_error" in message:
@@ -165,6 +176,29 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             ).all()
             materiality_inputs = {row.topic: row.is_material for row in materiality_rows}
 
+            document_count = int(
+                db.scalar(
+                    select(func.count())
+                    .select_from(Document)
+                    .where(
+                        Document.company_id == run.company_id,
+                        Document.tenant_id == run.tenant_id,
+                    )
+                )
+                or 0
+            )
+            if document_count == 0:
+                append_run_event(
+                    db,
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    event_type="run.execution.warning",
+                    payload={
+                        "tenant_id": run.tenant_id,
+                        "reason": "document_universe_empty",
+                    },
+                )
+
             document_hashes = list_company_document_hashes(
                 db, company_id=run.company_id, tenant_id=run.tenant_id
             )
@@ -210,6 +244,19 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 db,
                 company=company,
             )
+            persisted_plan = persist_compiled_plan(
+                db,
+                company_id=company.id,
+                reporting_year=company.reporting_year_end or company.reporting_year,
+                jurisdictions=list(regulatory_plan_result.plan.get("jurisdictions", [])),
+                regimes=list(regulatory_plan_result.plan.get("regimes", [])),
+                plan=regulatory_plan_result.plan,
+            )
+            if run.compiler_mode == "registry" and "CSRD_ESRS" in regulatory_plan_result.plan.get(
+                "regimes", []
+            ):
+                if persisted_plan.obligations_count == 0:
+                    raise ValueError("compiled_obligations_empty_for_csrd_entity")
 
             if settings.feature_registry_compiler and run.compiler_mode == "registry":
                 compiled_for_snapshot = compile_from_db(
@@ -264,6 +311,27 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 },
             )
 
+            company_document_ids = db.scalars(
+                select(Document.id).where(
+                    Document.company_id == run.company_id,
+                    Document.tenant_id == run.tenant_id,
+                )
+            ).all()
+            chunk_count = (
+                int(
+                    db.scalar(
+                        select(func.count())
+                        .select_from(Chunk)
+                        .where(Chunk.document_id.in_(company_document_ids))
+                    )
+                    or 0
+                )
+                if company_document_ids
+                else 0
+            )
+            if chunk_count == 0:
+                raise ValueError("chunk_table_empty_for_run")
+
             computed_assessments: list[DatapointAssessment] | None = None
 
             def _compute_assessments():
@@ -310,6 +378,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 db,
                 payload=RunManifestPayload(
                     run_id=run.id,
+                    regulatory_plan_id=persisted_plan.plan_id,
                     tenant_id=run.tenant_id,
                     company_id=run.company_id,
                     bundle_id=payload.bundle_id,
@@ -359,6 +428,42 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     tenant_id=run.tenant_id,
                     compiled_plan=compiled_plan,
                     assessments=run_assessments,
+                )
+            persist_obligation_coverage(
+                db,
+                compiled_plan_id=persisted_plan.plan_id,
+                run_id=run.id,
+                tenant_id=run.tenant_id,
+            )
+            diag_rows = db.scalars(
+                select(ExtractionDiagnostics).where(
+                    ExtractionDiagnostics.run_id == run.id,
+                    ExtractionDiagnostics.tenant_id == run.tenant_id,
+                )
+            ).all()
+            failure_count = 0
+            for row in diag_rows:
+                payload_json = (
+                    row.diagnostics_json if isinstance(row.diagnostics_json, dict) else {}
+                )
+                if payload_json.get("failure_reason_code"):
+                    failure_count += 1
+            integrity_warning = False
+            if diag_rows:
+                failure_ratio = failure_count / len(diag_rows)
+                if failure_ratio > settings.integrity_warning_failure_threshold:
+                    integrity_warning = True
+            if integrity_warning:
+                append_run_event(
+                    db,
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    event_type="run.execution.integrity_warning",
+                    payload={
+                        "tenant_id": run.tenant_id,
+                        "failure_count": failure_count,
+                        "diagnostics_count": len(diag_rows),
+                    },
                 )
             run.status = "completed"
             append_run_event(
