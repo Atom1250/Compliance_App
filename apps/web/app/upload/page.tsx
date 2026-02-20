@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   autoDiscoverDocuments,
@@ -22,6 +22,22 @@ export default function UploadPage() {
   const [isGuidedRunning, setIsGuidedRunning] = useState(false);
   const [title, setTitle] = useState("Annual ESG Report");
   const [autoDiscoveryResult, setAutoDiscoveryResult] = useState<AutoDiscoverResponse | null>(null);
+  const [bundlePreset, setBundlePreset] = useState<
+    "eu_pre_2026" | "eu_post_2026" | "eu_with_jurisdiction_overlay"
+  >("eu_post_2026");
+  const [bundleVersion, setBundleVersion] = useState("2026.01");
+  const [jurisdiction, setJurisdiction] = useState("NO");
+
+  useEffect(() => {
+    const endYear = Number(window.localStorage.getItem("company_reporting_year_end") ?? "0");
+    if (Number.isFinite(endYear) && endYear > 0 && endYear < 2026) {
+      setBundlePreset("eu_pre_2026");
+      setBundleVersion("2024.01");
+      return;
+    }
+    setBundlePreset("eu_post_2026");
+    setBundleVersion("2026.01");
+  }, []);
 
   async function runUpload(form: FormData) {
     setStepState((state) => transitionOrStay(state, "validating"));
@@ -95,8 +111,6 @@ export default function UploadPage() {
       setError("Missing company id.");
       return;
     }
-    const reportingYearEnd = Number(localStorage.getItem("company_reporting_year_end") ?? "2026");
-    const bundleVersion = Number.isFinite(reportingYearEnd) && reportingYearEnd < 2026 ? "2024.01" : "2026.01";
     setIsGuidedRunning(true);
     setError("");
     setStepState((state) => transitionOrStay(state, "submitting"));
@@ -104,8 +118,12 @@ export default function UploadPage() {
     try {
       const result = await orchestrateDiscoveryAndRun({
         companyId,
-        bundleId: "esrs_mini",
         bundleVersion,
+        bundlePreset,
+        compilerMode: bundlePreset === "eu_with_jurisdiction_overlay" ? "registry" : "legacy",
+        jurisdictions:
+          bundlePreset === "eu_with_jurisdiction_overlay" ? ["EU", jurisdiction] : ["EU"],
+        regimes: ["CSRD_ESRS"],
         llmProvider: "deterministic_fallback",
         maxDocuments: 8
       });
@@ -158,6 +176,47 @@ export default function UploadPage() {
       <button type="button" onClick={runGuidedFlow} disabled={isGuidedRunning}>
         {isGuidedRunning ? "Running Guided Flow..." : "Auto-Find + Start Run"}
       </button>
+      <div className="panel">
+        <h2>Guided Run Bundle</h2>
+        <label>
+          Bundle
+          <select
+            value={bundlePreset}
+            onChange={(event) =>
+              setBundlePreset(
+                event.target.value as
+                  | "eu_pre_2026"
+                  | "eu_post_2026"
+                  | "eu_with_jurisdiction_overlay"
+              )
+            }
+          >
+            <option value="eu_pre_2026">EU regs pre-2026</option>
+            <option value="eu_post_2026">EU regs post-2026 update</option>
+            <option value="eu_with_jurisdiction_overlay">EU + jurisdiction overlay</option>
+          </select>
+        </label>
+        <label>
+          Bundle Version
+          <select value={bundleVersion} onChange={(event) => setBundleVersion(event.target.value)}>
+            <option value="2026.01">2026.01 (current CSRD/ESRS)</option>
+            <option value="2024.01">2024.01 (legacy/pre-2026 test)</option>
+          </select>
+        </label>
+        {bundlePreset === "eu_with_jurisdiction_overlay" ? (
+          <label>
+            Jurisdiction Overlay
+            <select value={jurisdiction} onChange={(event) => setJurisdiction(event.target.value)}>
+              <option value="NO">Norway (NO)</option>
+              <option value="ES">Spain (ES)</option>
+              <option value="FR">France (FR)</option>
+              <option value="DE">Germany (DE)</option>
+              <option value="NL">Netherlands (NL)</option>
+              <option value="UK">United Kingdom (UK)</option>
+            </select>
+          </label>
+        ) : null}
+      </div>
       <p>{status}</p>
       <p>Step Key: {stepState}</p>
       {error ? (

@@ -16,8 +16,12 @@ export type UploadPayload = {
 
 export type RunConfigPayload = {
   companyId: number;
-  bundleId: string;
-  bundleVersion: string;
+  bundlePreset?: "eu_pre_2026" | "eu_post_2026" | "eu_with_jurisdiction_overlay";
+  bundleId?: string;
+  bundleVersion?: string;
+  jurisdictions?: string[];
+  regimes?: string[];
+  compilerMode?: "legacy" | "registry";
   llmProvider: "deterministic_fallback" | "local_lm_studio" | "openai_cloud";
 };
 
@@ -51,6 +55,20 @@ export type GuidedRunFlowResult = {
   stages: string[];
   discovery: AutoDiscoverResponse;
 };
+
+function resolveBundleIdVersion(payload: RunConfigPayload): { bundleId: string; bundleVersion: string } {
+  if (payload.bundleId && payload.bundleVersion) {
+    return { bundleId: payload.bundleId, bundleVersion: payload.bundleVersion };
+  }
+  const preset = payload.bundlePreset ?? "eu_post_2026";
+  if (preset === "eu_pre_2026") {
+    return { bundleId: "esrs_mini", bundleVersion: payload.bundleVersion ?? "2024.01" };
+  }
+  if (preset === "eu_with_jurisdiction_overlay") {
+    return { bundleId: "esrs_mini", bundleVersion: payload.bundleVersion ?? "2026.01" };
+  }
+  return { bundleId: "esrs_mini", bundleVersion: payload.bundleVersion ?? "2026.01" };
+}
 
 export type EvidencePackPreviewResponse = {
   run_id: number;
@@ -151,6 +169,7 @@ export async function autoDiscoverDocuments(
 }
 
 export async function configureRun(payload: RunConfigPayload): Promise<{ runId: number } | null> {
+  const resolved = resolveBundleIdVersion(payload);
   const created = await request<{ run_id: number; status: string }>("/runs", {
     method: "POST",
     body: JSON.stringify({
@@ -163,9 +182,12 @@ export async function configureRun(payload: RunConfigPayload): Promise<{ runId: 
     {
       method: "POST",
       body: JSON.stringify({
-        bundle_id: payload.bundleId,
-        bundle_version: payload.bundleVersion,
-        llm_provider: payload.llmProvider
+        bundle_id: resolved.bundleId,
+        bundle_version: resolved.bundleVersion,
+        llm_provider: payload.llmProvider,
+        compiler_mode: payload.compilerMode,
+        regulatory_jurisdictions: payload.jurisdictions,
+        regulatory_regimes: payload.regimes
       })
     }
   );

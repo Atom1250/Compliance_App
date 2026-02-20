@@ -234,6 +234,42 @@ def test_run_execute_accepts_local_lm_studio_provider(monkeypatch, tmp_path: Pat
     assert terminal_status == "completed"
 
 
+def test_run_execute_accepts_regulatory_context_overrides(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    response = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": "esrs_mini",
+            "bundle_version": "2026.01",
+            "compiler_mode": "registry",
+            "regulatory_jurisdictions": ["EU", "NO"],
+            "regulatory_regimes": ["CSRD_ESRS"],
+        },
+        headers=AUTH_DEFAULT,
+    )
+    assert response.status_code == 200
+
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status in {"completed", "failed"}
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        assert run.compiler_mode == "registry"
+        company = session.get(Company, run.company_id)
+        assert company is not None
+        assert json.loads(company.regulatory_jurisdictions) == ["EU", "NO"]
+        assert json.loads(company.regulatory_regimes) == ["CSRD_ESRS"]
+
+
 def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)

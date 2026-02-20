@@ -9,8 +9,11 @@ import { stateLabel, StepState, transitionOrStay } from "../../lib/flow-state";
 
 export default function RunConfigPage() {
   const router = useRouter();
-  const [bundleId, setBundleId] = useState("esrs_mini");
+  const [bundlePreset, setBundlePreset] = useState<
+    "eu_pre_2026" | "eu_post_2026" | "eu_with_jurisdiction_overlay"
+  >("eu_post_2026");
   const [bundleVersion, setBundleVersion] = useState("2026.01");
+  const [jurisdiction, setJurisdiction] = useState("NO");
   const [llmProvider, setLlmProvider] = useState<
     "deterministic_fallback" | "local_lm_studio" | "openai_cloud"
   >(
@@ -40,8 +43,12 @@ export default function RunConfigPage() {
     try {
       const configured = await configureRun({
         companyId,
-        bundleId,
         bundleVersion,
+        bundlePreset,
+        compilerMode: bundlePreset === "eu_with_jurisdiction_overlay" ? "registry" : "legacy",
+        jurisdictions:
+          bundlePreset === "eu_with_jurisdiction_overlay" ? ["EU", jurisdiction] : ["EU"],
+        regimes: ["CSRD_ESRS"],
         llmProvider
       });
       if (!configured?.runId) {
@@ -88,8 +95,12 @@ export default function RunConfigPage() {
   useEffect(() => {
     const endYear = Number(window.localStorage.getItem("company_reporting_year_end") ?? "0");
     if (Number.isFinite(endYear) && endYear > 0 && endYear < 2026) {
+      setBundlePreset("eu_pre_2026");
       setBundleVersion("2024.01");
+      return;
     }
+    setBundlePreset("eu_post_2026");
+    setBundleVersion("2026.01");
   }, []);
 
   return (
@@ -105,8 +116,22 @@ export default function RunConfigPage() {
         }}
       >
         <label>
-          Bundle ID
-          <input value={bundleId} onChange={(event) => setBundleId(event.target.value)} required />
+          Bundle
+          <select
+            value={bundlePreset}
+            onChange={(event) =>
+              setBundlePreset(
+                event.target.value as
+                  | "eu_pre_2026"
+                  | "eu_post_2026"
+                  | "eu_with_jurisdiction_overlay"
+              )
+            }
+          >
+            <option value="eu_pre_2026">EU regs pre-2026</option>
+            <option value="eu_post_2026">EU regs post-2026 update</option>
+            <option value="eu_with_jurisdiction_overlay">EU + jurisdiction overlay</option>
+          </select>
         </label>
         <label>
           Bundle Version
@@ -115,6 +140,23 @@ export default function RunConfigPage() {
             <option value="2024.01">2024.01 (legacy/pre-2026 test)</option>
           </select>
         </label>
+        {bundlePreset === "eu_with_jurisdiction_overlay" ? (
+          <label>
+            Jurisdiction Overlay
+            <select value={jurisdiction} onChange={(event) => setJurisdiction(event.target.value)}>
+              <option value="NO">Norway (NO)</option>
+              <option value="ES">Spain (ES)</option>
+              <option value="FR">France (FR)</option>
+              <option value="DE">Germany (DE)</option>
+              <option value="NL">Netherlands (NL)</option>
+              <option value="UK">United Kingdom (UK)</option>
+            </select>
+          </label>
+        ) : null}
+        <p>
+          Bundle maps to concrete <code>bundle_id</code> + <code>bundle_version</code> at run start.
+          Version pins the exact rules release used for deterministic outputs.
+        </p>
         <label>
           Execution Provider
           <select

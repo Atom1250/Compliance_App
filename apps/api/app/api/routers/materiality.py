@@ -164,6 +164,9 @@ class RunExecuteRequest(BaseModel):
     retrieval_top_k: int = Field(default=5, ge=1, le=100)
     retrieval_model_name: str = Field(default="default", min_length=1)
     llm_provider: str = Field(default="deterministic_fallback", min_length=1)
+    compiler_mode: str | None = Field(default=None, min_length=1)
+    regulatory_jurisdictions: list[str] | None = None
+    regulatory_regimes: list[str] | None = None
     retry_failed: bool = False
 
 
@@ -917,6 +920,19 @@ def execute_run(
         requested_bundle_id=payload.bundle_id,
         requested_bundle_version=payload.bundle_version,
     )
+    if payload.compiler_mode in {"legacy", "registry"}:
+        run.compiler_mode = payload.compiler_mode
+    company = db.scalar(
+        select(Company).where(Company.id == run.company_id, Company.tenant_id == auth.tenant_id)
+    )
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="company not found")
+    if payload.regulatory_jurisdictions is not None:
+        company.regulatory_jurisdictions = json.dumps(
+            sorted(set(payload.regulatory_jurisdictions))
+        )
+    if payload.regulatory_regimes is not None:
+        company.regulatory_regimes = json.dumps(sorted(set(payload.regulatory_regimes)))
 
     assessment_count = current_assessment_count(db, run_id=run.id, tenant_id=auth.tenant_id)
     latest_execution_event = db.scalar(
