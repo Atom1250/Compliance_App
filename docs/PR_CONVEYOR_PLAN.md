@@ -1327,3 +1327,141 @@ Definition of Done:
 Tests:
 - `make lint`
 - `make test`
+
+---
+
+## PR-REG-009 — Registry Compiler Activation and Relational Plan Persistence
+Objective:
+Upgrade from manifest-only compiled context to a first-class persisted compiled plan model with strict run guardrails.
+
+Scope:
+- Add relational persistence for compiled plans and obligations:
+- `compiled_plan` (`id`, `entity_id`, `reporting_year`, `regime`, `cohort`, `phase_in_flags`, `created_at`)
+- `compiled_obligation` (`id`, `compiled_plan_id`, `obligation_code`, `mandatory`, `jurisdiction`)
+- Wire compiler output to persist both relational tables plus existing manifest fields
+- Make `run_manifest.regulatory_plan_id` required for new runs (migration + runtime enforcement)
+- Add run bootstrap guard: fail execution when in-scope CSRD entity compiles to zero obligations
+
+Definition of Done:
+- Every successful run references a persisted `regulatory_plan_id`
+- No `n/a` registry metadata for compiler-enabled runs
+- In-scope CSRD run produces `compiled_obligation > 0` or fails deterministically with explicit reason
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-010 — Document Universe and Deterministic Inventory Engine
+Objective:
+Establish deterministic document inventory independent of extraction/analysis.
+
+Scope:
+- Add document universe service (`document_universe`) that builds normalized inventory records from upload/discovery sources
+- Add deterministic regex-based classification (`annual report`, `sustainability`, `transparency act`, `slavery`, `pillar 3`, `factbook`)
+- Persist inventory fields on document records (or linked table): `doc_type`, `reporting_year`, `source_url`, checksum, classification confidence
+- Add inventory API response/UI rendering contract:
+- Table renders before extraction starts
+- Empty state: `No documents discovered`
+
+Definition of Done:
+- Inventory renders with deterministic classification for discovered/uploaded documents
+- Inventory availability is decoupled from datapoint extraction progress
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-011 — Retrieval/Verification Contract Hardening
+Objective:
+Enforce evidence contract with structured diagnostics and explicit failure codes.
+
+Scope:
+- Add persisted extraction diagnostics payload per datapoint:
+- `retrieved_chunk_ids`, `retrieved_chunk_lengths`, `numeric_matches_found`, `verification_status`
+- `failure_reason_code` enum (`CHUNK_NOT_FOUND`, `EMPTY_CHUNK`, `NUMERIC_MISMATCH`, `BASELINE_MISSING`)
+- Enforce pre-Present contract:
+- every cited chunk exists
+- every cited chunk has non-empty text
+- otherwise downgrade deterministically to `Absent`
+- Add synthetic fixture regression to assert orphan cited chunks cannot pass verification
+
+Definition of Done:
+- No orphan evidence chunk IDs survive as `Present/Partial`
+- Diagnostics are queryable and stable for each datapoint execution
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-012 — Metric Datapoint Type System
+Objective:
+Introduce typed metric datapoints with baseline-aware validation.
+
+Scope:
+- Extend datapoint schema with `type` (`narrative|metric`) and `requires_baseline`
+- Add metric extraction contract:
+- `value`, `unit`, `year`, optional baseline year/value, `source_chunk_id`
+- Add deterministic numeric pre-parser (percent, currency, tCO2e, bn/million multipliers)
+- Add downgrade rules:
+- percentage without baseline -> downgrade
+- missing year -> downgrade
+- unit mismatch -> downgrade
+
+Definition of Done:
+- Metric datapoints populate structured quantitative fields
+- Baseline-required metrics enforce downgrade semantics deterministically
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-013 — Obligation Coverage Matrix Persistence and Rendering
+Objective:
+Make obligation-level coverage a persisted first-class output.
+
+Scope:
+- Add obligation coverage aggregation service:
+- `Full` = all mandatory datapoints Present
+- `Partial` = at least one Present but not all
+- `Absent` = none Present
+- Persist matrix rows in `obligation_coverage` keyed by `compiled_plan_id`
+- Render matrix sections deterministically (`Cross-cutting`, `E1`, `S1`, `G1`) even for sparse datapoints
+
+Definition of Done:
+- Matrix is never empty for non-empty compiled plans
+- Matrix results are independent of report narrative generation
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-014 — Run Orchestration Guardrails
+Objective:
+Add explicit pre-run and in-run integrity guardrails to prevent false-complete outcomes.
+
+Scope:
+- Add run preflight checks:
+- compiled plan missing -> abort
+- document universe empty -> warn + continue
+- chunk table empty -> abort extraction stage
+- Add diagnostics threshold policy:
+- if diagnostics failure rate exceeds threshold, set run status `integrity_warning` (or equivalent deterministic terminal subtype)
+- Persist guardrail outcomes in run events and diagnostics payload
+
+Definition of Done:
+- Runs cannot silently complete without core prerequisites
+- Guardrail decisions are visible in status/diagnostics APIs and UI
+
+Tests:
+- `make lint`
+- `make test`

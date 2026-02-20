@@ -270,6 +270,25 @@ Next PR ID: PR-REG-009
 - Migration tooling: Alembic (`alembic.ini`, `alembic/versions/`, `alembic upgrade head`)
 - Baseline PR-001 test run: `make test` -> `107 passed, 1 warning`
 
+## Plan Gap Analysis (User PR-01..PR-06 vs Current State)
+- PR-01 Registry Compiler Activation + Manifest Persistence:
+- Partially complete. Registry compiler exists, runs during execution, and persists plan JSON/hash + compiler metadata in `run_manifest`.
+- Missing from requested shape: dedicated `compiled_plan`/`compiled_obligation` relational tables and a hard run-fail when compiled obligations are zero for in-scope CSRD entities.
+- PR-02 Document Universe & Inventory Engine:
+- Partially complete. Deterministic Tavily discovery, dedupe, candidate persistence, and UI guided flow exist.
+- Missing from requested shape: first-class document-universe inventory model with deterministic `doc_type` regex classification, `reporting_year`, and inventory-table-first UX independent from extraction.
+- PR-03 Retrieval / Verification Contract Hardening:
+- Partially complete. Evidence gating and downgrade logic are implemented.
+- Missing from requested shape: persisted per-datapoint diagnostics contract (`retrieved_chunk_lengths`, `numeric_matches_found`, `failure_reason_code` taxonomy) and explicit regression fixture for orphan cited chunk IDs in extraction output contract checks.
+- PR-04 Metric Datapoint Type System:
+- Mostly missing. Current pipeline is status/value/citations-focused; no explicit `metric` datapoint type contract with baseline-required downgrade semantics.
+- PR-05 ESRS Coverage Matrix Engine:
+- Partially complete. Coverage matrix rendering exists for registry/reporting paths.
+- Missing from requested shape: explicit obligation coverage persistence table and always-on obligation-level matrix rendering decoupled from extraction volume.
+- PR-06 Run Orchestration Guardrails:
+- Partially complete. Some lifecycle/readiness checks and failure taxonomy are implemented.
+- Missing from requested shape: explicit pre-run guardrail contract (`compiled_plan missing`, `chunk table empty`, `diagnostics threshold -> integrity warning`) enforced as formal run orchestration gates.
+
 ## Open Risks / Unknowns
 - [ ] Confirm migrations framework and how to run upgrade/downgrade in CI.
 - [ ] Confirm existing auth pattern for admin endpoints (or decide CLI-only for PR-011).
@@ -277,6 +296,9 @@ Next PR ID: PR-REG-009
 - [ ] Confirm test DB strategy for expanded Postgres smoke and parity gates (env-provided URL vs compose service in CI).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
 - [ ] Postgres-gated tests currently require database-create privileges for full execution; when unavailable they skip by design.
+- [ ] Discovery quality is still constrained by upstream source 403s; next phase should add deterministic alternate-source/mirror ranking and fallback fetch strategies.
+- [ ] Discovery currently retrieves high-signal documents but not a full deterministic filing universe; inventory/classification engine remains to be implemented.
+- [ ] Current execution can complete with low/no datapoint coverage in some scenarios; next phase must harden guardrails around compiled obligations, chunk availability, and diagnostics thresholds.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`
@@ -288,3 +310,6 @@ Next PR ID: PR-REG-009
   - Add PR to Completed Work (2–5 bullets)
   - Advance Next PR ID to the next PR in docs/PR_CONVEYOR_PLAN.md
   - Record any new blockers/risks
+
+## Planned Workstream (Next)
+- Next execution stream is `PR-REG-009` through `PR-REG-014` to implement discovery quality, metric typing, obligation-level coverage persistence, and orchestration guardrails.
