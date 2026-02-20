@@ -1,8 +1,13 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-REG-015
+Next PR ID: PR-NBLM-006
 
 ## Completed Work
+- PR-NBLM-000..PR-NBLM-005 completed (NotebookLM MCP regulatory research service foundation).
+- Added ADR `docs/adr/0003-notebooklm-regulatory-research-service.md` formalizing workflow-only usage, kill-switch controls, and breakage response plan.
+- Added feature-flagged research service modules under `apps/api/app/services/regulatory_research/` (types, provider interface, deterministic request hashing, orchestrator, citation validation).
+- Added Postgres-backed audit persistence with migrations `0024_regulatory_research_cache` and `0025_regulatory_requirement_research_notes`, plus repository helpers for cache and notes.
+- Added/updated tests (`tests/test_regulatory_research_hash.py`, `tests/test_regulatory_research_citations.py`, `tests/test_regulatory_research_service.py`) and docs (`README.md`, `docs/regulatory_research_service.md`, `.example.env`) for CSV-safe defaults and flag behavior.
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
 - Verified mandatory conveyor artifacts exist: `PROJECT_STATE.md`, `docs/PR_CONVEYOR_PLAN.md`, `.github/pull_request_template.md`, `.github/codex/prompts/meta_next_pr.md`.
 - Verified ADR-0001 path exists and is readable at `docs/adr/0001-architecture.md`.
@@ -305,6 +310,7 @@ Next PR ID: PR-REG-015
 - [ ] Discovery quality is still constrained by upstream source 403s; next phase should add deterministic alternate-source/mirror ranking and fallback fetch strategies.
 - [ ] Discovery currently retrieves high-signal documents but not a full deterministic filing universe; inventory/classification engine remains to be implemented.
 - [ ] Current execution can complete with low/no datapoint coverage in some scenarios; next phase must harden guardrails around compiled obligations, chunk availability, and diagnostics thresholds.
+- [ ] NotebookLM MCP integration remains operationally sensitive to service-account/browser session drift; rollout should include staged canary checks before enabling persistence.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`
@@ -318,4 +324,4 @@ Next PR ID: PR-REG-015
   - Record any new blockers/risks
 
 ## Planned Workstream (Next)
-- Next execution stream should start at `PR-REG-015` (scope to be defined in `docs/PR_CONVEYOR_PLAN.md`).
+- Next execution stream should start at `PR-NBLM-006` (next 5 PRs in the NotebookLM regulatory research series).

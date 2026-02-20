@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     feature_registry_report_matrix: bool = False
     regulatory_registry_sync_enabled: bool = False
     regulatory_registry_bundles_root: Path = Path("app/regulatory/bundles")
+    feature_reg_research_enabled: bool = False
+    feature_notebooklm_enabled: bool = False
+    feature_notebooklm_strict_citations: bool | None = None
+    feature_notebooklm_persist_results: bool = False
+    feature_notebooklm_fail_open: bool = False
+    notebooklm_cache_ttl_days: int = 14
+    notebooklm_cache_failure_ttl_minutes: int = 30
 
     model_config = SettingsConfigDict(
         env_prefix="COMPLIANCE_APP_",

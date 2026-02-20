@@ -107,3 +107,19 @@ If older runs/documents are missing chunks, backfill them without resetting the 
   - `GET /regulatory/sources?jurisdiction=EU`
   - `GET /regulatory/bundles?regime=CSRD_ESRS`
   - `GET /runs/{run_id}/regulatory-plan`
+
+## Regulatory Research Service (NotebookLM MCP, Workflow Only)
+
+This integration is workflow-only and never part of runtime scoring.
+
+- ADR: `docs/adr/0003-notebooklm-regulatory-research-service.md`
+- Detailed docs: `docs/regulatory_research_service.md`
+
+Feature flags:
+- `COMPLIANCE_APP_FEATURE_REG_RESEARCH_ENABLED` (default `false`)
+- `COMPLIANCE_APP_FEATURE_NOTEBOOKLM_ENABLED` (default `false`)
+- `COMPLIANCE_APP_FEATURE_NOTEBOOKLM_STRICT_CITATIONS` (default auto by environment)
+- `COMPLIANCE_APP_FEATURE_NOTEBOOKLM_PERSIST_RESULTS` (default `false`)
+- `COMPLIANCE_APP_FEATURE_NOTEBOOKLM_FAIL_OPEN` (default `false`)
+- `COMPLIANCE_APP_NOTEBOOKLM_CACHE_TTL_DAYS` (default `14`)
+- `COMPLIANCE_APP_NOTEBOOKLM_CACHE_FAILURE_TTL_MINUTES` (default `30`)

@@ -1484,3 +1484,112 @@ Definition of Done:
 Tests:
 - `make lint`
 - `make test`
+
+---
+
+## PR-NBLM-000 — ADR: NotebookLM MCP Regulatory Research Service (Completed)
+Objective:
+Formalize NotebookLM as workflow-only research support with explicit scoring isolation.
+
+Scope:
+- Add ADR documenting usage boundaries, non-goals, governance, and breakage handling.
+- Include rollout notebook reference and kill-switch requirement.
+
+Definition of Done:
+- ADR states: no scoring-path dependency on NotebookLM.
+- ADR states: integration is behind feature flags + kill switch.
+- ADR includes clear disable/fallback breakage plan.
+
+---
+
+## PR-NBLM-001 — Research Provider Interface + Orchestrator (Completed)
+Objective:
+Add provider-agnostic research abstraction with deterministic request hashing.
+
+Scope:
+- Add request/response/citation types.
+- Add provider interface.
+- Add research service orchestrator with provider injection.
+- Add unit tests for hash determinism and service pass-through behavior.
+
+Definition of Done:
+- New research modules compile and tests pass.
+- No scoring modules import research package.
+
+---
+
+## PR-NBLM-002 — Feature Flags + Kill Switch (Completed)
+Objective:
+Add safe-default feature controls with deterministic disabled behavior.
+
+Scope:
+- Add `FEATURE_REG_RESEARCH_ENABLED`, `FEATURE_NOTEBOOKLM_ENABLED`, strict-citation, persist, fail-open, and cache TTL settings.
+- Service returns deterministic stub response when disabled.
+- Document flags in README/.example env.
+
+Definition of Done:
+- Default configuration performs no external calls.
+- Disabled mode returns deterministic `stub` response.
+
+---
+
+## PR-NBLM-003 — Citation Validation Policy (Completed)
+Objective:
+Enforce citation quality contract before any persistence path.
+
+Scope:
+- Add citation validator with strict/non-strict modes.
+- Add typed citation validation error.
+- Wire validator into research service.
+- Add tests for strict reject/non-strict persist gating.
+
+Definition of Done:
+- Strict mode rejects empty/invalid citations.
+- Non-strict mode allows responses but blocks persistence when citation quality is insufficient.
+
+---
+
+## PR-NBLM-004 — DB-Backed Research Cache (Completed)
+Objective:
+Add deterministic request-response caching in Postgres.
+
+Scope:
+- Migration + model for `regulatory_research_cache`.
+- Cache repo with read-through and TTL behavior.
+- Service cache-hit short-circuit and failure caching.
+- Tests for hit/miss/failure paths.
+
+Definition of Done:
+- Cache hit bypasses provider call.
+- Success and failure outcomes are persisted with TTLs.
+
+---
+
+## PR-NBLM-005 — Requirement-Linked Research Notes (Completed)
+Objective:
+Persist additive research notes linked to requirements without mutating canonical requirement records.
+
+Scope:
+- Migration + model for `regulatory_requirement_research_notes`.
+- Notes repo and service method `query_and_maybe_persist`.
+- Feature-flag and citation-gated persistence behavior.
+- Tests for enabled/disabled persistence and citation enforcement.
+
+Definition of Done:
+- Notes are persisted only when enabled and citations allow persistence.
+- Canonical requirement content is not auto-mutated.
+
+---
+
+## PR-NBLM-006 — NotebookLM Provider Adapter (Planned)
+Objective:
+Implement concrete NotebookLM MCP provider adapter wiring into `ResearchProvider`.
+
+Scope (planned):
+- Add provider implementation with robust error taxonomy.
+- Add provider health probe endpoint/command.
+- Add integration tests with deterministic fixture stubs for provider outputs.
+
+Tests:
+- `make lint`
+- `make test`
