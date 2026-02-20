@@ -1602,9 +1602,19 @@ Tests:
 
 ---
 
-## PR-NBLM-007 — Provider Wiring Endpoint/CLI (Planned)
+## PR-NBLM-007 — Infra Sidecar + Compose Profile (Completed)
 Objective:
-Expose an internal API/CLI path to exercise NotebookLM research queries using feature-flag gates.
+Provide a standard dev/staging NotebookLM MCP sidecar path without production impact.
+
+Scope:
+- Added `docker/compose.notebooklm.yml` for standalone NotebookLM MCP sidecar runtime.
+- Added persistent named volumes for Chrome profile/config.
+- Added runbook `docs/runbooks/notebooklm-mcp-local-setup.md`.
+- Added `.gitignore` guards for any local NotebookLM artifacts.
+
+Definition of Done:
+- Sidecar compose file exists and is documented.
+- Backend can be pointed at sidecar via `COMPLIANCE_APP_NOTEBOOKLM_MCP_BASE_URL`.
 
 Tests:
 - `make lint`
@@ -1612,9 +1622,22 @@ Tests:
 
 ---
 
-## PR-NBLM-008 — Research Observability + Audit Events (Planned)
+## PR-NBLM-008 — Internal Workflow API + CLI (Completed)
 Objective:
-Add deterministic event/audit records for research requests, cache hits, validation outcomes, and failures.
+Expose internal-only research query paths for analysts/Codex workflows (no scoring integration).
+
+Scope:
+- Added internal endpoints:
+  - `POST /internal/regulatory-research/query`
+  - `POST /internal/regulatory-research/requirements/{requirement_id}/query`
+- Added CLI wrapper:
+  - `python -m apps.api.app.scripts.regulatory_research_query ...`
+- Added schema docs in `docs/regulatory_research_service.md`.
+
+Definition of Done:
+- Endpoints are internal prefix + auth-protected.
+- Feature flag gate enforced.
+- Response includes answer/citations/provider/request hash/persisted note id.
 
 Tests:
 - `make lint`
@@ -1622,9 +1645,19 @@ Tests:
 
 ---
 
-## PR-NBLM-009 — NotebookLM Health Probe + Diagnostics (Planned)
+## PR-NBLM-009 — CI Stub Provider Safety Harness (Completed)
 Objective:
-Add MCP/provider health probing with actionable diagnostics and non-fatal workflow behavior.
+Ensure CI/dev tests do not require NotebookLM MCP auth/session.
+
+Scope:
+- Added deterministic stub provider for research flows.
+- Added provider factory selecting stub when NotebookLM flag is off.
+- Added tests for stub path and internal route behavior under flag gating.
+- Added manual integration runbook for NotebookLM-connected verification.
+
+Definition of Done:
+- CI research tests pass with NotebookLM disabled.
+- Stub path remains deterministic and citation-valid.
 
 Tests:
 - `make lint`
@@ -1632,9 +1665,32 @@ Tests:
 
 ---
 
-## PR-NBLM-010 — UI/Workflow Research Assist Hooks (Planned)
+## PR-NBLM-010 — Ops Runbooks: Auth, Monitoring, Breakage, Data Governance (Completed)
 Objective:
-Add internal workflow hooks to request and view requirement-linked research notes without touching scoring paths.
+Document operational controls and breakage playbook for NotebookLM workflow usage.
+
+Scope:
+- Added:
+  - `docs/runbooks/notebooklm-auth-governance.md`
+  - `docs/runbooks/notebooklm-monitoring.md`
+  - `docs/runbooks/notebooklm-breakage-response.md`
+  - `docs/runbooks/notebooklm-data-governance.md`
+- Explicit kill-switch in <=3 steps.
+- Monitoring signals and governance boundary documented.
+
+Definition of Done:
+- Runbooks define executable kill switch and fallback behavior.
+- Workflow-only/non-scoring boundary documented in operations docs.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-011 — Research Health Probe Endpoint (Planned)
+Objective:
+Add NotebookLM MCP health probe endpoint with actionable diagnostics for workflow operators.
 
 Tests:
 - `make lint`

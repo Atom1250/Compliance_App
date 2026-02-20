@@ -21,6 +21,12 @@ class ResearchActor:
     id: str
 
 
+@dataclass(frozen=True)
+class ResearchQueryResult:
+    response: ResearchResponse
+    note_id: int | None
+
+
 class RegulatoryResearchService:
     def __init__(
         self,
@@ -57,7 +63,7 @@ class RegulatoryResearchService:
                 req=req,
                 message="Regulatory research disabled by feature flag.",
             )
-        if not self._settings.feature_notebooklm_enabled:
+        if self._provider_name == "notebooklm" and not self._settings.feature_notebooklm_enabled:
             return self._disabled_response(
                 req=req,
                 message="NotebookLM provider disabled by feature flag.",
@@ -118,14 +124,27 @@ class RegulatoryResearchService:
         req: ResearchRequest,
         actor: ResearchActor,
     ) -> ResearchResponse:
+        return self.query_and_maybe_persist_with_note(
+            db,
+            req=req,
+            actor=actor,
+        ).response
+
+    def query_and_maybe_persist_with_note(
+        self,
+        db: Session,
+        *,
+        req: ResearchRequest,
+        actor: ResearchActor,
+    ) -> ResearchQueryResult:
         response = self.query(db, req=req)
         if not self._settings.feature_notebooklm_persist_results:
-            return response
+            return ResearchQueryResult(response=response, note_id=None)
         if req.requirement_id is None:
             raise ValueError("requirement_id is required when persistence is enabled")
         if not response.can_persist:
             raise ValueError("Cannot persist research response without valid citations")
-        notes_repo.insert_note(
+        note = notes_repo.insert_note(
             db,
             requirement_id=req.requirement_id,
             request_hash=response.request_hash,
@@ -138,4 +157,4 @@ class RegulatoryResearchService:
             created_by=actor.id,
         )
         db.commit()
-        return response
+        return ResearchQueryResult(response=response, note_id=note.id)

@@ -3,6 +3,7 @@
 from apps.api.app.services.regulatory_research.service import (
     RegulatoryResearchService,
     ResearchActor,
+    ResearchQueryResult,
 )
 from apps.api.app.services.regulatory_research.types import (
     Citation,
@@ -13,6 +14,7 @@ from apps.api.app.services.regulatory_research.types import (
 __all__ = [
     "Citation",
     "ResearchActor",
+    "ResearchQueryResult",
     "ResearchRequest",
     "ResearchResponse",
     "RegulatoryResearchService",

@@ -1,8 +1,13 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-NBLM-007
+Next PR ID: PR-NBLM-011
 
 ## Completed Work
+- PR-NBLM-007..PR-NBLM-010 completed (NotebookLM infra, workflow API, CI stub safety, ops runbooks).
+- Added NotebookLM sidecar compose file `docker/compose.notebooklm.yml` plus local setup/manual integration runbooks.
+- Added internal regulatory research endpoints and CLI (`/internal/regulatory-research/*`, `python -m apps.api.app.scripts.regulatory_research_query`).
+- Added deterministic stub provider factory path for CI/offline runs and new API/provider contract tests.
+- Added operational runbooks for auth governance, monitoring, breakage response, and data-governance controls.
 - PR-NBLM-006 completed (NotebookLM MCP provider integration).
 - Added NotebookLM integration modules in `apps/api/app/integrations/notebooklm/` (`mcp_client`, `provider`, `parser`, typed errors).
 - Added MCP config fields and defaults for base URL, notebook map JSON, timeout, and retries.
@@ -329,4 +334,4 @@ Next PR ID: PR-NBLM-007
   - Record any new blockers/risks
 
 ## Planned Workstream (Next)
-- Next execution stream should start at `PR-NBLM-006` (next 5 PRs in the NotebookLM regulatory research series).
+- Next execution stream should start at `PR-NBLM-011`.

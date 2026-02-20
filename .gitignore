@@ -16,6 +16,11 @@ outputs/
 apps/web/.next/
 apps/web/node_modules/
 
+# NotebookLM MCP local artifacts
+.data/notebooklm/
+docker/notebooklm/.secrets/
+docker/notebooklm/chrome_profile/
+
 # IDE
 .vscode/
 .DS_Store

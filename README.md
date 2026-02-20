@@ -127,3 +127,14 @@ Feature flags:
 - `COMPLIANCE_APP_NOTEBOOKLM_NOTEBOOK_MAP_JSON` (default includes `EU-CSRD-ESRS`)
 - `COMPLIANCE_APP_NOTEBOOKLM_MCP_TIMEOUT_SECONDS` (default `30`)
 - `COMPLIANCE_APP_NOTEBOOKLM_MCP_RETRIES` (default `1`)
+
+NotebookLM MCP sidecar (dev/staging):
+- `docker compose -f docker/compose.notebooklm.yml up -d`
+- Runbook: `docs/runbooks/notebooklm-mcp-local-setup.md`
+
+Internal research workflow API:
+- `POST /internal/regulatory-research/query`
+- `POST /internal/regulatory-research/requirements/{requirement_id}/query`
+
+CLI helper:
+- `python -m apps.api.app.scripts.regulatory_research_query --corpus EU-CSRD-ESRS --mode qa --question "..."`.

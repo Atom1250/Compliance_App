@@ -22,3 +22,23 @@ The Regulatory Research Service is a workflow utility layer for citation-backed 
 
 ## NotebookLM rollout reference
 - https://notebooklm.google.com/notebook/7bbf7d0b-db30-488e-8d2d-e7cbad3dbbe5
+
+## Internal workflow API
+- `POST /internal/regulatory-research/query`
+- `POST /internal/regulatory-research/requirements/{requirement_id}/query`
+
+Response shape:
+- `answer_markdown`
+- `citations[]`
+- `provider`
+- `request_hash`
+- `latency_ms`
+- `persisted_note_id` (nullable)
+
+## CLI
+```bash
+python -m apps.api.app.scripts.regulatory_research_query \
+  --corpus EU-CSRD-ESRS \
+  --mode mapping \
+  --question "Map ESRS E1-1 transition plan obligations"
+```
