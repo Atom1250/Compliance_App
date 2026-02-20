@@ -59,6 +59,7 @@ class RunExecutionPayload:
     retrieval_top_k: int
     retrieval_model_name: str
     llm_provider: str
+    research_provider: str = "disabled"
     bypass_cache: bool = False
 
 
@@ -190,6 +191,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 "bundle_id": payload.bundle_id,
                 "bundle_version": payload.bundle_version,
                 "llm_provider": payload.llm_provider,
+                "research_provider": payload.research_provider,
                 "bypass_cache": payload.bypass_cache,
             },
         )
@@ -200,6 +202,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             bundle_id=payload.bundle_id,
             bundle_version=payload.bundle_version,
             llm_provider=payload.llm_provider,
+            research_provider=payload.research_provider,
             bypass_cache=payload.bypass_cache,
         )
         db.commit()
@@ -258,6 +261,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 "bundle_version": payload.bundle_version,
                 "compiler_mode": run.compiler_mode,
                 "llm_provider": payload.llm_provider,
+                "research_provider": payload.research_provider,
                 "query_mode": "hybrid",
                 "retrieval_model_name": payload.retrieval_model_name,
                 "retrieval_policy": retrieval_policy_to_dict(retrieval_policy),
@@ -283,6 +287,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 "bundle_version": payload.bundle_version,
                 "compiler_mode": run.compiler_mode,
                 "llm_provider": payload.llm_provider,
+                "research_provider": payload.research_provider,
                 "model_name": extraction_client.model_name,
                 "retrieval_params": retrieval_params,
             }
@@ -533,6 +538,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     "tenant_id": run.tenant_id,
                     "assessment_count": assessment_count,
                     "cache_hit": cache_hit,
+                    "research_provider": payload.research_provider,
                 },
             )
             log_structured_event(
@@ -541,6 +547,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 tenant_id=run.tenant_id,
                 assessment_count=assessment_count,
                 cache_hit=cache_hit,
+                research_provider=payload.research_provider,
             )
             db.commit()
         except Exception as exc:  # pragma: no cover - defensive worker path

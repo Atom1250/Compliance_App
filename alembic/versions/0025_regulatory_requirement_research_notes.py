@@ -1,6 +1,6 @@
 """Add regulatory_requirement_research_notes table.
 
-Revision ID: 0025_regulatory_requirement_research_notes
+Revision ID: 0025_reg_research_notes
 Revises: 0024_regulatory_research_cache
 Create Date: 2026-02-20
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "0025_regulatory_requirement_research_notes"
+revision: str = "0025_reg_research_notes"
 down_revision: str | None = "0024_regulatory_research_cache"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

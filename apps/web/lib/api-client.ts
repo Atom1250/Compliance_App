@@ -23,6 +23,7 @@ export type RunConfigPayload = {
   regimes?: string[];
   compilerMode?: "legacy" | "registry";
   llmProvider: "deterministic_fallback" | "local_lm_studio" | "openai_cloud";
+  regulatoryResearchProvider?: "disabled" | "stub" | "notebooklm";
 };
 
 export type LLMHealthResponse = {
@@ -62,6 +63,7 @@ export type RunDiagnosticsResponse = {
   status: string;
   compiler_mode: string;
   llm_provider: string | null;
+  regulatory_research_provider: string | null;
   cache_hit: boolean | null;
   manifest_present: boolean;
   direct_document_count: number;
@@ -210,6 +212,7 @@ export async function configureRun(payload: RunConfigPayload): Promise<{ runId: 
         bundle_id: resolved.bundleId,
         bundle_version: resolved.bundleVersion,
         llm_provider: payload.llmProvider,
+        regulatory_research_provider: payload.regulatoryResearchProvider ?? "disabled",
         compiler_mode: payload.compilerMode,
         regulatory_jurisdictions: payload.jurisdictions,
         regulatory_regimes: payload.regimes
@@ -250,7 +253,8 @@ export async function fetchRunDiagnostics(runId: number): Promise<RunDiagnostics
 
 export async function rerunWithoutCache(
   runId: number,
-  llmProvider?: "deterministic_fallback" | "local_lm_studio" | "openai_cloud"
+  llmProvider?: "deterministic_fallback" | "local_lm_studio" | "openai_cloud",
+  regulatoryResearchProvider?: "disabled" | "stub" | "notebooklm"
 ): Promise<{ source_run_id: number; run_id: number; status: string }> {
   return request<{ source_run_id: number; run_id: number; status: string }>(
     `/runs/${runId}/rerun`,
@@ -258,7 +262,8 @@ export async function rerunWithoutCache(
       method: "POST",
       body: JSON.stringify({
         bypass_cache: true,
-        llm_provider: llmProvider
+        llm_provider: llmProvider,
+        regulatory_research_provider: regulatoryResearchProvider
       })
     }
   );

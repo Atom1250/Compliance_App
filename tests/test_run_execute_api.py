@@ -235,6 +235,36 @@ def test_run_execute_accepts_local_lm_studio_provider(monkeypatch, tmp_path: Pat
     assert terminal_status == "completed"
 
 
+def test_run_execute_accepts_regulatory_research_provider(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    response = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": "esrs_mini",
+            "bundle_version": "2026.01",
+            "llm_provider": "deterministic_fallback",
+            "regulatory_research_provider": "notebooklm",
+        },
+        headers=AUTH_DEFAULT,
+    )
+    assert response.status_code == 200
+    events = client.get(f"/runs/{run_id}/events", headers=AUTH_DEFAULT)
+    assert events.status_code == 200
+    queued = next(
+        item
+        for item in events.json()["events"]
+        if item["event_type"] == "run.execution.queued"
+    )
+    assert queued["payload"]["regulatory_research_provider"] == "notebooklm"
+
+
 def test_run_execute_accepts_regulatory_context_overrides(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
@@ -382,6 +412,7 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
         "bundle_version": "2026.01",
         "compiler_mode": "legacy",
         "llm_provider": "deterministic_fallback",
+        "research_provider": "disabled",
         "query_mode": "hybrid",
         "retrieval_policy": {
             "lexical_weight": 0.6,

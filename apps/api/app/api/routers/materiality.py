@@ -88,6 +88,7 @@ class RunDiagnosticsResponse(BaseModel):
     status: str
     compiler_mode: str
     llm_provider: str | None
+    regulatory_research_provider: str | None
     cache_hit: bool | None
     manifest_present: bool
     direct_document_count: int
@@ -174,6 +175,7 @@ class RunExecuteRequest(BaseModel):
     retrieval_top_k: int = Field(default=5, ge=1, le=100)
     retrieval_model_name: str = Field(default="default", min_length=1)
     llm_provider: str = Field(default="deterministic_fallback", min_length=1)
+    regulatory_research_provider: str = Field(default="disabled", min_length=1)
     compiler_mode: str | None = Field(default=None, min_length=1)
     regulatory_jurisdictions: list[str] | None = None
     regulatory_regimes: list[str] | None = None
@@ -189,6 +191,7 @@ class RunExecuteResponse(BaseModel):
 
 class RunRerunRequest(BaseModel):
     llm_provider: str | None = Field(default=None, min_length=1)
+    regulatory_research_provider: str | None = Field(default=None, min_length=1)
     bypass_cache: bool = True
 
 
@@ -911,6 +914,7 @@ def run_diagnostics(
     latest_failure_reason: str | None = None
     llm_provider: str | None = None
     cache_hit: bool | None = None
+    regulatory_research_provider: str | None = None
     integrity_warning = False
     for event in reversed(events):
         if event.event_type == "run.execution.completed" and cache_hit is None:
@@ -928,6 +932,16 @@ def run_diagnostics(
             provider = payload.get("llm_provider")
             if isinstance(provider, str):
                 llm_provider = provider
+        if (
+            event.event_type in {"run.execution.started", "run.execution.queued"}
+            and regulatory_research_provider is None
+        ):
+            payload = json.loads(event.payload)
+            provider = payload.get("regulatory_research_provider") or payload.get(
+                "research_provider"
+            )
+            if isinstance(provider, str):
+                regulatory_research_provider = provider
         if event.event_type == "run.execution.integrity_warning":
             integrity_warning = True
 
@@ -951,6 +965,7 @@ def run_diagnostics(
         status=run.status,
         compiler_mode=run.compiler_mode,
         llm_provider=llm_provider,
+        regulatory_research_provider=regulatory_research_provider,
         cache_hit=cache_hit,
         manifest_present=manifest_present,
         direct_document_count=direct_document_count,
@@ -1097,6 +1112,7 @@ def execute_run(
             "bundle_version": resolved.bundle_version,
             "retry_failed": payload.retry_failed,
             "llm_provider": payload.llm_provider,
+            "regulatory_research_provider": payload.regulatory_research_provider,
             "bypass_cache": payload.bypass_cache,
         },
     )
@@ -1108,6 +1124,7 @@ def execute_run(
         bundle_version=resolved.bundle_version,
         retry_failed=payload.retry_failed,
         llm_provider=payload.llm_provider,
+        regulatory_research_provider=payload.regulatory_research_provider,
         bypass_cache=payload.bypass_cache,
     )
     db.commit()
@@ -1120,6 +1137,7 @@ def execute_run(
             retrieval_top_k=payload.retrieval_top_k,
             retrieval_model_name=payload.retrieval_model_name,
             llm_provider=payload.llm_provider,
+            research_provider=payload.regulatory_research_provider,
             bypass_cache=payload.bypass_cache,
         ),
     )
@@ -1149,17 +1167,26 @@ def rerun_without_cache(
             detail="cannot rerun: manifest missing",
         )
     latest_provider = payload.llm_provider
-    if latest_provider is None:
+    latest_research_provider = payload.regulatory_research_provider
+    if latest_provider is None or latest_research_provider is None:
         source_events = list_run_events(db, run_id=source_run.id, tenant_id=auth.tenant_id)
         for event in reversed(source_events):
             if event.event_type in {"run.execution.started", "run.execution.queued"}:
                 event_payload = json.loads(event.payload)
-                provider = event_payload.get("llm_provider")
-                if isinstance(provider, str):
-                    latest_provider = provider
+                if latest_provider is None:
+                    provider = event_payload.get("llm_provider")
+                    if isinstance(provider, str):
+                        latest_provider = provider
+                if latest_research_provider is None:
+                    research_provider = event_payload.get("regulatory_research_provider")
+                    if isinstance(research_provider, str):
+                        latest_research_provider = research_provider
+                if latest_provider is not None and latest_research_provider is not None:
                     break
     if latest_provider is None:
         latest_provider = "deterministic_fallback"
+    if latest_research_provider is None:
+        latest_research_provider = "disabled"
     retrieval_params = json.loads(manifest.retrieval_params)
     new_run = Run(
         company_id=source_run.company_id,
@@ -1192,6 +1219,7 @@ def rerun_without_cache(
             "bundle_version": manifest.bundle_version,
             "retry_failed": False,
             "llm_provider": latest_provider,
+            "regulatory_research_provider": latest_research_provider,
             "bypass_cache": payload.bypass_cache,
             "rerun_of": source_run.id,
         },
@@ -1205,6 +1233,7 @@ def rerun_without_cache(
             retrieval_top_k=int(retrieval_params.get("top_k", 5)),
             retrieval_model_name=str(retrieval_params.get("retrieval_model_name", "default")),
             llm_provider=latest_provider,
+            research_provider=latest_research_provider,
             bypass_cache=payload.bypass_cache,
         ),
     )

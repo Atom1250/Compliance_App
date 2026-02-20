@@ -164,6 +164,7 @@ def test_run_diagnostics_returns_deterministic_metrics(monkeypatch, tmp_path: Pa
     assert payload["company_id"] > 0
     assert payload["status"] == "completed"
     assert payload["llm_provider"] is None
+    assert payload["regulatory_research_provider"] is None
     assert payload["cache_hit"] is None
     assert payload["manifest_present"] is True
     assert payload["direct_document_count"] == 0
@@ -210,6 +211,7 @@ def test_run_diagnostics_exposes_latest_failure_reason(monkeypatch, tmp_path: Pa
     assert payload["status"] == "failed"
     assert payload["company_id"] > 0
     assert payload["llm_provider"] is None
+    assert payload["regulatory_research_provider"] is None
     assert payload["cache_hit"] is None
     assert payload["manifest_present"] is False
     assert payload["direct_document_count"] == 0

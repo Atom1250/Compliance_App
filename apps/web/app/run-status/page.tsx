@@ -43,6 +43,9 @@ export default function RunStatusPage() {
   const [rerunProvider, setRerunProvider] = useState<
     "deterministic_fallback" | "local_lm_studio" | "openai_cloud"
   >("deterministic_fallback");
+  const [rerunResearchProvider, setRerunResearchProvider] = useState<
+    "disabled" | "stub" | "notebooklm"
+  >("disabled");
   const [isRerunning, setIsRerunning] = useState(false);
   const [error, setError] = useState("");
 
@@ -72,6 +75,11 @@ export default function RunStatusPage() {
       if (diag.llm_provider) {
         setRerunProvider(diag.llm_provider as "deterministic_fallback" | "local_lm_studio" | "openai_cloud");
       }
+      if (diag.regulatory_research_provider) {
+        setRerunResearchProvider(
+          diag.regulatory_research_provider as "disabled" | "stub" | "notebooklm"
+        );
+      }
       setStepState((state) => transitionOrStay(state, "success"));
       setStatusLabel(`Completed: ${response.status}`);
     } catch (caught) {
@@ -98,6 +106,11 @@ export default function RunStatusPage() {
           if (diag.llm_provider) {
             setRerunProvider(
               diag.llm_provider as "deterministic_fallback" | "local_lm_studio" | "openai_cloud"
+            );
+          }
+          if (diag.regulatory_research_provider) {
+            setRerunResearchProvider(
+              diag.regulatory_research_provider as "disabled" | "stub" | "notebooklm"
             );
           }
           setStepState((state) => transitionOrStay(state, "success"));
@@ -189,6 +202,19 @@ export default function RunStatusPage() {
               <option value="local_lm_studio">local_lm_studio</option>
             </select>
           </label>
+          <label>
+            Re-run Research Provider
+            <select
+              value={rerunResearchProvider}
+              onChange={(event) =>
+                setRerunResearchProvider(event.target.value as "disabled" | "stub" | "notebooklm")
+              }
+            >
+              <option value="disabled">disabled</option>
+              <option value="stub">stub</option>
+              <option value="notebooklm">notebooklm</option>
+            </select>
+          </label>
           <button
             type="button"
             onClick={async () => {
@@ -198,7 +224,11 @@ export default function RunStatusPage() {
               setIsRerunning(true);
               setError("");
               try {
-                const rerun = await rerunWithoutCache(runId, rerunProvider);
+                const rerun = await rerunWithoutCache(
+                  runId,
+                  rerunProvider,
+                  rerunResearchProvider
+                );
                 window.localStorage.setItem("run_id", String(rerun.run_id));
                 setRunId(rerun.run_id);
                 setStatus("queued");
@@ -222,6 +252,7 @@ export default function RunStatusPage() {
         <div className="panel">
           <h2>Run Summary</h2>
           <p>Provider: {diagnostics.llm_provider ?? "unknown"}</p>
+          <p>Research Provider: {diagnostics.regulatory_research_provider ?? "disabled"}</p>
           <p>Cache Hit: {diagnostics.cache_hit === null ? "unknown" : String(diagnostics.cache_hit)}</p>
           <p>
             Documents in Scope: {diagnostics.scoped_document_count} (direct:{" "}

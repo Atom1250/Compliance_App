@@ -19,6 +19,9 @@ export default function RunConfigPage() {
   >(
     "deterministic_fallback"
   );
+  const [regulatoryResearchProvider, setRegulatoryResearchProvider] = useState<
+    "disabled" | "stub" | "notebooklm"
+  >("disabled");
   const [llmHealth, setLlmHealth] = useState<LLMHealthResponse | null>(null);
   const [llmHealthStatus, setLlmHealthStatus] = useState("Checking local LLM config...");
   const [runError, setRunError] = useState("");
@@ -41,7 +44,7 @@ export default function RunConfigPage() {
     setStepState((state) => transitionOrStay(state, "submitting"));
     setRunStatusLabel(stateLabel("submitting"));
     try {
-      const configured = await configureRun({
+        const configured = await configureRun({
         companyId,
         bundleVersion,
         bundlePreset,
@@ -49,7 +52,8 @@ export default function RunConfigPage() {
         jurisdictions:
           bundlePreset === "eu_with_jurisdiction_overlay" ? ["EU", jurisdiction] : ["EU"],
         regimes: ["CSRD_ESRS"],
-        llmProvider
+        llmProvider,
+        regulatoryResearchProvider
       });
       if (!configured?.runId) {
         throw new Error("Missing run id in API response.");
@@ -175,6 +179,25 @@ export default function RunConfigPage() {
             <option value="openai_cloud">openai_cloud</option>
           </select>
         </label>
+        <label>
+          Regulatory Research Provider (Workflow Only)
+          <select
+            value={regulatoryResearchProvider}
+            onChange={(event) =>
+              setRegulatoryResearchProvider(
+                event.target.value as "disabled" | "stub" | "notebooklm"
+              )
+            }
+          >
+            <option value="disabled">disabled</option>
+            <option value="stub">stub</option>
+            <option value="notebooklm">notebooklm</option>
+          </select>
+        </label>
+        <p>
+          This setting does not change scoring logic. It controls optional workflow research
+          enrichment only.
+        </p>
         <div className="panel">
           <p>LLM Health</p>
           <p>Status: {llmHealthStatus}</p>
