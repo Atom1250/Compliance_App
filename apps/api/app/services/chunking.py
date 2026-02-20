@@ -31,6 +31,7 @@ def _chunk_id(document_hash: str, page_number: int, start_offset: int, end_offse
 def build_page_chunks(
     *,
     document_hash: str,
+    tenant_id: str = "default",
     page_number: int,
     text: str,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
@@ -43,7 +44,9 @@ def build_page_chunks(
         raise ValueError("chunk_overlap must be >= 0 and < chunk_size")
 
     if text == "":
-        chunk_id = _chunk_id(document_hash, page_number, 0, 0)
+        tenant_scope = tenant_id or "default"
+        chunk_seed = f"{tenant_scope}:{document_hash}"
+        chunk_id = _chunk_id(chunk_seed, page_number, 0, 0)
         return [
             ChunkPayload(
                 chunk_id=chunk_id,
@@ -61,9 +64,16 @@ def build_page_chunks(
     while start < len(text):
         end = min(len(text), start + chunk_size)
         chunk_text = text[start:end]
+        tenant_scope = tenant_id or "default"
+        chunk_seed = f"{tenant_scope}:{document_hash}"
         chunks.append(
             ChunkPayload(
-                chunk_id=_chunk_id(document_hash, page_number, start, end),
+                chunk_id=_chunk_id(
+                    chunk_seed,
+                    page_number,
+                    start,
+                    end,
+                ),
                 page_number=page_number,
                 start_offset=start,
                 end_offset=end,
@@ -82,6 +92,7 @@ def persist_chunks_for_document(
     *,
     document_id: int,
     document_hash: str,
+    tenant_id: str = "default",
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> None:
@@ -99,6 +110,7 @@ def persist_chunks_for_document(
     for page in pages:
         for payload in build_page_chunks(
             document_hash=document_hash,
+            tenant_id=tenant_id,
             page_number=page.page_number,
             text=page.text,
             chunk_size=chunk_size,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from apps.api.app.core.config import get_settings
@@ -71,9 +72,40 @@ def ingest_document_bytes(
     db.add(document_file)
     extracted_pages = extract_pages_for_document(content, filename)
     persist_document_pages(db, document.id, extracted_pages)
-    persist_chunks_for_document(db, document_id=document.id, document_hash=content_hash)
-    db.commit()
-    db.refresh(document_file)
+    try:
+        persist_chunks_for_document(
+            db,
+            document_id=document.id,
+            document_hash=content_hash,
+            tenant_id=tenant_id,
+        )
+        db.commit()
+        db.refresh(document_file)
+    except IntegrityError:
+        # If a deterministic chunk identity collision happens during discovery,
+        # recover by reusing the existing tenant-scoped immutable file when available.
+        db.rollback()
+        existing = db.scalar(
+            select(DocumentFile)
+            .join(Document, Document.id == DocumentFile.document_id)
+            .where(DocumentFile.sha256_hash == content_hash, Document.tenant_id == tenant_id)
+        )
+        if existing is not None:
+            ensure_company_document_link(
+                db,
+                company_id=company_id,
+                document_id=existing.document_id,
+                tenant_id=tenant_id,
+            )
+            db.commit()
+            return {
+                "document_id": existing.document_id,
+                "document_file_id": existing.id,
+                "sha256_hash": existing.sha256_hash,
+                "storage_uri": existing.storage_uri,
+                "duplicate": True,
+            }
+        raise
 
     return {
         "document_id": document.id,

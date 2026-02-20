@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import time
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from apps.api.app.core.auth import AuthContext, require_auth_context
@@ -47,6 +49,17 @@ class AutoDiscoverResponse(BaseModel):
     ingested_count: int
     ingested_documents: list[AutoDiscoverItem]
     skipped: list[AutoDiscoverSkipItem]
+
+
+def _summarize_discovery_error(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code if exc.response is not None else "unknown"
+        return f"http_status_{code}"
+    if isinstance(exc, httpx.TimeoutException):
+        return "download_timeout"
+    if isinstance(exc, IntegrityError):
+        return "db_integrity_error"
+    return f"{type(exc).__name__}: {exc}"
 
 
 @router.post("/upload")
@@ -230,7 +243,7 @@ def auto_discover_documents(
         except Exception as exc:
             # A failed ingestion can leave the Session in rollback-only state.
             db.rollback()
-            reason = f"{type(exc).__name__}: {exc}"
+            reason = _summarize_discovery_error(exc)
             skipped.append(
                 AutoDiscoverSkipItem(
                     source_url=candidate.url,

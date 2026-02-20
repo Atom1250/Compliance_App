@@ -110,6 +110,24 @@ def _filename_from_url(url: str) -> str:
     return basename or "discovered-document.pdf"
 
 
+def _candidate_url_variants(url: str) -> list[str]:
+    variants: list[str] = [url]
+    parsed = urlparse(url)
+    host = parsed.netloc
+    if host.startswith("www."):
+        variants.append(url.replace("://www.", "://", 1))
+    elif "." in host and not host.startswith("www."):
+        variants.append(url.replace("://", "://www.", 1))
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in variants:
+        if item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
+
+
 def download_discovery_candidate(
     *,
     candidate: TavilyCandidate,
@@ -126,21 +144,25 @@ def download_discovery_candidate(
     }
     last_exc: Exception | None = None
     response: httpx.Response | None = None
-    for attempt in range(1, 4):
-        try:
-            response = httpx.get(
-                candidate.url,
-                timeout=timeout_seconds,
-                follow_redirects=True,
-                headers=headers,
-            )
-            response.raise_for_status()
+    for url in _candidate_url_variants(candidate.url):
+        for attempt in range(1, 4):
+            try:
+                candidate_response = httpx.get(
+                    url,
+                    timeout=timeout_seconds,
+                    follow_redirects=True,
+                    headers=headers,
+                )
+                candidate_response.raise_for_status()
+                response = candidate_response
+                break
+            except Exception as exc:  # pragma: no cover - network dependent
+                last_exc = exc
+                if attempt == 3:
+                    break
+                time.sleep(0.2 * attempt)
+        if response is not None:
             break
-        except Exception as exc:  # pragma: no cover - network dependent
-            last_exc = exc
-            if attempt == 3:
-                raise
-            time.sleep(0.2 * attempt)
     if response is None:
         if last_exc is not None:
             raise last_exc
