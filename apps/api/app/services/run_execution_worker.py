@@ -42,7 +42,11 @@ from apps.api.app.services.llm_provider import build_extraction_client_from_sett
 from apps.api.app.services.regulatory_compiler import compile_company_regulatory_plan
 from apps.api.app.services.regulatory_registry import compile_from_db
 from apps.api.app.services.retrieval import get_retrieval_policy, retrieval_policy_to_dict
-from apps.api.app.services.run_cache import RunHashInput, get_or_compute_cached_output
+from apps.api.app.services.run_cache import (
+    RunHashInput,
+    get_or_compute_cached_output,
+    serialize_assessments,
+)
 from apps.api.app.services.run_input_snapshot import persist_run_input_snapshot
 from apps.api.app.services.run_manifest import RunManifestPayload, persist_run_manifest
 from apps.api.app.services.run_registry_artifacts import persist_registry_outputs_for_run
@@ -55,6 +59,7 @@ class RunExecutionPayload:
     retrieval_top_k: int
     retrieval_model_name: str
     llm_provider: str
+    bypass_cache: bool = False
 
 
 class _DeterministicAbsentTransport:
@@ -184,6 +189,8 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 "tenant_id": run.tenant_id,
                 "bundle_id": payload.bundle_id,
                 "bundle_version": payload.bundle_version,
+                "llm_provider": payload.llm_provider,
+                "bypass_cache": payload.bypass_cache,
             },
         )
         log_structured_event(
@@ -192,6 +199,8 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             tenant_id=run.tenant_id,
             bundle_id=payload.bundle_id,
             bundle_version=payload.bundle_version,
+            llm_provider=payload.llm_provider,
+            bypass_cache=payload.bypass_cache,
         )
         db.commit()
 
@@ -386,29 +395,34 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 )
                 return computed_assessments
 
-            output_json, cache_hit = get_or_compute_cached_output(
-                db,
-                run_id=run.id,
-                hash_input=RunHashInput(
-                    tenant_id=run.tenant_id,
-                    document_hashes=document_hashes,
-                    company_profile={
-                        "employees": company.employees,
-                        "listed_status": company.listed_status,
-                        "reporting_year": company.reporting_year,
-                        "reporting_year_start": company.reporting_year_start,
-                        "reporting_year_end": company.reporting_year_end,
-                        "turnover": company.turnover,
-                    },
-                    materiality_inputs=materiality_inputs,
-                    bundle_version=payload.bundle_version,
-                    retrieval_params=retrieval_params,
-                    prompt_hash=prompt_hash,
-                    compiler_mode=run.compiler_mode,
-                    registry_checksums=registry_checksums,
-                ),
-                compute_assessments=_compute_assessments,
-            )
+            if payload.bypass_cache:
+                computed_assessments = _compute_assessments()
+                output_json = serialize_assessments(computed_assessments)
+                cache_hit = False
+            else:
+                output_json, cache_hit = get_or_compute_cached_output(
+                    db,
+                    run_id=run.id,
+                    hash_input=RunHashInput(
+                        tenant_id=run.tenant_id,
+                        document_hashes=document_hashes,
+                        company_profile={
+                            "employees": company.employees,
+                            "listed_status": company.listed_status,
+                            "reporting_year": company.reporting_year,
+                            "reporting_year_start": company.reporting_year_start,
+                            "reporting_year_end": company.reporting_year_end,
+                            "turnover": company.turnover,
+                        },
+                        materiality_inputs=materiality_inputs,
+                        bundle_version=payload.bundle_version,
+                        retrieval_params=retrieval_params,
+                        prompt_hash=prompt_hash,
+                        compiler_mode=run.compiler_mode,
+                        registry_checksums=registry_checksums,
+                    ),
+                    compute_assessments=_compute_assessments,
+                )
             if cache_hit and computed_assessments is None:
                 computed_assessments = _materialize_assessments_from_cache(
                     db,

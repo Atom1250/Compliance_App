@@ -21,6 +21,8 @@ def test_pages_use_shared_api_client() -> None:
     assert "export async function uploadDocument" in api_client
     assert "export async function configureRun" in api_client
     assert "export async function fetchRunStatus" in api_client
+    assert "export async function fetchRunDiagnostics" in api_client
+    assert "export async function rerunWithoutCache" in api_client
     assert "export async function fetchReportHtml" in api_client
     assert "export async function fetchEvidencePackPreview" in api_client
     assert "export async function fetchLLMHealth" in api_client
@@ -51,6 +53,8 @@ def test_pages_use_shared_api_client() -> None:
     assert "Retry Start Run" in run_config_page
     assert "fetchRunStatus" in run_status_page
     assert "Retry Status Check" in run_status_page
+    assert "Re-run Without Cache" in run_status_page
+    assert "Stage Progress:" in run_status_page
     assert "Preview Report" in report_page
     assert "Preview Evidence Pack" in report_page
     assert "Download Evidence Pack" in report_page

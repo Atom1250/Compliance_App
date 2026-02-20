@@ -719,3 +719,33 @@ def test_run_execute_retry_failed_allows_retry_for_retryable_failure(
     assert retry.status_code == 200
     assert retry.json()["status"] == "queued"
     assert _wait_for_terminal_status(db_url, run_id=run_id) == "completed"
+
+
+def test_run_rerun_without_cache_creates_new_run(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    first = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert first.status_code == 200
+    assert _wait_for_terminal_status(db_url, run_id=run_id) == "completed"
+
+    rerun = client.post(
+        f"/runs/{run_id}/rerun",
+        json={"bypass_cache": True, "llm_provider": "deterministic_fallback"},
+        headers=AUTH_DEFAULT,
+    )
+    assert rerun.status_code == 200
+    rerun_payload = rerun.json()
+    assert rerun_payload["source_run_id"] == run_id
+    new_run_id = rerun_payload["run_id"]
+    assert new_run_id != run_id
+    assert _wait_for_terminal_status(db_url, run_id=new_run_id) == "completed"

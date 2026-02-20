@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.requirements.applicability import resolve_required_datapoint_ids
@@ -18,8 +18,10 @@ from app.requirements.routing import resolve_bundle_selection
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
+    Chunk,
     Company,
     DatapointAssessment,
+    Document,
     ExtractionDiagnostics,
     ObligationCoverage,
     Run,
@@ -29,6 +31,7 @@ from apps.api.app.db.models import (
 )
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
+from apps.api.app.services.company_documents import list_company_document_ids
 from apps.api.app.services.evidence_pack import export_evidence_pack
 from apps.api.app.services.reporting import (
     ReportManifestMetadata,
@@ -81,9 +84,16 @@ class RunEventsResponse(BaseModel):
 
 class RunDiagnosticsResponse(BaseModel):
     run_id: int
+    company_id: int
     status: str
     compiler_mode: str
+    llm_provider: str | None
+    cache_hit: bool | None
     manifest_present: bool
+    direct_document_count: int
+    scoped_document_count: int
+    shared_document_count: int
+    chunk_count: int
     required_datapoints_count: int | None
     required_datapoints_error: str | None
     assessment_count: int
@@ -167,6 +177,7 @@ class RunExecuteRequest(BaseModel):
     compiler_mode: str | None = Field(default=None, min_length=1)
     regulatory_jurisdictions: list[str] | None = None
     regulatory_regimes: list[str] | None = None
+    bypass_cache: bool = False
     retry_failed: bool = False
 
 
@@ -174,6 +185,17 @@ class RunExecuteResponse(BaseModel):
     run_id: int
     status: str
     assessment_count: int
+
+
+class RunRerunRequest(BaseModel):
+    llm_provider: str | None = Field(default=None, min_length=1)
+    bypass_cache: bool = True
+
+
+class RunRerunResponse(BaseModel):
+    source_run_id: int
+    run_id: int
+    status: str
 
 
 class ReportPreviewSummary(BaseModel):
@@ -806,6 +828,31 @@ def run_diagnostics(
             required_datapoints_count = len(required)
         except Exception as exc:  # pragma: no cover - defensive endpoint path
             required_datapoints_error = str(exc)
+    direct_document_count = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Document)
+            .where(Document.company_id == run.company_id, Document.tenant_id == auth.tenant_id)
+        )
+        or 0
+    )
+    scoped_document_ids = list_company_document_ids(
+        db, company_id=run.company_id, tenant_id=auth.tenant_id
+    )
+    scoped_document_count = len(scoped_document_ids)
+    shared_document_count = max(0, scoped_document_count - direct_document_count)
+    chunk_count = (
+        int(
+            db.scalar(
+                select(func.count())
+                .select_from(Chunk)
+                .where(Chunk.document_id.in_(scoped_document_ids))
+            )
+            or 0
+        )
+        if scoped_document_ids
+        else 0
+    )
 
     assessments = db.scalars(
         select(DatapointAssessment)
@@ -862,12 +909,25 @@ def run_diagnostics(
     }
 
     latest_failure_reason: str | None = None
+    llm_provider: str | None = None
+    cache_hit: bool | None = None
     integrity_warning = False
     for event in reversed(events):
+        if event.event_type == "run.execution.completed" and cache_hit is None:
+            payload = json.loads(event.payload)
+            if "cache_hit" in payload:
+                cache_hit = bool(payload["cache_hit"])
         if event.event_type == "run.execution.failed":
             payload = json.loads(event.payload)
             latest_failure_reason = str(payload.get("error")) if payload.get("error") else None
-            break
+        if (
+            event.event_type in {"run.execution.started", "run.execution.queued"}
+            and llm_provider is None
+        ):
+            payload = json.loads(event.payload)
+            provider = payload.get("llm_provider")
+            if isinstance(provider, str):
+                llm_provider = provider
         if event.event_type == "run.execution.integrity_warning":
             integrity_warning = True
 
@@ -887,9 +947,16 @@ def run_diagnostics(
 
     return RunDiagnosticsResponse(
         run_id=run.id,
+        company_id=run.company_id,
         status=run.status,
         compiler_mode=run.compiler_mode,
+        llm_provider=llm_provider,
+        cache_hit=cache_hit,
         manifest_present=manifest_present,
+        direct_document_count=direct_document_count,
+        scoped_document_count=scoped_document_count,
+        shared_document_count=shared_document_count,
+        chunk_count=chunk_count,
         required_datapoints_count=required_datapoints_count,
         required_datapoints_error=required_datapoints_error,
         assessment_count=assessment_count,
@@ -1029,6 +1096,8 @@ def execute_run(
             "bundle_id": resolved.bundle_id,
             "bundle_version": resolved.bundle_version,
             "retry_failed": payload.retry_failed,
+            "llm_provider": payload.llm_provider,
+            "bypass_cache": payload.bypass_cache,
         },
     )
     log_structured_event(
@@ -1038,6 +1107,8 @@ def execute_run(
         bundle_id=resolved.bundle_id,
         bundle_version=resolved.bundle_version,
         retry_failed=payload.retry_failed,
+        llm_provider=payload.llm_provider,
+        bypass_cache=payload.bypass_cache,
     )
     db.commit()
 
@@ -1049,10 +1120,95 @@ def execute_run(
             retrieval_top_k=payload.retrieval_top_k,
             retrieval_model_name=payload.retrieval_model_name,
             llm_provider=payload.llm_provider,
+            bypass_cache=payload.bypass_cache,
         ),
     )
 
     return RunExecuteResponse(run_id=run.id, status=run.status, assessment_count=assessment_count)
+
+
+@router.post("/{run_id}/rerun", response_model=RunRerunResponse)
+def rerun_without_cache(
+    run_id: int,
+    payload: RunRerunRequest,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunRerunResponse:
+    source_run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if source_run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    manifest = db.scalar(
+        select(RunManifest).where(
+            RunManifest.run_id == source_run.id,
+            RunManifest.tenant_id == auth.tenant_id,
+        )
+    )
+    if manifest is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot rerun: manifest missing",
+        )
+    latest_provider = payload.llm_provider
+    if latest_provider is None:
+        source_events = list_run_events(db, run_id=source_run.id, tenant_id=auth.tenant_id)
+        for event in reversed(source_events):
+            if event.event_type in {"run.execution.started", "run.execution.queued"}:
+                event_payload = json.loads(event.payload)
+                provider = event_payload.get("llm_provider")
+                if isinstance(provider, str):
+                    latest_provider = provider
+                    break
+    if latest_provider is None:
+        latest_provider = "deterministic_fallback"
+    retrieval_params = json.loads(manifest.retrieval_params)
+    new_run = Run(
+        company_id=source_run.company_id,
+        tenant_id=auth.tenant_id,
+        status="queued",
+        compiler_mode=source_run.compiler_mode,
+    )
+    db.add(new_run)
+    db.flush()
+    append_run_event(
+        db,
+        run_id=new_run.id,
+        tenant_id=auth.tenant_id,
+        event_type="run.created",
+        payload={
+            "tenant_id": auth.tenant_id,
+            "company_id": source_run.company_id,
+            "status": new_run.status,
+            "rerun_of": source_run.id,
+        },
+    )
+    append_run_event(
+        db,
+        run_id=new_run.id,
+        tenant_id=auth.tenant_id,
+        event_type="run.execution.queued",
+        payload={
+            "tenant_id": auth.tenant_id,
+            "bundle_id": manifest.bundle_id,
+            "bundle_version": manifest.bundle_version,
+            "retry_failed": False,
+            "llm_provider": latest_provider,
+            "bypass_cache": payload.bypass_cache,
+            "rerun_of": source_run.id,
+        },
+    )
+    db.commit()
+    enqueue_run_execution(
+        new_run.id,
+        RunExecutionPayload(
+            bundle_id=manifest.bundle_id,
+            bundle_version=manifest.bundle_version,
+            retrieval_top_k=int(retrieval_params.get("top_k", 5)),
+            retrieval_model_name=str(retrieval_params.get("retrieval_model_name", "default")),
+            llm_provider=latest_provider,
+            bypass_cache=payload.bypass_cache,
+        ),
+    )
+    return RunRerunResponse(source_run_id=source_run.id, run_id=new_run.id, status=new_run.status)
 
 
 @router.post("/{run_id}/materiality", response_model=MaterialityUpsertResponse)

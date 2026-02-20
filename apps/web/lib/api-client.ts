@@ -56,6 +56,31 @@ export type GuidedRunFlowResult = {
   discovery: AutoDiscoverResponse;
 };
 
+export type RunDiagnosticsResponse = {
+  run_id: number;
+  company_id: number;
+  status: string;
+  compiler_mode: string;
+  llm_provider: string | null;
+  cache_hit: boolean | null;
+  manifest_present: boolean;
+  direct_document_count: number;
+  scoped_document_count: number;
+  shared_document_count: number;
+  chunk_count: number;
+  required_datapoints_count: number | null;
+  required_datapoints_error: string | null;
+  assessment_count: number;
+  assessment_status_counts: Record<string, number>;
+  retrieval_hit_count: number;
+  diagnostics_count: number;
+  diagnostics_failures: number;
+  integrity_warning: boolean;
+  latest_failure_reason: string | null;
+  stage_outcomes: Record<string, boolean>;
+  stage_event_counts: Record<string, number>;
+};
+
 function resolveBundleIdVersion(payload: RunConfigPayload): { bundleId: string; bundleVersion: string } {
   if (payload.bundleId && payload.bundleVersion) {
     return { bundleId: payload.bundleId, bundleVersion: payload.bundleVersion };
@@ -217,6 +242,26 @@ export async function orchestrateDiscoveryAndRun(
 
 export async function fetchRunStatus(runId: number): Promise<{ status: string }> {
   return request<{ status: string }>(`/runs/${runId}/status`);
+}
+
+export async function fetchRunDiagnostics(runId: number): Promise<RunDiagnosticsResponse> {
+  return request<RunDiagnosticsResponse>(`/runs/${runId}/diagnostics`);
+}
+
+export async function rerunWithoutCache(
+  runId: number,
+  llmProvider?: "deterministic_fallback" | "local_lm_studio" | "openai_cloud"
+): Promise<{ source_run_id: number; run_id: number; status: string }> {
+  return request<{ source_run_id: number; run_id: number; status: string }>(
+    `/runs/${runId}/rerun`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        bypass_cache: true,
+        llm_provider: llmProvider
+      })
+    }
+  );
 }
 
 export async function fetchReportHtml(runId: number): Promise<string> {
