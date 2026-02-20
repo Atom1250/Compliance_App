@@ -71,19 +71,25 @@ def search_tavily_documents(
         queries.extend(_query_variants(company_name, year))
 
     by_url: dict[str, TavilyCandidate] = {}
+    timeout = httpx.Timeout(timeout_seconds, connect=min(timeout_seconds, 10.0))
     for query in queries:
-        response = httpx.post(
-            base_url,
-            json={
-                "api_key": api_key,
-                "query": query,
-                "search_depth": "advanced",
-                "max_results": max_results,
-                "include_raw_content": False,
-            },
-            timeout=timeout_seconds,
-        )
-        response.raise_for_status()
+        try:
+            response = httpx.post(
+                base_url,
+                json={
+                    "api_key": api_key,
+                    "query": query,
+                    "search_depth": "advanced",
+                    "max_results": max_results,
+                    "include_raw_content": False,
+                },
+                timeout=timeout,
+                follow_redirects=True,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            # Keep discovery resilient if an individual query fails.
+            continue
         payload = response.json()
         raw_results = payload.get("results", [])
         for item in raw_results:

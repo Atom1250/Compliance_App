@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -14,6 +16,7 @@ from apps.api.app.db.session import get_db_session
 from apps.api.app.services.document_ingestion import ingest_document_bytes
 from apps.api.app.services.tavily_discovery import (
     download_discovery_candidate,
+    is_pdf_candidate_url,
     search_tavily_documents,
 )
 
@@ -112,19 +115,30 @@ def auto_discover_documents(
             detail="tavily api key is not configured",
         )
 
-    candidates = search_tavily_documents(
-        company_name=company.name,
-        reporting_year=company.reporting_year_end or company.reporting_year,
-        reporting_year_start=company.reporting_year_start,
-        reporting_year_end=company.reporting_year_end,
-        api_key=settings.tavily_api_key,
-        base_url=settings.tavily_base_url,
-        timeout_seconds=settings.tavily_timeout_seconds,
-        max_results=settings.tavily_max_results,
-    )
+    try:
+        candidates = search_tavily_documents(
+            company_name=company.name,
+            reporting_year=company.reporting_year_end or company.reporting_year,
+            reporting_year_start=company.reporting_year_start,
+            reporting_year_end=company.reporting_year_end,
+            api_key=settings.tavily_api_key,
+            base_url=settings.tavily_base_url,
+            timeout_seconds=settings.tavily_timeout_seconds,
+            max_results=settings.tavily_max_results,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"tavily discovery failed: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    # Keep runtime bounded and deterministic for UI/API consumers.
+    candidate_limit = max(payload.max_documents * 2, payload.max_documents)
+    candidates = candidates[:candidate_limit]
     raw_candidates = len(candidates)
     ingested: list[AutoDiscoverItem] = []
     skipped: list[AutoDiscoverSkipItem] = []
+    company_id = company.id
 
     def _record_decision(
         *,
@@ -136,7 +150,7 @@ def auto_discover_documents(
     ) -> None:
         db.add(
             DocumentDiscoveryCandidate(
-                company_id=company.id,
+                company_id=company_id,
                 tenant_id=auth.tenant_id,
                 source_url=source_url,
                 title=title[:255],
@@ -146,7 +160,32 @@ def auto_discover_documents(
             )
         )
 
+    started_at = time.monotonic()
+    considered = 0
     for candidate in candidates:
+        considered += 1
+        if time.monotonic() - started_at > settings.tavily_discovery_budget_seconds:
+            reason = "discovery_time_budget_exceeded"
+            skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=False,
+                reason=reason,
+            )
+            continue
+        if not is_pdf_candidate_url(candidate.url):
+            reason = "non_pdf_candidate_url"
+            skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=False,
+                reason=reason,
+            )
+            continue
         if len(ingested) >= payload.max_documents:
             reason = "max_documents_reached"
             skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
@@ -168,7 +207,7 @@ def auto_discover_documents(
             result = ingest_document_bytes(
                 db=db,
                 tenant_id=auth.tenant_id,
-                company_id=company.id,
+                company_id=company_id,
                 title=title[:255],
                 filename=downloaded.filename,
                 content=downloaded.content,
@@ -189,6 +228,8 @@ def auto_discover_documents(
                 reason="duplicate_ingested" if bool(result["duplicate"]) else "ingested",
             )
         except Exception as exc:
+            # A failed ingestion can leave the Session in rollback-only state.
+            db.rollback()
             reason = f"{type(exc).__name__}: {exc}"
             skipped.append(
                 AutoDiscoverSkipItem(
@@ -208,7 +249,7 @@ def auto_discover_documents(
 
     return AutoDiscoverResponse(
         company_id=company.id,
-        candidates_considered=len(candidates),
+        candidates_considered=considered,
         raw_candidates=raw_candidates,
         ingested_count=len(ingested),
         ingested_documents=ingested,

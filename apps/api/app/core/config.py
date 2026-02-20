@@ -34,7 +34,13 @@ class Settings(BaseSettings):
     request_rate_limit_max_requests: int = 30
     cors_allowed_origins: str = (
         "http://localhost:3000,http://127.0.0.1:3000,"
-        "http://localhost:3001,http://127.0.0.1:3001"
+        "http://localhost:3001,http://127.0.0.1:3001,"
+        "http://localhost:3002,http://127.0.0.1:3002,"
+        "http://host.docker.internal:3000,http://host.docker.internal:3001,"
+        "http://host.docker.internal:3002"
+    )
+    cors_allowed_origin_regex: str = (
+        r"https?://(localhost|127\.0\.0\.1|host\.docker\.internal)(:\d+)?$"
     )
     tavily_enabled: bool = False
     tavily_api_key: str = ""
@@ -43,6 +49,7 @@ class Settings(BaseSettings):
     tavily_max_results: int = 8
     tavily_download_timeout_seconds: float = 30.0
     tavily_max_document_bytes: int = 50000000
+    tavily_discovery_budget_seconds: float = 60.0
     feature_registry_compiler: bool = False
     feature_registry_report_matrix: bool = False
     regulatory_registry_sync_enabled: bool = False

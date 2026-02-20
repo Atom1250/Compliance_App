@@ -1,18 +1,19 @@
 """Extend regulatory bundle metadata and run manifest regulatory context.
 
-Revision ID: 0022_regulatory_context_manifest_bundle_ext
+Revision ID: 0022_regctx_manifest_ext
 Revises: 0021_regulatory_source_document
 Create Date: 2026-02-19
 """
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
+from alembic import op
+
 # revision identifiers, used by Alembic.
-revision: str = "0022_regulatory_context_manifest_bundle_ext"
+revision: str = "0022_regctx_manifest_ext"
 down_revision: str | None = "0021_regulatory_source_document"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -44,7 +45,12 @@ def upgrade() -> None:
     if not _column_exists("regulatory_bundle", "updated_at"):
         op.add_column(
             "regulatory_bundle",
-            sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(),
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            ),
         )
     op.create_index(
         "ix_regulatory_bundle_status",
@@ -61,10 +67,14 @@ def upgrade() -> None:
         )
 
     if not _column_exists("run_manifest", "regulatory_registry_version"):
-        op.add_column("run_manifest", sa.Column("regulatory_registry_version", sa.Text(), nullable=True))
+        op.add_column(
+            "run_manifest",
+            sa.Column("regulatory_registry_version", sa.Text(), nullable=True),
+        )
     if not _column_exists("run_manifest", "regulatory_compiler_version"):
         op.add_column(
-            "run_manifest", sa.Column("regulatory_compiler_version", sa.String(length=64), nullable=True)
+            "run_manifest",
+            sa.Column("regulatory_compiler_version", sa.String(length=64), nullable=True),
         )
     if not _column_exists("run_manifest", "regulatory_plan_json"):
         op.add_column("run_manifest", sa.Column("regulatory_plan_json", sa.Text(), nullable=True))

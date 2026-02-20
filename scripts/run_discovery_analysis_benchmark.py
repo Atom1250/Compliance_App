@@ -6,12 +6,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from apps.api.app.main import create_app
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 
 def _wait_for_status(
@@ -33,6 +36,8 @@ def _wait_for_status(
 
 
 def main() -> int:
+    from apps.api.app.main import create_app
+
     parser = argparse.ArgumentParser(description="Run discovery+analysis benchmark")
     parser.add_argument("--company-name", required=True)
     parser.add_argument("--year-start", type=int, required=True)
