@@ -15,8 +15,10 @@ from app.regulatory.datapoint_generation import generate_registry_datapoints
 from app.requirements.applicability import resolve_required_datapoint_ids
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
+    Chunk,
     Company,
     DatapointAssessment,
+    ExtractionDiagnostics,
     RegulatoryBundle,
     Run,
     RunMateriality,
@@ -27,12 +29,24 @@ from apps.api.app.services.assessment_pipeline import (
     execute_assessment_pipeline,
 )
 from apps.api.app.services.audit import append_run_event, log_structured_event
-from apps.api.app.services.company_documents import list_company_document_hashes
+from apps.api.app.services.company_documents import (
+    list_company_document_hashes,
+    list_company_document_ids,
+)
+from apps.api.app.services.compiled_plan_persistence import (
+    persist_compiled_plan,
+    persist_obligation_coverage,
+)
 from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
+from apps.api.app.services.regulatory_compiler import compile_company_regulatory_plan
 from apps.api.app.services.regulatory_registry import compile_from_db
 from apps.api.app.services.retrieval import get_retrieval_policy, retrieval_policy_to_dict
-from apps.api.app.services.run_cache import RunHashInput, get_or_compute_cached_output
+from apps.api.app.services.run_cache import (
+    RunHashInput,
+    get_or_compute_cached_output,
+    serialize_assessments,
+)
 from apps.api.app.services.run_input_snapshot import persist_run_input_snapshot
 from apps.api.app.services.run_manifest import RunManifestPayload, persist_run_manifest
 from apps.api.app.services.run_registry_artifacts import persist_registry_outputs_for_run
@@ -45,6 +59,8 @@ class RunExecutionPayload:
     retrieval_top_k: int
     retrieval_model_name: str
     llm_provider: str
+    research_provider: str = "disabled"
+    bypass_cache: bool = False
 
 
 class _DeterministicAbsentTransport:
@@ -102,11 +118,59 @@ def _classify_failure(exc: Exception) -> tuple[str, bool]:
         return "config_error", False
     if "Bundle not found:" in message:
         return "bundle_not_found", False
+    if "compiled_obligations_empty_for_csrd_entity" in message:
+        return "compiled_plan_empty", False
+    if "chunk_table_empty_for_run" in message:
+        return "chunk_prerequisite_missing", False
     if "llm_schema_parse_error" in message:
         return "schema_parse_error", False
     if "llm_schema_validation_error" in message:
         return "schema_validation_error", False
     return "internal_error", False
+
+
+def _materialize_assessments_from_cache(
+    db: Session,
+    *,
+    run_id: int,
+    tenant_id: str,
+    output_json: str,
+) -> list[DatapointAssessment]:
+    payload = json.loads(output_json)
+    if not isinstance(payload, list):
+        raise ValueError("invalid_cached_output_format")
+    rows: list[DatapointAssessment] = []
+    for item in sorted(payload, key=lambda row: str(row.get("datapoint_key", ""))):
+        datapoint_key = str(item.get("datapoint_key") or "").strip()
+        status = str(item.get("status") or "").strip()
+        if not datapoint_key or not status:
+            continue
+        evidence_chunk_ids = item.get("evidence_chunk_ids") or []
+        if not isinstance(evidence_chunk_ids, list):
+            evidence_chunk_ids = []
+        retrieval_params = item.get("retrieval_params") or {}
+        if not isinstance(retrieval_params, dict):
+            retrieval_params = {}
+        rows.append(
+            DatapointAssessment(
+                run_id=run_id,
+                tenant_id=tenant_id,
+                datapoint_key=datapoint_key,
+                status=status,
+                value=item.get("value"),
+                evidence_chunk_ids=json.dumps(sorted(set(map(str, evidence_chunk_ids)))),
+                rationale=str(item.get("rationale") or ""),
+                model_name=str(item.get("model_name") or "deterministic-local-v1"),
+                prompt_hash=str(item.get("prompt_hash") or ""),
+                retrieval_params=json.dumps(
+                    retrieval_params, sort_keys=True, separators=(",", ":")
+                ),
+            )
+        )
+    for row in rows:
+        db.add(row)
+    db.flush()
+    return rows
 
 
 def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
@@ -126,6 +190,9 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 "tenant_id": run.tenant_id,
                 "bundle_id": payload.bundle_id,
                 "bundle_version": payload.bundle_version,
+                "llm_provider": payload.llm_provider,
+                "research_provider": payload.research_provider,
+                "bypass_cache": payload.bypass_cache,
             },
         )
         log_structured_event(
@@ -134,6 +201,9 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             tenant_id=run.tenant_id,
             bundle_id=payload.bundle_id,
             bundle_version=payload.bundle_version,
+            llm_provider=payload.llm_provider,
+            research_provider=payload.research_provider,
+            bypass_cache=payload.bypass_cache,
         )
         db.commit()
 
@@ -164,6 +234,23 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
             ).all()
             materiality_inputs = {row.topic: row.is_material for row in materiality_rows}
 
+            company_document_ids = list_company_document_ids(
+                db, company_id=run.company_id, tenant_id=run.tenant_id
+            )
+            document_count = len(company_document_ids)
+            if document_count == 0:
+                append_run_event(
+                    db,
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    event_type="run.execution.warning",
+                    payload={
+                        "tenant_id": run.tenant_id,
+                        "reason": "document_universe_empty",
+                        "company_document_count": document_count,
+                    },
+                )
+
             document_hashes = list_company_document_hashes(
                 db, company_id=run.company_id, tenant_id=run.tenant_id
             )
@@ -174,6 +261,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 "bundle_version": payload.bundle_version,
                 "compiler_mode": run.compiler_mode,
                 "llm_provider": payload.llm_provider,
+                "research_provider": payload.research_provider,
                 "query_mode": "hybrid",
                 "retrieval_model_name": payload.retrieval_model_name,
                 "retrieval_policy": retrieval_policy_to_dict(retrieval_policy),
@@ -199,12 +287,30 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 "bundle_version": payload.bundle_version,
                 "compiler_mode": run.compiler_mode,
                 "llm_provider": payload.llm_provider,
+                "research_provider": payload.research_provider,
                 "model_name": extraction_client.model_name,
                 "retrieval_params": retrieval_params,
             }
             prompt_hash = hashlib.sha256(
                 json.dumps(prompt_seed, sort_keys=True, separators=(",", ":")).encode()
             ).hexdigest()
+            regulatory_plan_result = compile_company_regulatory_plan(
+                db,
+                company=company,
+            )
+            persisted_plan = persist_compiled_plan(
+                db,
+                company_id=company.id,
+                reporting_year=company.reporting_year_end or company.reporting_year,
+                jurisdictions=list(regulatory_plan_result.plan.get("jurisdictions", [])),
+                regimes=list(regulatory_plan_result.plan.get("regimes", [])),
+                plan=regulatory_plan_result.plan,
+            )
+            if run.compiler_mode == "registry" and "CSRD_ESRS" in regulatory_plan_result.plan.get(
+                "regimes", []
+            ):
+                if persisted_plan.obligations_count == 0:
+                    raise ValueError("compiled_obligations_empty_for_csrd_entity")
 
             if settings.feature_registry_compiler and run.compiler_mode == "registry":
                 compiled_for_snapshot = compile_from_db(
@@ -259,6 +365,24 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 },
             )
 
+            chunk_count = (
+                int(
+                    db.scalar(
+                        select(func.count())
+                        .select_from(Chunk)
+                        .where(Chunk.document_id.in_(company_document_ids))
+                    )
+                    or 0
+                )
+                if company_document_ids
+                else 0
+            )
+            if chunk_count == 0:
+                raise ValueError(
+                    "chunk_table_empty_for_run "
+                    f"(documents_in_scope={document_count}, chunks={chunk_count})"
+                )
+
             computed_assessments: list[DatapointAssessment] | None = None
 
             def _compute_assessments():
@@ -276,35 +400,48 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 )
                 return computed_assessments
 
-            output_json, cache_hit = get_or_compute_cached_output(
-                db,
-                run_id=run.id,
-                hash_input=RunHashInput(
+            if payload.bypass_cache:
+                computed_assessments = _compute_assessments()
+                output_json = serialize_assessments(computed_assessments)
+                cache_hit = False
+            else:
+                output_json, cache_hit = get_or_compute_cached_output(
+                    db,
+                    run_id=run.id,
+                    hash_input=RunHashInput(
+                        tenant_id=run.tenant_id,
+                        document_hashes=document_hashes,
+                        company_profile={
+                            "employees": company.employees,
+                            "listed_status": company.listed_status,
+                            "reporting_year": company.reporting_year,
+                            "reporting_year_start": company.reporting_year_start,
+                            "reporting_year_end": company.reporting_year_end,
+                            "turnover": company.turnover,
+                        },
+                        materiality_inputs=materiality_inputs,
+                        bundle_version=payload.bundle_version,
+                        retrieval_params=retrieval_params,
+                        prompt_hash=prompt_hash,
+                        compiler_mode=run.compiler_mode,
+                        registry_checksums=registry_checksums,
+                    ),
+                    compute_assessments=_compute_assessments,
+                )
+            if cache_hit and computed_assessments is None:
+                computed_assessments = _materialize_assessments_from_cache(
+                    db,
+                    run_id=run.id,
                     tenant_id=run.tenant_id,
-                    document_hashes=document_hashes,
-                    company_profile={
-                        "employees": company.employees,
-                        "listed_status": company.listed_status,
-                        "reporting_year": company.reporting_year,
-                        "reporting_year_start": company.reporting_year_start,
-                        "reporting_year_end": company.reporting_year_end,
-                        "turnover": company.turnover,
-                    },
-                    materiality_inputs=materiality_inputs,
-                    bundle_version=payload.bundle_version,
-                    retrieval_params=retrieval_params,
-                    prompt_hash=prompt_hash,
-                    compiler_mode=run.compiler_mode,
-                    registry_checksums=registry_checksums,
-                ),
-                compute_assessments=_compute_assessments,
-            )
+                    output_json=output_json,
+                )
             assessment_count = len(json.loads(output_json))
 
             persist_run_manifest(
                 db,
                 payload=RunManifestPayload(
                     run_id=run.id,
+                    regulatory_plan_id=persisted_plan.plan_id,
                     tenant_id=run.tenant_id,
                     company_id=run.company_id,
                     bundle_id=payload.bundle_id,
@@ -312,6 +449,12 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     retrieval_params=retrieval_params,
                     model_name=extraction_client.model_name,
                     prompt_hash=prompt_hash,
+                    regulatory_registry_version={
+                        "selected_bundles": regulatory_plan_result.plan["selected_bundles"]
+                    },
+                    regulatory_compiler_version=regulatory_plan_result.plan["compiler_version"],
+                    regulatory_plan_json=regulatory_plan_result.plan,
+                    regulatory_plan_hash=regulatory_plan_result.plan_hash,
                     git_sha=settings.git_sha,
                 ),
                 assessments=computed_assessments or [],
@@ -349,6 +492,42 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     compiled_plan=compiled_plan,
                     assessments=run_assessments,
                 )
+            persist_obligation_coverage(
+                db,
+                compiled_plan_id=persisted_plan.plan_id,
+                run_id=run.id,
+                tenant_id=run.tenant_id,
+            )
+            diag_rows = db.scalars(
+                select(ExtractionDiagnostics).where(
+                    ExtractionDiagnostics.run_id == run.id,
+                    ExtractionDiagnostics.tenant_id == run.tenant_id,
+                )
+            ).all()
+            failure_count = 0
+            for row in diag_rows:
+                payload_json = (
+                    row.diagnostics_json if isinstance(row.diagnostics_json, dict) else {}
+                )
+                if payload_json.get("failure_reason_code"):
+                    failure_count += 1
+            integrity_warning = False
+            if diag_rows:
+                failure_ratio = failure_count / len(diag_rows)
+                if failure_ratio > settings.integrity_warning_failure_threshold:
+                    integrity_warning = True
+            if integrity_warning:
+                append_run_event(
+                    db,
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    event_type="run.execution.integrity_warning",
+                    payload={
+                        "tenant_id": run.tenant_id,
+                        "failure_count": failure_count,
+                        "diagnostics_count": len(diag_rows),
+                    },
+                )
             run.status = "completed"
             append_run_event(
                 db,
@@ -359,6 +538,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     "tenant_id": run.tenant_id,
                     "assessment_count": assessment_count,
                     "cache_hit": cache_hit,
+                    "research_provider": payload.research_provider,
                 },
             )
             log_structured_event(
@@ -367,6 +547,7 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 tenant_id=run.tenant_id,
                 assessment_count=assessment_count,
                 cache_hit=cache_hit,
+                research_provider=payload.research_provider,
             )
             db.commit()
         except Exception as exc:  # pragma: no cover - defensive worker path

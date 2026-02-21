@@ -13,6 +13,9 @@ from app.requirements.importer import import_bundle, load_bundle
 from apps.api.app.db.models import (
     Chunk,
     Company,
+    CompanyDocumentLink,
+    CompiledObligation,
+    CompiledPlan,
     DatapointAssessment,
     Document,
     DocumentFile,
@@ -140,6 +143,29 @@ def test_run_execute_happy_path_stores_assessments(monkeypatch, tmp_path: Path) 
     assert len(stored) == 2
 
 
+def test_run_execute_fails_when_chunk_table_empty(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        session.query(Chunk).delete()
+        session.commit()
+
+    client = TestClient(app)
+    response = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert response.status_code == 200
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "failed"
+
+
 def test_run_execute_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
@@ -209,6 +235,147 @@ def test_run_execute_accepts_local_lm_studio_provider(monkeypatch, tmp_path: Pat
     assert terminal_status == "completed"
 
 
+def test_run_execute_accepts_regulatory_research_provider(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    response = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": "esrs_mini",
+            "bundle_version": "2026.01",
+            "llm_provider": "deterministic_fallback",
+            "regulatory_research_provider": "notebooklm",
+        },
+        headers=AUTH_DEFAULT,
+    )
+    assert response.status_code == 200
+    events = client.get(f"/runs/{run_id}/events", headers=AUTH_DEFAULT)
+    assert events.status_code == 200
+    queued = next(
+        item
+        for item in events.json()["events"]
+        if item["event_type"] == "run.execution.queued"
+    )
+    assert queued["payload"]["regulatory_research_provider"] == "notebooklm"
+
+
+def test_run_execute_accepts_regulatory_context_overrides(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    response = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": "esrs_mini",
+            "bundle_version": "2026.01",
+            "compiler_mode": "registry",
+            "regulatory_jurisdictions": ["EU", "NO"],
+            "regulatory_regimes": ["CSRD_ESRS"],
+        },
+        headers=AUTH_DEFAULT,
+    )
+    assert response.status_code == 200
+
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status in {"completed", "failed"}
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        assert run.compiler_mode == "registry"
+        company = session.get(Company, run.company_id)
+        assert company is not None
+        assert json.loads(company.regulatory_jurisdictions) == ["EU", "NO"]
+        assert json.loads(company.regulatory_regimes) == ["CSRD_ESRS"]
+
+
+def test_run_execute_uses_linked_documents_for_chunk_preflight(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        company = session.get(Company, run.company_id)
+        assert company is not None
+
+        shared_owner = Company(name="Shared Owner", tenant_id="default", reporting_year=2024)
+        session.add(shared_owner)
+        session.flush()
+        shared_doc = Document(
+            company_id=shared_owner.id,
+            tenant_id="default",
+            title="Shared ESG Doc",
+        )
+        session.add(shared_doc)
+        session.flush()
+        shared_chunk = Chunk(
+            document_id=shared_doc.id,
+            chunk_id="shared-chunk-1",
+            page_number=1,
+            start_offset=0,
+            end_offset=64,
+            text="Gross Scope 1 emissions are reported as 42 tCO2e.",
+            content_tsv="gross scope emissions 42 tco2e",
+        )
+        session.add(shared_chunk)
+        session.add(
+            CompanyDocumentLink(
+                company_id=company.id,
+                document_id=shared_doc.id,
+                tenant_id="default",
+            )
+        )
+
+        # Remove direct company docs/chunks so run must rely on link scope.
+        docs = session.scalars(
+            select(Document).where(
+                Document.company_id == company.id, Document.tenant_id == "default"
+            )
+        ).all()
+        doc_ids = [d.id for d in docs]
+        if doc_ids:
+            session.query(Chunk).where(Chunk.document_id.in_(doc_ids)).delete(
+                synchronize_session=False
+            )
+            session.query(DocumentFile).where(DocumentFile.document_id.in_(doc_ids)).delete(
+                synchronize_session=False
+            )
+            session.query(Document).where(Document.id.in_(doc_ids)).delete(
+                synchronize_session=False
+            )
+        session.commit()
+
+    client = TestClient(app)
+    response = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert response.status_code == 200
+
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "completed"
+
+
 def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
@@ -245,6 +412,7 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
         "bundle_version": "2026.01",
         "compiler_mode": "legacy",
         "llm_provider": "deterministic_fallback",
+        "research_provider": "disabled",
         "query_mode": "hybrid",
         "retrieval_policy": {
             "lexical_weight": 0.6,
@@ -256,8 +424,18 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
         "top_k": 7,
     }
     assert payload["model_name"] == "deterministic-local-v1"
+    assert payload["regulatory_plan_id"] is not None
     assert len(payload["prompt_hash"]) == 64
     assert payload["git_sha"] == "deadbeef" * 5
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        plan = session.get(CompiledPlan, payload["regulatory_plan_id"])
+        assert plan is not None
+        obligations = session.scalars(
+            select(CompiledObligation).where(CompiledObligation.compiled_plan_id == plan.id)
+        ).all()
+    assert isinstance(obligations, list)
 
     engine = create_engine(db_url)
     with Session(engine) as session:
@@ -428,6 +606,58 @@ def test_run_execute_cache_hit_skips_pipeline_and_preserves_cached_output(
         assert snapshot_after.payload_json == first_snapshot_json
 
 
+def test_run_execute_cache_hit_materializes_assessments_for_new_run(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+    from apps.api.app.services import run_execution_worker as worker_module
+
+    get_settings.cache_clear()
+    call_count = {"count": 0}
+    original_execute = worker_module.execute_assessment_pipeline
+
+    def counting_execute(*args, **kwargs):
+        call_count["count"] += 1
+        return original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(worker_module, "execute_assessment_pipeline", counting_execute)
+    client = TestClient(app)
+    payload = {
+        "bundle_id": "esrs_mini",
+        "bundle_version": "2026.01",
+        "retrieval_top_k": 5,
+        "retrieval_model_name": "default",
+        "llm_provider": "deterministic_fallback",
+    }
+
+    first = client.post(f"/runs/{run_id}/execute", json=payload, headers=AUTH_DEFAULT)
+    assert first.status_code == 200
+    assert _wait_for_terminal_status(db_url, run_id=run_id) == "completed"
+
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        second_run = Run(company_id=run.company_id, tenant_id="default", status="queued")
+        session.add(second_run)
+        session.commit()
+        second_run_id = second_run.id
+
+    second = client.post(f"/runs/{second_run_id}/execute", json=payload, headers=AUTH_DEFAULT)
+    assert second.status_code == 200
+    assert _wait_for_terminal_status(db_url, run_id=second_run_id) == "completed"
+    assert call_count["count"] == 1
+
+    with Session(engine) as session:
+        assessments = session.scalars(
+            select(DatapointAssessment).where(DatapointAssessment.run_id == second_run_id)
+        ).all()
+    assert len(assessments) > 0
+
+
 def test_run_execute_retry_failed_is_idempotent(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
@@ -520,3 +750,33 @@ def test_run_execute_retry_failed_allows_retry_for_retryable_failure(
     assert retry.status_code == 200
     assert retry.json()["status"] == "queued"
     assert _wait_for_terminal_status(db_url, run_id=run_id) == "completed"
+
+
+def test_run_rerun_without_cache_creates_new_run(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    first = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert first.status_code == 200
+    assert _wait_for_terminal_status(db_url, run_id=run_id) == "completed"
+
+    rerun = client.post(
+        f"/runs/{run_id}/rerun",
+        json={"bypass_cache": True, "llm_provider": "deterministic_fallback"},
+        headers=AUTH_DEFAULT,
+    )
+    assert rerun.status_code == 200
+    rerun_payload = rerun.json()
+    assert rerun_payload["source_run_id"] == run_id
+    new_run_id = rerun_payload["run_id"]
+    assert new_run_id != run_id
+    assert _wait_for_terminal_status(db_url, run_id=new_run_id) == "completed"

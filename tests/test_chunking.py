@@ -19,3 +19,24 @@ def test_chunk_ids_change_with_offsets() -> None:
     chunks_changed = build_page_chunks(document_hash="doc-hash", page_number=1, text=changed_text)
 
     assert [chunk.chunk_id for chunk in chunks_base] != [chunk.chunk_id for chunk in chunks_changed]
+
+
+def test_chunk_ids_are_tenant_scoped_for_non_default_tenants() -> None:
+    text = "A" * 1200
+
+    default_chunks = build_page_chunks(
+        document_hash="doc-hash",
+        tenant_id="default",
+        page_number=1,
+        text=text,
+    )
+    tenant_chunks = build_page_chunks(
+        document_hash="doc-hash",
+        tenant_id="tenant-b",
+        page_number=1,
+        text=text,
+    )
+
+    assert [chunk.chunk_id for chunk in default_chunks] != [
+        chunk.chunk_id for chunk in tenant_chunks
+    ]

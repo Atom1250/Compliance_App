@@ -23,16 +23,22 @@ class ExtractedPage:
     parser_version: str
 
 
+def _sanitize_text(text: str) -> str:
+    # PostgreSQL text fields reject NUL bytes; sanitize deterministically.
+    return text.replace("\x00", "")
+
+
 def _extract_pdf_pages(content: bytes) -> list[ExtractedPage]:
     reader = PdfReader(BytesIO(content))
     pages: list[ExtractedPage] = []
     for idx, page in enumerate(reader.pages, start=1):
         text = page.extract_text() or ""
+        sanitized = _sanitize_text(text)
         pages.append(
             ExtractedPage(
                 page_number=idx,
-                text=text,
-                char_count=len(text),
+                text=sanitized,
+                char_count=len(sanitized),
                 parser_version="pdf-pypdf-v1",
             )
         )
@@ -52,7 +58,7 @@ def _extract_docx_pages(content: bytes) -> list[ExtractedPage]:
         if fragments:
             paragraphs.append("".join(fragments))
 
-    text = "\n".join(paragraphs)
+    text = _sanitize_text("\n".join(paragraphs))
     return [
         ExtractedPage(
             page_number=1,
@@ -64,7 +70,7 @@ def _extract_docx_pages(content: bytes) -> list[ExtractedPage]:
 
 
 def _extract_fallback_page(content: bytes) -> list[ExtractedPage]:
-    text = content.decode("utf-8", errors="ignore")
+    text = _sanitize_text(content.decode("utf-8", errors="ignore"))
     return [
         ExtractedPage(
             page_number=1,

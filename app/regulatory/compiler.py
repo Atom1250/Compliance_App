@@ -24,6 +24,8 @@ class CompiledObligation(BaseModel):
     obligation_id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     standard_reference: str = Field(min_length=1)
+    disclosure_reference: str = Field(min_length=1)
+    source_record_ids: list[str] = Field(default_factory=list)
     elements: list[CompiledElement] = Field(default_factory=list)
 
 
@@ -58,6 +60,11 @@ def _compile_obligation(
     *,
     context: dict[str, Any],
 ) -> CompiledObligation | None:
+    applies_if = (obligation.applies_if or "").strip()
+    if applies_if:
+        allowed_symbols = set(context.keys())
+        if not evaluate_expression(applies_if, context=context, allowed_symbols=allowed_symbols):
+            return None
     compiled_elements: list[CompiledElement] = []
     for element in sorted(obligation.elements, key=lambda item: item.element_id):
         if not _element_applies(element, context=context):
@@ -75,6 +82,8 @@ def _compile_obligation(
         obligation_id=obligation.obligation_id,
         title=obligation.title,
         standard_reference=obligation.standard_reference,
+        disclosure_reference=obligation.disclosure_reference,
+        source_record_ids=sorted(set(obligation.source_record_ids)),
         elements=compiled_elements,
     )
 
@@ -97,4 +106,3 @@ def compile_bundle(
         regime=bundle.regime,
         obligations=obligations,
     )
-

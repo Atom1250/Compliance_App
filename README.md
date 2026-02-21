@@ -18,7 +18,8 @@ Initial project scaffold.
   - `COMPLIANCE_APP_DATABASE_URL=sqlite:///outputs/dev/compliance_app.sqlite make dev`
   - `COMPLIANCE_APP_ALLOW_SQLITE_TRANSITIONAL=true`
 - `make dev`, `make dev-api`, and `make dev-web` auto-load `.env` when present.
-- `make dev` and `make dev-api` also auto-import requirements bundles (`esrs_mini`, `green_finance_mini`) so run execution can start without manual DB seeding.
+- `make dev` and `make dev-api` also auto-import requirements bundles (`esrs_mini`, `esrs_mini_legacy`, `green_finance_icma_eugb`) so run execution can start without manual DB seeding.
+- `make dev` expects a reachable Docker daemon when `DEV_USE_COMPOSE=true` (default). If Docker is unavailable, set `DEV_USE_COMPOSE=false` and provide a reachable `COMPLIANCE_APP_DATABASE_URL`.
 
 ## UAT Harness
 
@@ -98,3 +99,43 @@ If older runs/documents are missing chunks, backfill them without resetting the 
 - EU-only CSV: `python -m apps.api.app.scripts.import_regulatory_sources --file regulatory_source_document_SOURCE_SHEETS_EU_only.csv --jurisdiction EU`
 - Optional XLSX convenience remains supported via `--sheets ...`
 - Prefer `SOURCE_SHEETS_*` CSV artifacts; avoid `regulatory_source_document_full.csv` unless you preprocess non-data tabs.
+
+## Regulatory Bundle Sync + Compiler Context
+
+- Sync bundles to DB:
+  - `python -m apps.api.app.scripts.sync_regulatory_bundles --path app/regulatory/bundles --mode sync`
+- Registry APIs:
+  - `GET /regulatory/sources?jurisdiction=EU`
+  - `GET /regulatory/bundles?regime=CSRD_ESRS`
+  - `GET /runs/{run_id}/regulatory-plan`
+
+## Regulatory Research Service (NotebookLM MCP, Workflow Only)
+
+This integration is workflow-only and never part of runtime scoring.
+
+- ADR: `docs/adr/0003-notebooklm-regulatory-research-service.md`
+- Detailed docs: `docs/regulatory_research_service.md`
+
+Feature flags:
+- `COMPLIANCE_APP_FEATURE_REG_RESEARCH_ENABLED` (default `false`)
+- `COMPLIANCE_APP_FEATURE_NOTEBOOKLM_ENABLED` (default `false`)
+- `COMPLIANCE_APP_FEATURE_NOTEBOOKLM_STRICT_CITATIONS` (default auto by environment)
+- `COMPLIANCE_APP_FEATURE_NOTEBOOKLM_PERSIST_RESULTS` (default `false`)
+- `COMPLIANCE_APP_FEATURE_NOTEBOOKLM_FAIL_OPEN` (default `false`)
+- `COMPLIANCE_APP_NOTEBOOKLM_CACHE_TTL_DAYS` (default `14`)
+- `COMPLIANCE_APP_NOTEBOOKLM_CACHE_FAILURE_TTL_MINUTES` (default `30`)
+- `COMPLIANCE_APP_NOTEBOOKLM_MCP_BASE_URL` (default `http://127.0.0.1:3000`)
+- `COMPLIANCE_APP_NOTEBOOKLM_NOTEBOOK_MAP_JSON` (default includes `EU-CSRD-ESRS`)
+- `COMPLIANCE_APP_NOTEBOOKLM_MCP_TIMEOUT_SECONDS` (default `30`)
+- `COMPLIANCE_APP_NOTEBOOKLM_MCP_RETRIES` (default `1`)
+
+NotebookLM MCP sidecar (dev/staging):
+- `docker compose -f docker/compose.notebooklm.yml up -d`
+- Runbook: `docs/runbooks/notebooklm-mcp-local-setup.md`
+
+Internal research workflow API:
+- `POST /internal/regulatory-research/query`
+- `POST /internal/regulatory-research/requirements/{requirement_id}/query`
+
+CLI helper:
+- `python -m apps.api.app.scripts.regulatory_research_query --corpus EU-CSRD-ESRS --mode qa --question "..."`.

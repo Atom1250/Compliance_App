@@ -1,8 +1,23 @@
 # Project State — Regulatory Registry + Obligations Conveyor
 
-Next PR ID: PR-062
+Next PR ID: PR-NBLM-011
 
 ## Completed Work
+- PR-NBLM-007..PR-NBLM-010 completed (NotebookLM infra, workflow API, CI stub safety, ops runbooks).
+- Added NotebookLM sidecar compose file `docker/compose.notebooklm.yml` plus local setup/manual integration runbooks.
+- Added internal regulatory research endpoints and CLI (`/internal/regulatory-research/*`, `python -m apps.api.app.scripts.regulatory_research_query`).
+- Added deterministic stub provider factory path for CI/offline runs and new API/provider contract tests.
+- Added operational runbooks for auth governance, monitoring, breakage response, and data-governance controls.
+- PR-NBLM-006 completed (NotebookLM MCP provider integration).
+- Added NotebookLM integration modules in `apps/api/app/integrations/notebooklm/` (`mcp_client`, `provider`, `parser`, typed errors).
+- Added MCP config fields and defaults for base URL, notebook map JSON, timeout, and retries.
+- Added parser/provider/client contract tests (`tests/test_notebooklm_parser.py`, `tests/test_notebooklm_provider.py`, `tests/test_notebooklm_mcp_client.py`).
+- Updated docs and env examples for NotebookLM MCP runtime settings.
+- PR-NBLM-000..PR-NBLM-005 completed (NotebookLM MCP regulatory research service foundation).
+- Added ADR `docs/adr/0003-notebooklm-regulatory-research-service.md` formalizing workflow-only usage, kill-switch controls, and breakage response plan.
+- Added feature-flagged research service modules under `apps/api/app/services/regulatory_research/` (types, provider interface, deterministic request hashing, orchestrator, citation validation).
+- Added Postgres-backed audit persistence with migrations `0024_regulatory_research_cache` and `0025_regulatory_requirement_research_notes`, plus repository helpers for cache and notes.
+- Added/updated tests (`tests/test_regulatory_research_hash.py`, `tests/test_regulatory_research_citations.py`, `tests/test_regulatory_research_service.py`) and docs (`README.md`, `docs/regulatory_research_service.md`, `.example.env`) for CSV-safe defaults and flag behavior.
 - PR-001 completed (Phase 0 bootstrap + baseline lock).
 - Verified mandatory conveyor artifacts exist: `PROJECT_STATE.md`, `docs/PR_CONVEYOR_PLAN.md`, `.github/pull_request_template.md`, `.github/codex/prompts/meta_next_pr.md`.
 - Verified ADR-0001 path exists and is readable at `docs/adr/0001-architecture.md`.
@@ -255,6 +270,18 @@ Next PR ID: PR-062
 - Added manifest/report contract upgrades: `report_template_version` persisted in `run_manifest`, `REPORT_TEMPLATE_VERSION = "gold_standard_v1"`, and deterministic report section anchors aligned to template structure.
 - Implemented discovery and ingestion hardening: year-range Tavily multi-query merge/dedupe, fetch-time PDF validation with retries/headers, larger default document-size cap, and cross-company duplicate document linking via `company_document_link`.
 - Implemented retrieval and observability upgrades: company-scoped retrieval support, discovery diagnostics fields, UI diagnostics panel, benchmark harness script (`scripts/run_discovery_analysis_benchmark.py`), and supporting tests (`tests/test_company_document_link.py`, updated discovery/reporting/golden tests).
+- PR-REG-001..PR-REG-008 completed (Regulatory Context Layer to Spec).
+- Extended `regulatory_bundle` + `run_manifest` schema to persist regulatory compiler context (registry versions, compiler version, plan JSON/hash).
+- Added deterministic company-context compiler service with jurisdiction/regime selection, overlay application, stable ordering, and canonical plan hash.
+- Added minimal EU core bundle `csrd_esrs_core@2026.02` with ESRS E1-1/E1-6 and Norway overlay example, plus bundle sync CLI (`merge|sync`) and documentation.
+- Wired run execution to persist compiler outputs into manifest and updated report metadata rendering to read manifest-backed regulatory values.
+- Added read-only regulatory context APIs: `/regulatory/sources`, `/regulatory/bundles`, and `/runs/{run_id}/regulatory-plan`.
+- PR-REG-009..PR-REG-014 completed (Regulatory Context Activation + Discovery/Verification Quality).
+- Added relational persistence for regulatory execution context: `compiled_plan`, `compiled_obligation`, `obligation_coverage`, and `run_manifest.regulatory_plan_id`.
+- Added deterministic document inventory classification/storage and API surface via `/documents/inventory/{company_id}`.
+- Added extraction diagnostics persistence and stricter evidence/metric verification contracts with deterministic failure codes and downgrade semantics.
+- Added orchestration guardrails for missing compiled obligations/chunks, plus diagnostics-threshold integrity warning events.
+- Added PR execution logs: `docs/prs/PR-REG-009.md` through `docs/prs/PR-REG-014.md`.
 
 ## Tooling Notes
 - Test command: `make test` (`.venv/bin/python -m pytest`)
@@ -264,6 +291,25 @@ Next PR ID: PR-062
 - Migration tooling: Alembic (`alembic.ini`, `alembic/versions/`, `alembic upgrade head`)
 - Baseline PR-001 test run: `make test` -> `107 passed, 1 warning`
 
+## Plan Gap Analysis (User PR-01..PR-06 vs Current State)
+- PR-01 Registry Compiler Activation + Manifest Persistence:
+- Partially complete. Registry compiler exists, runs during execution, and persists plan JSON/hash + compiler metadata in `run_manifest`.
+- Missing from requested shape: dedicated `compiled_plan`/`compiled_obligation` relational tables and a hard run-fail when compiled obligations are zero for in-scope CSRD entities.
+- PR-02 Document Universe & Inventory Engine:
+- Partially complete. Deterministic Tavily discovery, dedupe, candidate persistence, and UI guided flow exist.
+- Missing from requested shape: first-class document-universe inventory model with deterministic `doc_type` regex classification, `reporting_year`, and inventory-table-first UX independent from extraction.
+- PR-03 Retrieval / Verification Contract Hardening:
+- Partially complete. Evidence gating and downgrade logic are implemented.
+- Missing from requested shape: persisted per-datapoint diagnostics contract (`retrieved_chunk_lengths`, `numeric_matches_found`, `failure_reason_code` taxonomy) and explicit regression fixture for orphan cited chunk IDs in extraction output contract checks.
+- PR-04 Metric Datapoint Type System:
+- Mostly missing. Current pipeline is status/value/citations-focused; no explicit `metric` datapoint type contract with baseline-required downgrade semantics.
+- PR-05 ESRS Coverage Matrix Engine:
+- Partially complete. Coverage matrix rendering exists for registry/reporting paths.
+- Missing from requested shape: explicit obligation coverage persistence table and always-on obligation-level matrix rendering decoupled from extraction volume.
+- PR-06 Run Orchestration Guardrails:
+- Partially complete. Some lifecycle/readiness checks and failure taxonomy are implemented.
+- Missing from requested shape: explicit pre-run guardrail contract (`compiled_plan missing`, `chunk table empty`, `diagnostics threshold -> integrity warning`) enforced as formal run orchestration gates.
+
 ## Open Risks / Unknowns
 - [ ] Confirm migrations framework and how to run upgrade/downgrade in CI.
 - [ ] Confirm existing auth pattern for admin endpoints (or decide CLI-only for PR-011).
@@ -271,6 +317,10 @@ Next PR ID: PR-062
 - [ ] Confirm test DB strategy for expanded Postgres smoke and parity gates (env-provided URL vs compose service in CI).
 - [ ] `pytest` warns on unknown config key `asyncio_default_fixture_loop_scope`; cleanup needed to avoid config drift.
 - [ ] Postgres-gated tests currently require database-create privileges for full execution; when unavailable they skip by design.
+- [ ] Discovery quality is still constrained by upstream source 403s; next phase should add deterministic alternate-source/mirror ranking and fallback fetch strategies.
+- [ ] Discovery currently retrieves high-signal documents but not a full deterministic filing universe; inventory/classification engine remains to be implemented.
+- [ ] Current execution can complete with low/no datapoint coverage in some scenarios; next phase must harden guardrails around compiled obligations, chunk availability, and diagnostics thresholds.
+- [ ] NotebookLM MCP integration remains operationally sensitive to service-account/browser session drift; rollout should include staged canary checks before enabling persistence.
 
 ## Repository Conventions
 - Branch naming: `pr-XXX-<short-name>`
@@ -282,3 +332,6 @@ Next PR ID: PR-062
   - Add PR to Completed Work (2–5 bullets)
   - Advance Next PR ID to the next PR in docs/PR_CONVEYOR_PLAN.md
   - Record any new blockers/risks
+
+## Planned Workstream (Next)
+- Next execution stream should start at `PR-NBLM-011`.

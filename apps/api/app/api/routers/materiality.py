@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.requirements.applicability import resolve_required_datapoint_ids
@@ -18,8 +18,12 @@ from app.requirements.routing import resolve_bundle_selection
 from apps.api.app.core.auth import AuthContext, require_auth_context
 from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import (
+    Chunk,
     Company,
     DatapointAssessment,
+    Document,
+    ExtractionDiagnostics,
+    ObligationCoverage,
     Run,
     RunEvent,
     RunManifest,
@@ -27,8 +31,13 @@ from apps.api.app.db.models import (
 )
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.audit import append_run_event, list_run_events, log_structured_event
+from apps.api.app.services.company_documents import list_company_document_ids
 from apps.api.app.services.evidence_pack import export_evidence_pack
-from apps.api.app.services.reporting import build_report_data, generate_html_report
+from apps.api.app.services.reporting import (
+    ReportManifestMetadata,
+    build_report_data,
+    generate_html_report,
+)
 from apps.api.app.services.run_execution_worker import (
     RunExecutionPayload,
     current_assessment_count,
@@ -75,14 +84,25 @@ class RunEventsResponse(BaseModel):
 
 class RunDiagnosticsResponse(BaseModel):
     run_id: int
+    company_id: int
     status: str
     compiler_mode: str
+    llm_provider: str | None
+    regulatory_research_provider: str | None
+    cache_hit: bool | None
     manifest_present: bool
+    direct_document_count: int
+    scoped_document_count: int
+    shared_document_count: int
+    chunk_count: int
     required_datapoints_count: int | None
     required_datapoints_error: str | None
     assessment_count: int
     assessment_status_counts: dict[str, int]
     retrieval_hit_count: int
+    diagnostics_count: int
+    diagnostics_failures: int
+    integrity_warning: bool
     latest_failure_reason: str | None
     stage_outcomes: dict[str, bool]
     stage_event_counts: dict[str, int]
@@ -104,6 +124,7 @@ class RunStatusResponse(BaseModel):
 
 class RunManifestResponse(BaseModel):
     run_id: int
+    regulatory_plan_id: int | None = None
     document_hashes: list[str]
     bundle_id: str
     bundle_version: str
@@ -111,7 +132,18 @@ class RunManifestResponse(BaseModel):
     model_name: str
     prompt_hash: str
     report_template_version: str
+    regulatory_registry_version: dict[str, object] | None = None
+    regulatory_compiler_version: str | None = None
+    regulatory_plan_json: dict[str, object] | None = None
+    regulatory_plan_hash: str | None = None
     git_sha: str
+
+
+class RunRegulatoryPlanResponse(BaseModel):
+    run_id: int
+    compiler_version: str | None
+    plan_hash: str | None
+    plan: dict[str, object] | None
 
 
 class RunExportReadinessResponse(BaseModel):
@@ -143,6 +175,11 @@ class RunExecuteRequest(BaseModel):
     retrieval_top_k: int = Field(default=5, ge=1, le=100)
     retrieval_model_name: str = Field(default="default", min_length=1)
     llm_provider: str = Field(default="deterministic_fallback", min_length=1)
+    regulatory_research_provider: str = Field(default="disabled", min_length=1)
+    compiler_mode: str | None = Field(default=None, min_length=1)
+    regulatory_jurisdictions: list[str] | None = None
+    regulatory_regimes: list[str] | None = None
+    bypass_cache: bool = False
     retry_failed: bool = False
 
 
@@ -150,6 +187,18 @@ class RunExecuteResponse(BaseModel):
     run_id: int
     status: str
     assessment_count: int
+
+
+class RunRerunRequest(BaseModel):
+    llm_provider: str | None = Field(default=None, min_length=1)
+    regulatory_research_provider: str | None = Field(default=None, min_length=1)
+    bypass_cache: bool = True
+
+
+class RunRerunResponse(BaseModel):
+    source_run_id: int
+    run_id: int
+    status: str
 
 
 class ReportPreviewSummary(BaseModel):
@@ -375,10 +424,63 @@ def _render_report_html(db: Session, *, run: Run, tenant_id: str) -> str:
         .order_by(DatapointAssessment.datapoint_key)
     ).all()
     settings = get_settings()
+    manifest = db.scalar(
+        select(RunManifest).where(RunManifest.run_id == run.id, RunManifest.tenant_id == tenant_id)
+    )
+    metadata = ReportManifestMetadata()
+    obligation_coverage_rows: list[dict[str, object]] = []
+    if manifest is not None:
+        retrieval_params = json.loads(manifest.retrieval_params)
+        plan_json = (
+            json.loads(manifest.regulatory_plan_json) if manifest.regulatory_plan_json else {}
+        )
+        selected_bundles = plan_json.get("selected_bundles", [])
+        requirements_bundles = ", ".join(
+            f"{item.get('bundle_id')}@{item.get('version')}"
+            for item in selected_bundles
+            if item.get("bundle_id") and item.get("version")
+        ) or f"{manifest.bundle_id}@{manifest.bundle_version}"
+        overlays = sorted(
+            {
+                item.get("reason", "").split(":", 1)[1]
+                for item in plan_json.get("obligations_excluded", [])
+                if str(item.get("reason", "")).startswith("overlay_disabled:")
+            }
+        )
+        metadata = ReportManifestMetadata(
+            requirements_bundles=requirements_bundles,
+            regulatory_registry_version=manifest.regulatory_registry_version or "n/a",
+            compiler_version=manifest.regulatory_compiler_version or "n/a",
+            model_used=manifest.model_name,
+            retrieval_parameters=json.dumps(retrieval_params, sort_keys=True),
+            git_sha=manifest.git_sha,
+            applied_regimes=", ".join(plan_json.get("regimes", [])) or "n/a",
+            applied_overlays=", ".join(overlays) if overlays else "none",
+            obligations_applied_count=len(plan_json.get("obligations_applied", [])),
+        )
+        if manifest.regulatory_plan_id is not None:
+            rows = db.scalars(
+                select(ObligationCoverage)
+                .where(ObligationCoverage.compiled_plan_id == manifest.regulatory_plan_id)
+                .order_by(ObligationCoverage.obligation_code)
+            ).all()
+            obligation_coverage_rows = [
+                {
+                    "obligation_code": item.obligation_code,
+                    "coverage_status": item.coverage_status,
+                    "full_count": item.full_count,
+                    "partial_count": item.partial_count,
+                    "absent_count": item.absent_count,
+                    "na_count": item.na_count,
+                }
+                for item in rows
+            ]
     return generate_html_report(
         run_id=run.id,
         assessments=assessments,
         include_registry_report_matrix=settings.feature_registry_report_matrix,
+        metadata=metadata,
+        obligation_coverage_rows=obligation_coverage_rows,
     )
 
 
@@ -397,10 +499,55 @@ def _render_report_preview(
         .order_by(DatapointAssessment.datapoint_key)
     ).all()
     settings = get_settings()
+    manifest = db.scalar(
+        select(RunManifest).where(RunManifest.run_id == run.id, RunManifest.tenant_id == tenant_id)
+    )
+    metadata = ReportManifestMetadata()
+    obligation_coverage_rows: list[dict[str, object]] = []
+    if manifest is not None:
+        retrieval_params = json.loads(manifest.retrieval_params)
+        plan_json = (
+            json.loads(manifest.regulatory_plan_json) if manifest.regulatory_plan_json else {}
+        )
+        requirements_bundles = ", ".join(
+            f"{item.get('bundle_id')}@{item.get('version')}"
+            for item in plan_json.get("selected_bundles", [])
+            if item.get("bundle_id") and item.get("version")
+        ) or f"{manifest.bundle_id}@{manifest.bundle_version}"
+        metadata = ReportManifestMetadata(
+            requirements_bundles=requirements_bundles,
+            regulatory_registry_version=manifest.regulatory_registry_version or "n/a",
+            compiler_version=manifest.regulatory_compiler_version or "n/a",
+            model_used=manifest.model_name,
+            retrieval_parameters=json.dumps(retrieval_params, sort_keys=True),
+            git_sha=manifest.git_sha,
+            applied_regimes=", ".join(plan_json.get("regimes", [])) or "n/a",
+            applied_overlays="none",
+            obligations_applied_count=len(plan_json.get("obligations_applied", [])),
+        )
+        if manifest.regulatory_plan_id is not None:
+            rows = db.scalars(
+                select(ObligationCoverage)
+                .where(ObligationCoverage.compiled_plan_id == manifest.regulatory_plan_id)
+                .order_by(ObligationCoverage.obligation_code)
+            ).all()
+            obligation_coverage_rows = [
+                {
+                    "obligation_code": item.obligation_code,
+                    "coverage_status": item.coverage_status,
+                    "full_count": item.full_count,
+                    "partial_count": item.partial_count,
+                    "absent_count": item.absent_count,
+                    "na_count": item.na_count,
+                }
+                for item in rows
+            ]
     html = generate_html_report(
         run_id=run.id,
         assessments=assessments,
         include_registry_report_matrix=settings.feature_registry_report_matrix,
+        metadata=metadata,
+        obligation_coverage_rows=obligation_coverage_rows,
     )
     report = build_report_data(run_id=run.id, assessments=assessments)
     return ReportPreviewResponse(
@@ -606,6 +753,7 @@ def run_manifest(
 
     return RunManifestResponse(
         run_id=run.id,
+        regulatory_plan_id=manifest.regulatory_plan_id,
         document_hashes=json.loads(manifest.document_hashes),
         bundle_id=manifest.bundle_id,
         bundle_version=manifest.bundle_version,
@@ -613,7 +761,42 @@ def run_manifest(
         model_name=manifest.model_name,
         prompt_hash=manifest.prompt_hash,
         report_template_version=manifest.report_template_version,
+        regulatory_registry_version=(
+            json.loads(manifest.regulatory_registry_version)
+            if manifest.regulatory_registry_version
+            else None
+        ),
+        regulatory_compiler_version=manifest.regulatory_compiler_version,
+        regulatory_plan_json=(
+            json.loads(manifest.regulatory_plan_json) if manifest.regulatory_plan_json else None
+        ),
+        regulatory_plan_hash=manifest.regulatory_plan_hash,
         git_sha=manifest.git_sha,
+    )
+
+
+@router.get("/{run_id}/regulatory-plan", response_model=RunRegulatoryPlanResponse)
+def run_regulatory_plan(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunRegulatoryPlanResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    manifest = db.scalar(
+        select(RunManifest).where(
+            RunManifest.run_id == run_id,
+            RunManifest.tenant_id == auth.tenant_id,
+        )
+    )
+    if manifest is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="manifest not found")
+    return RunRegulatoryPlanResponse(
+        run_id=run_id,
+        compiler_version=manifest.regulatory_compiler_version,
+        plan_hash=manifest.regulatory_plan_hash,
+        plan=json.loads(manifest.regulatory_plan_json) if manifest.regulatory_plan_json else None,
     )
 
 
@@ -648,6 +831,31 @@ def run_diagnostics(
             required_datapoints_count = len(required)
         except Exception as exc:  # pragma: no cover - defensive endpoint path
             required_datapoints_error = str(exc)
+    direct_document_count = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Document)
+            .where(Document.company_id == run.company_id, Document.tenant_id == auth.tenant_id)
+        )
+        or 0
+    )
+    scoped_document_ids = list_company_document_ids(
+        db, company_id=run.company_id, tenant_id=auth.tenant_id
+    )
+    scoped_document_count = len(scoped_document_ids)
+    shared_document_count = max(0, scoped_document_count - direct_document_count)
+    chunk_count = (
+        int(
+            db.scalar(
+                select(func.count())
+                .select_from(Chunk)
+                .where(Chunk.document_id.in_(scoped_document_ids))
+            )
+            or 0
+        )
+        if scoped_document_ids
+        else 0
+    )
 
     assessments = db.scalars(
         select(DatapointAssessment)
@@ -669,6 +877,21 @@ def run_diagnostics(
             for chunk_id in json.loads(row.evidence_chunk_ids)
         }
     )
+    diagnostics_rows = db.scalars(
+        select(ExtractionDiagnostics)
+        .where(
+            ExtractionDiagnostics.run_id == run.id,
+            ExtractionDiagnostics.tenant_id == auth.tenant_id,
+        )
+        .order_by(ExtractionDiagnostics.datapoint_key)
+    ).all()
+    diagnostics_count = len(diagnostics_rows)
+    diagnostics_failures = sum(
+        1
+        for row in diagnostics_rows
+        if isinstance(row.diagnostics_json, dict)
+        and row.diagnostics_json.get("failure_reason_code")
+    )
 
     events = list_run_events(db, run_id=run.id, tenant_id=auth.tenant_id)
     stage_events = [
@@ -689,11 +912,38 @@ def run_diagnostics(
     }
 
     latest_failure_reason: str | None = None
+    llm_provider: str | None = None
+    cache_hit: bool | None = None
+    regulatory_research_provider: str | None = None
+    integrity_warning = False
     for event in reversed(events):
+        if event.event_type == "run.execution.completed" and cache_hit is None:
+            payload = json.loads(event.payload)
+            if "cache_hit" in payload:
+                cache_hit = bool(payload["cache_hit"])
         if event.event_type == "run.execution.failed":
             payload = json.loads(event.payload)
             latest_failure_reason = str(payload.get("error")) if payload.get("error") else None
-            break
+        if (
+            event.event_type in {"run.execution.started", "run.execution.queued"}
+            and llm_provider is None
+        ):
+            payload = json.loads(event.payload)
+            provider = payload.get("llm_provider")
+            if isinstance(provider, str):
+                llm_provider = provider
+        if (
+            event.event_type in {"run.execution.started", "run.execution.queued"}
+            and regulatory_research_provider is None
+        ):
+            payload = json.loads(event.payload)
+            provider = payload.get("regulatory_research_provider") or payload.get(
+                "research_provider"
+            )
+            if isinstance(provider, str):
+                regulatory_research_provider = provider
+        if event.event_type == "run.execution.integrity_warning":
+            integrity_warning = True
 
     append_run_event(
         db,
@@ -711,14 +961,25 @@ def run_diagnostics(
 
     return RunDiagnosticsResponse(
         run_id=run.id,
+        company_id=run.company_id,
         status=run.status,
         compiler_mode=run.compiler_mode,
+        llm_provider=llm_provider,
+        regulatory_research_provider=regulatory_research_provider,
+        cache_hit=cache_hit,
         manifest_present=manifest_present,
+        direct_document_count=direct_document_count,
+        scoped_document_count=scoped_document_count,
+        shared_document_count=shared_document_count,
+        chunk_count=chunk_count,
         required_datapoints_count=required_datapoints_count,
         required_datapoints_error=required_datapoints_error,
         assessment_count=assessment_count,
         assessment_status_counts=assessment_status_counts,
         retrieval_hit_count=retrieval_hit_count,
+        diagnostics_count=diagnostics_count,
+        diagnostics_failures=diagnostics_failures,
+        integrity_warning=integrity_warning,
         latest_failure_reason=latest_failure_reason,
         stage_outcomes=stage_outcomes,
         stage_event_counts=stage_event_counts,
@@ -741,6 +1002,19 @@ def execute_run(
         requested_bundle_id=payload.bundle_id,
         requested_bundle_version=payload.bundle_version,
     )
+    if payload.compiler_mode in {"legacy", "registry"}:
+        run.compiler_mode = payload.compiler_mode
+    company = db.scalar(
+        select(Company).where(Company.id == run.company_id, Company.tenant_id == auth.tenant_id)
+    )
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="company not found")
+    if payload.regulatory_jurisdictions is not None:
+        company.regulatory_jurisdictions = json.dumps(
+            sorted(set(payload.regulatory_jurisdictions))
+        )
+    if payload.regulatory_regimes is not None:
+        company.regulatory_regimes = json.dumps(sorted(set(payload.regulatory_regimes)))
 
     assessment_count = current_assessment_count(db, run_id=run.id, tenant_id=auth.tenant_id)
     latest_execution_event = db.scalar(
@@ -837,6 +1111,9 @@ def execute_run(
             "bundle_id": resolved.bundle_id,
             "bundle_version": resolved.bundle_version,
             "retry_failed": payload.retry_failed,
+            "llm_provider": payload.llm_provider,
+            "regulatory_research_provider": payload.regulatory_research_provider,
+            "bypass_cache": payload.bypass_cache,
         },
     )
     log_structured_event(
@@ -846,6 +1123,9 @@ def execute_run(
         bundle_id=resolved.bundle_id,
         bundle_version=resolved.bundle_version,
         retry_failed=payload.retry_failed,
+        llm_provider=payload.llm_provider,
+        regulatory_research_provider=payload.regulatory_research_provider,
+        bypass_cache=payload.bypass_cache,
     )
     db.commit()
 
@@ -857,10 +1137,107 @@ def execute_run(
             retrieval_top_k=payload.retrieval_top_k,
             retrieval_model_name=payload.retrieval_model_name,
             llm_provider=payload.llm_provider,
+            research_provider=payload.regulatory_research_provider,
+            bypass_cache=payload.bypass_cache,
         ),
     )
 
     return RunExecuteResponse(run_id=run.id, status=run.status, assessment_count=assessment_count)
+
+
+@router.post("/{run_id}/rerun", response_model=RunRerunResponse)
+def rerun_without_cache(
+    run_id: int,
+    payload: RunRerunRequest,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunRerunResponse:
+    source_run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if source_run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    manifest = db.scalar(
+        select(RunManifest).where(
+            RunManifest.run_id == source_run.id,
+            RunManifest.tenant_id == auth.tenant_id,
+        )
+    )
+    if manifest is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot rerun: manifest missing",
+        )
+    latest_provider = payload.llm_provider
+    latest_research_provider = payload.regulatory_research_provider
+    if latest_provider is None or latest_research_provider is None:
+        source_events = list_run_events(db, run_id=source_run.id, tenant_id=auth.tenant_id)
+        for event in reversed(source_events):
+            if event.event_type in {"run.execution.started", "run.execution.queued"}:
+                event_payload = json.loads(event.payload)
+                if latest_provider is None:
+                    provider = event_payload.get("llm_provider")
+                    if isinstance(provider, str):
+                        latest_provider = provider
+                if latest_research_provider is None:
+                    research_provider = event_payload.get("regulatory_research_provider")
+                    if isinstance(research_provider, str):
+                        latest_research_provider = research_provider
+                if latest_provider is not None and latest_research_provider is not None:
+                    break
+    if latest_provider is None:
+        latest_provider = "deterministic_fallback"
+    if latest_research_provider is None:
+        latest_research_provider = "disabled"
+    retrieval_params = json.loads(manifest.retrieval_params)
+    new_run = Run(
+        company_id=source_run.company_id,
+        tenant_id=auth.tenant_id,
+        status="queued",
+        compiler_mode=source_run.compiler_mode,
+    )
+    db.add(new_run)
+    db.flush()
+    append_run_event(
+        db,
+        run_id=new_run.id,
+        tenant_id=auth.tenant_id,
+        event_type="run.created",
+        payload={
+            "tenant_id": auth.tenant_id,
+            "company_id": source_run.company_id,
+            "status": new_run.status,
+            "rerun_of": source_run.id,
+        },
+    )
+    append_run_event(
+        db,
+        run_id=new_run.id,
+        tenant_id=auth.tenant_id,
+        event_type="run.execution.queued",
+        payload={
+            "tenant_id": auth.tenant_id,
+            "bundle_id": manifest.bundle_id,
+            "bundle_version": manifest.bundle_version,
+            "retry_failed": False,
+            "llm_provider": latest_provider,
+            "regulatory_research_provider": latest_research_provider,
+            "bypass_cache": payload.bypass_cache,
+            "rerun_of": source_run.id,
+        },
+    )
+    db.commit()
+    enqueue_run_execution(
+        new_run.id,
+        RunExecutionPayload(
+            bundle_id=manifest.bundle_id,
+            bundle_version=manifest.bundle_version,
+            retrieval_top_k=int(retrieval_params.get("top_k", 5)),
+            retrieval_model_name=str(retrieval_params.get("retrieval_model_name", "default")),
+            llm_provider=latest_provider,
+            research_provider=latest_research_provider,
+            bypass_cache=payload.bypass_cache,
+        ),
+    )
+    return RunRerunResponse(source_run_id=source_run.id, run_id=new_run.id, status=new_run.status)
 
 
 @router.post("/{run_id}/materiality", response_model=MaterialityUpsertResponse)

@@ -39,6 +39,25 @@ python -m apps.api.app.scripts.import_regulatory_sources \
   --issues-out regulatory_import_issues.csv
 ```
 
+## Merge vs Sync Modes
+
+- `--mode merge` (default): empty incoming fields do not overwrite existing DB values.
+- `--mode sync`: incoming row is authoritative; empty incoming fields clear DB values (`NULL`).
+
+Examples:
+
+```bash
+python -m apps.api.app.scripts.import_regulatory_sources \
+  --file regulatory_source_document_SOURCE_SHEETS_full.csv \
+  --mode merge
+```
+
+```bash
+python -m apps.api.app.scripts.import_regulatory_sources \
+  --file regulatory_source_document_SOURCE_SHEETS_full.csv \
+  --mode sync
+```
+
 ## Optional Convenience (XLSX)
 
 XLSX remains supported, but CSV is preferred for deterministic ingestion:

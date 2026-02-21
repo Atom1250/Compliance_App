@@ -26,7 +26,8 @@ def test_cli_helpers_list_sync_and_compile_preview(tmp_path: Path) -> None:
 
         bundles = list_bundles(session)
         assert bundles
-        assert bundles[0][0] == "eu_csrd_sample"
+        assert any(item[0] == "eu_csrd_sample" for item in bundles)
+        assert any(item[0] == "csrd_esrs_core" for item in bundles)
 
         preview = compile_preview(
             session,

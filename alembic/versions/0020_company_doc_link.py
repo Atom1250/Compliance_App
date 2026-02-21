@@ -1,6 +1,6 @@
 """Add company_document_link and run_manifest.report_template_version.
 
-Revision ID: 0020_company_doc_link_manifest_template
+Revision ID: 0020_company_doc_link
 Revises: 0019_chunk_content_tsv_text
 Create Date: 2026-02-19
 """
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = "0020_company_doc_link_manifest_template"
+revision: str = "0020_company_doc_link"
 down_revision: str | None = "0019_chunk_content_tsv_text"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

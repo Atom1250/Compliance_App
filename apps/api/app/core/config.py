@@ -34,7 +34,13 @@ class Settings(BaseSettings):
     request_rate_limit_max_requests: int = 30
     cors_allowed_origins: str = (
         "http://localhost:3000,http://127.0.0.1:3000,"
-        "http://localhost:3001,http://127.0.0.1:3001"
+        "http://localhost:3001,http://127.0.0.1:3001,"
+        "http://localhost:3002,http://127.0.0.1:3002,"
+        "http://host.docker.internal:3000,http://host.docker.internal:3001,"
+        "http://host.docker.internal:3002"
+    )
+    cors_allowed_origin_regex: str = (
+        r"https?://(localhost|127\.0\.0\.1|host\.docker\.internal)(:\d+)?$"
     )
     tavily_enabled: bool = False
     tavily_api_key: str = ""
@@ -43,10 +49,25 @@ class Settings(BaseSettings):
     tavily_max_results: int = 8
     tavily_download_timeout_seconds: float = 30.0
     tavily_max_document_bytes: int = 50000000
+    tavily_discovery_budget_seconds: float = 60.0
+    integrity_warning_failure_threshold: float = 0.4
     feature_registry_compiler: bool = False
     feature_registry_report_matrix: bool = False
     regulatory_registry_sync_enabled: bool = False
     regulatory_registry_bundles_root: Path = Path("app/regulatory/bundles")
+    feature_reg_research_enabled: bool = False
+    feature_notebooklm_enabled: bool = False
+    feature_notebooklm_strict_citations: bool | None = None
+    feature_notebooklm_persist_results: bool = False
+    feature_notebooklm_fail_open: bool = False
+    notebooklm_cache_ttl_days: int = 14
+    notebooklm_cache_failure_ttl_minutes: int = 30
+    notebooklm_mcp_base_url: str = "http://127.0.0.1:3000"
+    notebooklm_notebook_map_json: str = (
+        '{"EU-CSRD-ESRS":"7bbf7d0b-db30-488e-8d2d-e7cbad3dbbe5"}'
+    )
+    notebooklm_mcp_timeout_seconds: float = 30.0
+    notebooklm_mcp_retries: int = 1
 
     model_config = SettingsConfigDict(
         env_prefix="COMPLIANCE_APP_",

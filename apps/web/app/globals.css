@@ -104,6 +104,69 @@ button:hover {
   background: #ffffffd9;
 }
 
+.progress-wrap {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #eef7f4;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #31c89e);
+  transition: width 240ms ease;
+}
+
+.stage-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.stage-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stage-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  flex: 0 0 auto;
+}
+
+.stage-dot.done {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.stage-dot.active {
+  background: #ffbf00;
+  border-color: #d39c00;
+  animation: pulse-blink 1s infinite;
+}
+
+.stage-dot.failed {
+  background: #db3e3e;
+  border-color: #ab2525;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #edfff8;
+  color: var(--ink);
+}
+
 .row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -129,5 +192,20 @@ button:hover {
   to {
     transform: translateY(0);
     opacity: 1;
+  }
+}
+
+@keyframes pulse-blink {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
 }

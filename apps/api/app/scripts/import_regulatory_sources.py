@@ -35,7 +35,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "--file regulatory_source_document_SOURCE_SHEETS_EU_only.csv --jurisdiction EU\n"
             "  Full:\n"
             "    python -m apps.api.app.scripts.import_regulatory_sources "
-            "--file regulatory_source_document_SOURCE_SHEETS_full.csv\n\n"
+            "--file regulatory_source_document_SOURCE_SHEETS_full.csv --mode merge\n\n"
+            "Sync restore (clear fields when source is empty)\n"
+            "    python -m apps.api.app.scripts.import_regulatory_sources "
+            "--file regulatory_source_document_SOURCE_SHEETS_full.csv --mode sync\n\n"
             "Dry-run\n"
             "    python -m apps.api.app.scripts.import_regulatory_sources "
             "--file regulatory_source_document_SOURCE_SHEETS_full.csv "
@@ -67,6 +70,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--jurisdiction",
         default=None,
         help="Optional exact jurisdiction filter (example: EU)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("merge", "sync"),
+        default="merge",
+        help=(
+            "Import mode: merge retains existing DB values for empty incoming fields; "
+            "sync clears-on-empty."
+        ),
     )
     parser.add_argument("--dry-run", action="store_true", help="Validate/preview without DB writes")
     parser.add_argument(
@@ -101,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
                 file_path=file_path,
                 sheets=sheets,
                 jurisdiction=args.jurisdiction,
+                mode=args.mode,
                 dry_run=bool(args.dry_run),
                 issues_out=issues_out,
             )
@@ -111,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     result = summary.as_dict()
     result["issues_out"] = str(issues_out) if issues_out else None
     result["dry_run"] = bool(args.dry_run)
+    result["mode"] = args.mode
     print(json.dumps(result, sort_keys=True))
     if summary.invalid_rows > 0:
         return 1

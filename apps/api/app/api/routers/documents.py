@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import time
+
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from apps.api.app.core.auth import AuthContext, require_auth_context
@@ -12,8 +16,10 @@ from apps.api.app.core.config import get_settings
 from apps.api.app.db.models import Company, Document, DocumentDiscoveryCandidate, DocumentFile
 from apps.api.app.db.session import get_db_session
 from apps.api.app.services.document_ingestion import ingest_document_bytes
+from apps.api.app.services.document_universe import list_document_inventory
 from apps.api.app.services.tavily_discovery import (
     download_discovery_candidate,
+    is_pdf_candidate_url,
     search_tavily_documents,
 )
 
@@ -44,6 +50,28 @@ class AutoDiscoverResponse(BaseModel):
     ingested_count: int
     ingested_documents: list[AutoDiscoverItem]
     skipped: list[AutoDiscoverSkipItem]
+
+
+class DocumentInventoryItemResponse(BaseModel):
+    document_id: int
+    company_id: int
+    title: str
+    doc_type: str
+    reporting_year: int | None
+    source_url: str | None
+    checksum: str | None
+    classification_confidence: str
+
+
+def _summarize_discovery_error(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code if exc.response is not None else "unknown"
+        return f"http_status_{code}"
+    if isinstance(exc, httpx.TimeoutException):
+        return "download_timeout"
+    if isinstance(exc, IntegrityError):
+        return "db_integrity_error"
+    return f"{type(exc).__name__}: {exc}"
 
 
 @router.post("/upload")
@@ -112,19 +140,30 @@ def auto_discover_documents(
             detail="tavily api key is not configured",
         )
 
-    candidates = search_tavily_documents(
-        company_name=company.name,
-        reporting_year=company.reporting_year_end or company.reporting_year,
-        reporting_year_start=company.reporting_year_start,
-        reporting_year_end=company.reporting_year_end,
-        api_key=settings.tavily_api_key,
-        base_url=settings.tavily_base_url,
-        timeout_seconds=settings.tavily_timeout_seconds,
-        max_results=settings.tavily_max_results,
-    )
+    try:
+        candidates = search_tavily_documents(
+            company_name=company.name,
+            reporting_year=company.reporting_year_end or company.reporting_year,
+            reporting_year_start=company.reporting_year_start,
+            reporting_year_end=company.reporting_year_end,
+            api_key=settings.tavily_api_key,
+            base_url=settings.tavily_base_url,
+            timeout_seconds=settings.tavily_timeout_seconds,
+            max_results=settings.tavily_max_results,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"tavily discovery failed: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    # Keep runtime bounded and deterministic for UI/API consumers.
+    candidate_limit = max(payload.max_documents * 2, payload.max_documents)
+    candidates = candidates[:candidate_limit]
     raw_candidates = len(candidates)
     ingested: list[AutoDiscoverItem] = []
     skipped: list[AutoDiscoverSkipItem] = []
+    company_id = company.id
 
     def _record_decision(
         *,
@@ -136,7 +175,7 @@ def auto_discover_documents(
     ) -> None:
         db.add(
             DocumentDiscoveryCandidate(
-                company_id=company.id,
+                company_id=company_id,
                 tenant_id=auth.tenant_id,
                 source_url=source_url,
                 title=title[:255],
@@ -146,7 +185,32 @@ def auto_discover_documents(
             )
         )
 
+    started_at = time.monotonic()
+    considered = 0
     for candidate in candidates:
+        considered += 1
+        if time.monotonic() - started_at > settings.tavily_discovery_budget_seconds:
+            reason = "discovery_time_budget_exceeded"
+            skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=False,
+                reason=reason,
+            )
+            continue
+        if not is_pdf_candidate_url(candidate.url):
+            reason = "non_pdf_candidate_url"
+            skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
+            _record_decision(
+                source_url=candidate.url,
+                title=candidate.title,
+                score=candidate.score,
+                accepted=False,
+                reason=reason,
+            )
+            continue
         if len(ingested) >= payload.max_documents:
             reason = "max_documents_reached"
             skipped.append(AutoDiscoverSkipItem(source_url=candidate.url, reason=reason))
@@ -168,10 +232,11 @@ def auto_discover_documents(
             result = ingest_document_bytes(
                 db=db,
                 tenant_id=auth.tenant_id,
-                company_id=company.id,
+                company_id=company_id,
                 title=title[:255],
                 filename=downloaded.filename,
                 content=downloaded.content,
+                source_url=downloaded.source_url,
             )
             ingested.append(
                 AutoDiscoverItem(
@@ -189,7 +254,9 @@ def auto_discover_documents(
                 reason="duplicate_ingested" if bool(result["duplicate"]) else "ingested",
             )
         except Exception as exc:
-            reason = f"{type(exc).__name__}: {exc}"
+            # A failed ingestion can leave the Session in rollback-only state.
+            db.rollback()
+            reason = _summarize_discovery_error(exc)
             skipped.append(
                 AutoDiscoverSkipItem(
                     source_url=candidate.url,
@@ -208,7 +275,7 @@ def auto_discover_documents(
 
     return AutoDiscoverResponse(
         company_id=company.id,
-        candidates_considered=len(candidates),
+        candidates_considered=considered,
         raw_candidates=raw_candidates,
         ingested_count=len(ingested),
         ingested_documents=ingested,
@@ -241,3 +308,30 @@ def get_document(
         "sha256_hash": document_file.sha256_hash,
         "storage_uri": document_file.storage_uri,
     }
+
+
+@router.get("/inventory/{company_id}", response_model=list[DocumentInventoryItemResponse])
+def document_inventory(
+    company_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> list[DocumentInventoryItemResponse]:
+    company = db.scalar(
+        select(Company).where(Company.id == company_id, Company.tenant_id == auth.tenant_id)
+    )
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="company not found")
+    rows = list_document_inventory(db, company_id=company_id, tenant_id=auth.tenant_id)
+    return [
+        DocumentInventoryItemResponse(
+            document_id=row.document_id,
+            company_id=row.company_id,
+            title=row.title,
+            doc_type=row.doc_type,
+            reporting_year=row.reporting_year,
+            source_url=row.source_url,
+            checksum=row.checksum,
+            classification_confidence=row.classification_confidence,
+        )
+        for row in rows
+    ]

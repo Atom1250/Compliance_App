@@ -21,6 +21,8 @@ def test_pages_use_shared_api_client() -> None:
     assert "export async function uploadDocument" in api_client
     assert "export async function configureRun" in api_client
     assert "export async function fetchRunStatus" in api_client
+    assert "export async function fetchRunDiagnostics" in api_client
+    assert "export async function rerunWithoutCache" in api_client
     assert "export async function fetchReportHtml" in api_client
     assert "export async function fetchEvidencePackPreview" in api_client
     assert "export async function fetchLLMHealth" in api_client
@@ -41,12 +43,19 @@ def test_pages_use_shared_api_client() -> None:
     assert "Retry upload" in upload_page
     assert "Auto-Find ESG Documents" in upload_page
     assert "Auto-Find + Start Run" in upload_page
+    assert "Guided Run Bundle" in upload_page
+    assert "Jurisdiction Overlay" in upload_page
+    assert "Bundle Version" in run_config_page
+    assert "Jurisdiction Overlay" in run_config_page
     assert "Execution Provider" in run_config_page
+    assert "Regulatory Research Provider (Workflow Only)" in run_config_page
     assert "fetchLLMHealth" in run_config_page
     assert "Run LLM Probe" in run_config_page
     assert "Retry Start Run" in run_config_page
     assert "fetchRunStatus" in run_status_page
     assert "Retry Status Check" in run_status_page
+    assert "Re-run Without Cache" in run_status_page
+    assert "Stage Progress:" in run_status_page
     assert "Preview Report" in report_page
     assert "Preview Evidence Pack" in report_page
     assert "Download Evidence Pack" in report_page

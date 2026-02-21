@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
@@ -130,15 +131,11 @@ def test_auto_discover_persists_download_validation_rejection_reason(
     monkeypatch.setattr(
         documents_router,
         "download_discovery_candidate",
-        lambda **kwargs: (
-            (_ for _ in ()).throw(ValueError("downloaded content is not a PDF"))
-            if kwargs["candidate"].url.endswith("/listing")
-            else DownloadedDocument(
-                content=b"%PDF-1.7 mock",
-                filename="report.pdf",
-                title="Report",
-                source_url="https://example.com/report.pdf",
-            )
+        lambda **_: DownloadedDocument(
+            content=b"%PDF-1.7 mock",
+            filename="report.pdf",
+            title="Report",
+            source_url="https://example.com/report.pdf",
         ),
     )
 
@@ -152,7 +149,7 @@ def test_auto_discover_persists_download_validation_rejection_reason(
     payload = response.json()
     assert payload["ingested_count"] == 1
     assert any(
-        item["reason"] == "ValueError: downloaded content is not a PDF"
+        item["reason"] == "non_pdf_candidate_url"
         for item in payload["skipped"]
     )
 
@@ -162,6 +159,70 @@ def test_auto_discover_persists_download_validation_rejection_reason(
             select(DocumentDiscoveryCandidate).order_by(DocumentDiscoveryCandidate.id)
         ).all()
     assert [row.reason for row in decisions] == [
-        "ValueError: downloaded content is not a PDF",
+        "non_pdf_candidate_url",
         "ingested",
     ]
+
+
+def test_auto_discover_handles_binary_nul_content_without_request_crash(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, company_id = _prepare_database(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_OBJECT_STORAGE_ROOT", str(tmp_path / "object_store"))
+    monkeypatch.setenv("COMPLIANCE_APP_TAVILY_ENABLED", "true")
+    monkeypatch.setenv("COMPLIANCE_APP_TAVILY_API_KEY", "test-key")
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        documents_router,
+        "search_tavily_documents",
+        lambda **_: [
+            TavilyCandidate(title="Binary PDF", url="https://example.com/binary.pdf", score=0.95)
+        ],
+    )
+    monkeypatch.setattr(
+        documents_router,
+        "download_discovery_candidate",
+        lambda **_: DownloadedDocument(
+            # Invalid PDF-like bytes containing NUL should be sanitized by fallback extraction.
+            content=b"%PDF-1.7\\x00binary",
+            filename="binary.pdf",
+            title="Binary PDF",
+            source_url="https://example.com/binary.pdf",
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/documents/auto-discover",
+        json={"company_id": company_id, "max_documents": 1},
+        headers=AUTH_HEADERS,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ingested_count"] == 1
+
+
+def test_auto_discover_returns_502_when_search_provider_fails(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, company_id = _prepare_database(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_TAVILY_ENABLED", "true")
+    monkeypatch.setenv("COMPLIANCE_APP_TAVILY_API_KEY", "test-key")
+    get_settings.cache_clear()
+
+    def _raise_search_error(**_: object) -> list[TavilyCandidate]:
+        raise RuntimeError("search backend timeout")
+
+    monkeypatch.setattr(documents_router, "search_tavily_documents", _raise_search_error)
+
+    client = TestClient(app)
+    response = client.post(
+        "/documents/auto-discover",
+        json={"company_id": company_id, "max_documents": 1},
+        headers=AUTH_HEADERS,
+    )
+    assert response.status_code == status.HTTP_502_BAD_GATEWAY
+    assert "tavily discovery failed" in response.json()["detail"]

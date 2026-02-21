@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,6 +48,12 @@ class Document(Base):
         String(64), nullable=False, default="default", index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    doc_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    reporting_year: Mapped[int | None] = mapped_column(nullable=True, index=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    classification_confidence: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="manual", index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -122,6 +137,8 @@ class DatapointDefinition(Base):
     datapoint_key: Mapped[str] = mapped_column(String(128), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     disclosure_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    datapoint_type: Mapped[str] = mapped_column(String(32), nullable=False, default="narrative")
+    requires_baseline: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     materiality_topic: Mapped[str] = mapped_column(String(64), nullable=False, default="general")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -217,6 +234,9 @@ class RunManifest(Base):
     run_id: Mapped[int] = mapped_column(
         ForeignKey("run.id"), nullable=False, unique=True, index=True
     )
+    regulatory_plan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("compiled_plan.id"), nullable=True, index=True
+    )
     tenant_id: Mapped[str] = mapped_column(
         String(64), nullable=False, default="default", index=True
     )
@@ -229,12 +249,19 @@ class RunManifest(Base):
     report_template_version: Mapped[str] = mapped_column(
         String(64), nullable=False, default="legacy_v1"
     )
+    regulatory_registry_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    regulatory_compiler_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    regulatory_plan_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    regulatory_plan_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     git_sha: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class RegulatoryBundle(Base):
     __tablename__ = "regulatory_bundle"
+    __table_args__ = (
+        UniqueConstraint("regime", "bundle_id", "version", name="uq_regulatory_bundle_triplet"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     bundle_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
@@ -243,7 +270,14 @@ class RegulatoryBundle(Base):
     regime: Mapped[str] = mapped_column(String(64), nullable=False)
     checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    source_record_ids: Mapped[dict] = mapped_column(JSON, nullable=False, default=list)
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
 
 
 class RunRegistryArtifact(Base):
@@ -327,3 +361,99 @@ class RunInputSnapshot(Base):
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class CompiledPlan(Base):
+    __tablename__ = "compiled_plan"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    entity_id: Mapped[int] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
+    reporting_year: Mapped[int | None] = mapped_column(nullable=True, index=True)
+    regime: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    cohort: Mapped[str] = mapped_column(String(64), nullable=False)
+    phase_in_flags: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class CompiledObligation(Base):
+    __tablename__ = "compiled_obligation"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    compiled_plan_id: Mapped[int] = mapped_column(
+        ForeignKey("compiled_plan.id"), nullable=False, index=True
+    )
+    obligation_code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    jurisdiction: Mapped[str] = mapped_column(String(64), nullable=False, default="EU")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ObligationCoverage(Base):
+    __tablename__ = "obligation_coverage"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    compiled_plan_id: Mapped[int] = mapped_column(
+        ForeignKey("compiled_plan.id"), nullable=False, index=True
+    )
+    obligation_code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    coverage_status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    full_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    partial_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    absent_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    na_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ExtractionDiagnostics(Base):
+    __tablename__ = "extraction_diagnostics"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("run.id"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default", index=True
+    )
+    datapoint_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    diagnostics_json: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RegulatoryResearchCache(Base):
+    __tablename__ = "regulatory_research_cache"
+
+    request_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    corpus_key: Mapped[str] = mapped_column(Text, nullable=False)
+    mode: Mapped[str] = mapped_column(Text, nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    citations_jsonb: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=list
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RegulatoryRequirementResearchNote(Base):
+    __tablename__ = "regulatory_requirement_research_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    requirement_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    request_hash: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    corpus_key: Mapped[str] = mapped_column(Text, nullable=False)
+    mode: Mapped[str] = mapped_column(Text, nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    citations_jsonb: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False, default=list
+    )
+    created_by: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )

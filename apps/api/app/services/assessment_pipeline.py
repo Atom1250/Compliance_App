@@ -16,6 +16,7 @@ from apps.api.app.db.models import (
     Company,
     DatapointAssessment,
     DatapointDefinition,
+    ExtractionDiagnostics,
     RequirementBundle,
     Run,
 )
@@ -44,6 +45,8 @@ class AssessmentRunConfig:
 class _DatapointQueryDef:
     title: str
     disclosure_reference: str
+    datapoint_type: str = "narrative"
+    requires_baseline: bool = False
 
 
 def execute_assessment_pipeline(
@@ -107,6 +110,8 @@ def execute_assessment_pipeline(
             item.datapoint_key: _DatapointQueryDef(
                 title=item.title,
                 disclosure_reference=item.disclosure_reference,
+                datapoint_type="narrative",
+                requires_baseline=False,
             )
             for item in generated
         }
@@ -132,6 +137,8 @@ def execute_assessment_pipeline(
             row.datapoint_key: _DatapointQueryDef(
                 title=row.title,
                 disclosure_reference=row.disclosure_reference,
+                datapoint_type=row.datapoint_type,
+                requires_baseline=row.requires_baseline,
             )
             for row in db.scalars(
                 select(DatapointDefinition)
@@ -144,6 +151,12 @@ def execute_assessment_pipeline(
         delete(DatapointAssessment).where(
             DatapointAssessment.run_id == run.id,
             DatapointAssessment.tenant_id == run.tenant_id,
+        )
+    )
+    db.execute(
+        delete(ExtractionDiagnostics).where(
+            ExtractionDiagnostics.run_id == run.id,
+            ExtractionDiagnostics.tenant_id == run.tenant_id,
         )
     )
 
@@ -188,6 +201,8 @@ def execute_assessment_pipeline(
             evidence_chunk_ids=extraction.evidence_chunk_ids,
             rationale=extraction.rationale,
             retrieval_results=retrieval_results,
+            datapoint_type=datapoint_def.datapoint_type,
+            requires_baseline=datapoint_def.requires_baseline,
         )
         prompt = extraction_client.build_prompt(
             datapoint_key=datapoint_key,
@@ -200,7 +215,11 @@ def execute_assessment_pipeline(
             tenant_id=run.tenant_id,
             datapoint_key=datapoint_key,
             status=verification.status,
-            value=extraction.value,
+            value=(
+                json.dumps(verification.metric_payload, sort_keys=True, separators=(",", ":"))
+                if verification.metric_payload is not None
+                else extraction.value
+            ),
             evidence_chunk_ids=json.dumps(
                 extraction.evidence_chunk_ids,
                 sort_keys=True,
@@ -212,6 +231,20 @@ def execute_assessment_pipeline(
             retrieval_params=retrieval_params_json,
         )
         db.add(assessment)
+        db.add(
+            ExtractionDiagnostics(
+                run_id=run.id,
+                tenant_id=run.tenant_id,
+                datapoint_key=datapoint_key,
+                diagnostics_json={
+                    "retrieved_chunk_ids": [item.chunk_id for item in retrieval_results],
+                    "retrieved_chunk_lengths": [len(item.text or "") for item in retrieval_results],
+                    "numeric_matches_found": verification.numeric_matches_found,
+                    "verification_status": verification.verification_status,
+                    "failure_reason_code": verification.failure_reason_code,
+                },
+            )
+        )
         created.append(assessment)
         retrieval_trace_entries.append(
             {

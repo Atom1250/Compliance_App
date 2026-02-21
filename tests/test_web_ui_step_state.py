@@ -44,6 +44,8 @@ def test_run_setup_pages_use_step_state_transitions() -> None:
     assert 'transitionOrStay(state, "error")' in run_status_page
     assert "Step Key:" in run_status_page
     assert "Status fetch failed:" in run_status_page
+    assert "fetchRunDiagnostics" in run_status_page
+    assert "progress-bar" in run_status_page
 
 
 def test_report_page_uses_step_state_and_actionable_errors() -> None:

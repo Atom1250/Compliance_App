@@ -1,0 +1,84 @@
+{
+  "bundle_id": "csrd_esrs_core",
+  "version": "2026.02",
+  "jurisdiction": "EU",
+  "regime": "CSRD_ESRS",
+  "compiler_version": "reg-compiler-v1",
+  "source_record_ids": [
+    "EU-L1-CSRD",
+    "EU-L2-ESRS-DA",
+    "EU-TAX-L1-2020-852",
+    "EU-GUID-FAQ-CSRD"
+  ],
+  "obligations": [
+    {
+      "obligation_id": "ESRS-E1-1",
+      "title": "Transition plan disclosure",
+      "standard_ref": "ESRS E1",
+      "disclosure_reference": "ESRS E1-1",
+      "applies_if": "company.listed_status == True and company.reporting_year >= 2025",
+      "source_record_ids": ["EU-L2-ESRS-DA"],
+      "elements": [
+        {
+          "element_id": "E1-1-transition-plan",
+          "label": "Transition plan narrative",
+          "type": "narrative",
+          "required": true
+        }
+      ]
+    },
+    {
+      "obligation_id": "ESRS-E1-6",
+      "title": "Gross GHG emissions disclosure",
+      "standard_ref": "ESRS E1",
+      "disclosure_reference": "ESRS E1-6",
+      "applies_if": "company.reporting_year >= 2025",
+      "source_record_ids": ["EU-L2-ESRS-DA"],
+      "elements": [
+        {
+          "element_id": "E1-6-scope-1",
+          "label": "Scope 1 gross emissions",
+          "type": "metric",
+          "required": true
+        },
+        {
+          "element_id": "E1-6-scope-2",
+          "label": "Scope 2 gross emissions",
+          "type": "metric",
+          "required": true
+        },
+        {
+          "element_id": "E1-6-scope-3",
+          "label": "Scope 3 gross emissions",
+          "type": "metric",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "overlays": [
+    {
+      "jurisdiction": "NO",
+      "overlay_id": "no_transparency_overlay_v1",
+      "obligations_add": [
+        {
+          "obligation_id": "NO-TRANSPARENCY-STATEMENT-1",
+          "title": "Norway transparency statement disclosure",
+          "standard_ref": "Norway Transparency Act",
+          "disclosure_reference": "NO Transparency Act Section 5",
+          "source_record_ids": ["NO-L1-LOV-2024-06-21-42"],
+          "elements": [
+            {
+              "element_id": "NO-TSL-STATEMENT",
+              "label": "Transparency statement publication",
+              "type": "narrative",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "obligations_modify": [],
+      "obligations_disable": []
+    }
+  ]
+}

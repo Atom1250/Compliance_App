@@ -40,7 +40,8 @@ def test_verification_downgrades_present_when_numeric_not_in_cited_chunk() -> No
         retrieval_results=[_retrieval_result("chunk-1", "Gross Scope 1 emissions are 42 tCO2e.")],
     )
 
-    assert result.status == "Partial"
+    assert result.status == "Absent"
+    assert result.failure_reason_code == "NUMERIC_MISMATCH"
     assert "numeric value not found in evidence: 99" in result.rationale
 
 
@@ -53,7 +54,8 @@ def test_verification_downgrades_present_when_year_missing() -> None:
         retrieval_results=[_retrieval_result("chunk-1", "For FY2025, emissions are 42 tCO2e.")],
     )
 
-    assert result.status == "Partial"
+    assert result.status == "Absent"
+    assert result.failure_reason_code == "NUMERIC_MISMATCH"
     assert "year not found in evidence: 2026" in result.rationale
 
 
@@ -67,7 +69,22 @@ def test_verification_downgrades_partial_to_absent_when_evidence_chunk_missing()
     )
 
     assert result.status == "Absent"
+    assert result.failure_reason_code == "CHUNK_NOT_FOUND"
     assert "missing cited chunk(s): missing-chunk" in result.rationale
+
+
+def test_metric_verification_requires_baseline_when_configured() -> None:
+    result = verify_assessment(
+        status="Present",
+        value="12.5 % FY2026",
+        evidence_chunk_ids=["chunk-1"],
+        rationale="Metric extracted.",
+        retrieval_results=[_retrieval_result("chunk-1", "FY2026 emissions reduced by 12.5%.")],
+        datapoint_type="metric",
+        requires_baseline=True,
+    )
+    assert result.status == "Absent"
+    assert result.failure_reason_code == "BASELINE_MISSING"
 
 
 def test_verification_enforces_evidence_gating_for_present_without_evidence() -> None:

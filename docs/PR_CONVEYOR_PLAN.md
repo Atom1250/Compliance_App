@@ -361,6 +361,153 @@ Tests:
 
 ---
 
+## PR-REG-001 — Regulatory Bundle Schema + DB Model + Migration
+Objective:
+Ensure DB-backed storage supports versioned bundle metadata and deterministic lifecycle management.
+
+Scope:
+- Extended `regulatory_bundle` model/migration with status + source-record metadata + unique `(regime,bundle_id,version)`.
+- Added run-manifest regulatory context columns for compiler output persistence.
+
+Definition of Done:
+- Migration chain reaches head with new columns.
+- Existing and new bundle workflows remain deterministic.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-002 — Bundle Loader + Sync Command (Repo JSON → DB)
+Objective:
+Provide deterministic repo-bundle sync with explicit `merge|sync` behavior.
+
+Scope:
+- Extended registry sync service to support `mode=merge|sync`.
+- Added CLI: `python -m apps.api.app.scripts.sync_regulatory_bundles --path app/regulatory/bundles --mode sync`.
+
+Definition of Done:
+- Sync is deterministic and idempotent.
+- `sync` mode deactivates bundles absent from source path.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-003 — Minimal EU Bundle (CSRD/ESRS Core)
+Objective:
+Ship a working EU-first core bundle for compiler context and report metadata.
+
+Scope:
+- Added `app/regulatory/bundles/csrd_esrs_core@2026.02.json`.
+- Includes ESRS E1-1 and E1-6 obligations plus NO overlay example.
+- Added bundle README.
+
+Definition of Done:
+- Bundle validates and compiles.
+- Bundle sync includes new core bundle.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-004 — Regulatory Compiler v1
+Objective:
+Compile company context into deterministic applicable/excluded obligation plans.
+
+Scope:
+- Added `apps/api/app/services/regulatory_compiler.py`.
+- Selects active bundles by company jurisdictions/regimes, applies overlays, and returns stable plan hash.
+
+Definition of Done:
+- Stable ordering/hash behavior for repeated runs.
+- Overlay behavior deterministic by jurisdiction.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-005 — Persist Plan in Manifest + Report Metadata
+Objective:
+Eliminate `n/a` registry metadata by persisting compiler outputs and rendering them.
+
+Scope:
+- Run execution now persists registry version/compiler version/plan JSON/plan hash in `run_manifest`.
+- Report metadata now renders manifest-backed values instead of placeholder `n/a`.
+- Added `/runs/{run_id}/regulatory-plan` endpoint.
+
+Definition of Done:
+- Manifest contains persisted regulatory context.
+- Report metadata displays real run context values.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-006 — Jurisdiction Overlay Framework
+Objective:
+Support overlay add/modify/disable logic in bundle schema/compiler.
+
+Scope:
+- Extended schema with `overlays[]`.
+- Compiler applies overlay obligations for matching jurisdictions.
+- Added NO overlay example in core bundle.
+
+Definition of Done:
+- NO+EU context includes overlay obligations.
+- EU-only context excludes NO overlay obligations.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-007 — Coverage Matrix Assembly v1
+Objective:
+Keep obligation coverage matrix deterministic and renderable alongside report sections.
+
+Scope:
+- Coverage matrix helper supports explicit obligation-ID inclusion and deterministic ordering.
+- Report metadata now includes obligations applied count from manifest plan.
+
+Definition of Done:
+- Matrix/report rendering deterministic with registry metadata context.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-008 — Regulatory Context Read APIs
+Objective:
+Expose read-only regulatory context for UI/ops diagnostics.
+
+Scope:
+- Added endpoints:
+  - `GET /regulatory/sources?jurisdiction=EU`
+  - `GET /regulatory/bundles?regime=CSRD_ESRS`
+  - `GET /runs/{run_id}/regulatory-plan`
+
+Definition of Done:
+- Endpoints return deterministic ordered responses and pass auth/tenant checks.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
 ## PR-053 — Download Robustness + PDF Validation
 Objective:
 Increase ingestion success for discovered candidates while keeping PDF-only MVP policy.
@@ -1176,6 +1323,374 @@ Scope:
 Definition of Done:
 - Repo guidance reflects Postgres-first operation and SQLite phase-down
 - Tests pass
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-009 — Registry Compiler Activation and Relational Plan Persistence
+Objective:
+Upgrade from manifest-only compiled context to a first-class persisted compiled plan model with strict run guardrails.
+
+Scope:
+- Add relational persistence for compiled plans and obligations:
+- `compiled_plan` (`id`, `entity_id`, `reporting_year`, `regime`, `cohort`, `phase_in_flags`, `created_at`)
+- `compiled_obligation` (`id`, `compiled_plan_id`, `obligation_code`, `mandatory`, `jurisdiction`)
+- Wire compiler output to persist both relational tables plus existing manifest fields
+- Make `run_manifest.regulatory_plan_id` required for new runs (migration + runtime enforcement)
+- Add run bootstrap guard: fail execution when in-scope CSRD entity compiles to zero obligations
+
+Definition of Done:
+- Every successful run references a persisted `regulatory_plan_id`
+- No `n/a` registry metadata for compiler-enabled runs
+- In-scope CSRD run produces `compiled_obligation > 0` or fails deterministically with explicit reason
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-010 — Document Universe and Deterministic Inventory Engine
+Objective:
+Establish deterministic document inventory independent of extraction/analysis.
+
+Scope:
+- Add document universe service (`document_universe`) that builds normalized inventory records from upload/discovery sources
+- Add deterministic regex-based classification (`annual report`, `sustainability`, `transparency act`, `slavery`, `pillar 3`, `factbook`)
+- Persist inventory fields on document records (or linked table): `doc_type`, `reporting_year`, `source_url`, checksum, classification confidence
+- Add inventory API response/UI rendering contract:
+- Table renders before extraction starts
+- Empty state: `No documents discovered`
+
+Definition of Done:
+- Inventory renders with deterministic classification for discovered/uploaded documents
+- Inventory availability is decoupled from datapoint extraction progress
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-011 — Retrieval/Verification Contract Hardening
+Objective:
+Enforce evidence contract with structured diagnostics and explicit failure codes.
+
+Scope:
+- Add persisted extraction diagnostics payload per datapoint:
+- `retrieved_chunk_ids`, `retrieved_chunk_lengths`, `numeric_matches_found`, `verification_status`
+- `failure_reason_code` enum (`CHUNK_NOT_FOUND`, `EMPTY_CHUNK`, `NUMERIC_MISMATCH`, `BASELINE_MISSING`)
+- Enforce pre-Present contract:
+- every cited chunk exists
+- every cited chunk has non-empty text
+- otherwise downgrade deterministically to `Absent`
+- Add synthetic fixture regression to assert orphan cited chunks cannot pass verification
+
+Definition of Done:
+- No orphan evidence chunk IDs survive as `Present/Partial`
+- Diagnostics are queryable and stable for each datapoint execution
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-012 — Metric Datapoint Type System
+Objective:
+Introduce typed metric datapoints with baseline-aware validation.
+
+Scope:
+- Extend datapoint schema with `type` (`narrative|metric`) and `requires_baseline`
+- Add metric extraction contract:
+- `value`, `unit`, `year`, optional baseline year/value, `source_chunk_id`
+- Add deterministic numeric pre-parser (percent, currency, tCO2e, bn/million multipliers)
+- Add downgrade rules:
+- percentage without baseline -> downgrade
+- missing year -> downgrade
+- unit mismatch -> downgrade
+
+Definition of Done:
+- Metric datapoints populate structured quantitative fields
+- Baseline-required metrics enforce downgrade semantics deterministically
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-013 — Obligation Coverage Matrix Persistence and Rendering
+Objective:
+Make obligation-level coverage a persisted first-class output.
+
+Scope:
+- Add obligation coverage aggregation service:
+- `Full` = all mandatory datapoints Present
+- `Partial` = at least one Present but not all
+- `Absent` = none Present
+- Persist matrix rows in `obligation_coverage` keyed by `compiled_plan_id`
+- Render matrix sections deterministically (`Cross-cutting`, `E1`, `S1`, `G1`) even for sparse datapoints
+
+Definition of Done:
+- Matrix is never empty for non-empty compiled plans
+- Matrix results are independent of report narrative generation
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-014 — Run Orchestration Guardrails
+Objective:
+Add explicit pre-run and in-run integrity guardrails to prevent false-complete outcomes.
+
+Scope:
+- Add run preflight checks:
+- compiled plan missing -> abort
+- document universe empty -> warn + continue
+- chunk table empty -> abort extraction stage
+- Add diagnostics threshold policy:
+- if diagnostics failure rate exceeds threshold, set run status `integrity_warning` (or equivalent deterministic terminal subtype)
+- Persist guardrail outcomes in run events and diagnostics payload
+
+Definition of Done:
+- Runs cannot silently complete without core prerequisites
+- Guardrail decisions are visible in status/diagnostics APIs and UI
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-REG-015 — Discovery Recall and Source Ranking Uplift (Planned)
+Objective:
+Improve deterministic discovery recall/precision for ESG filing retrieval while preserving reproducibility.
+
+Scope (planned):
+- Expand deterministic search query templates by filing taxonomy and period.
+- Add source-ranking policy with explicit tie-breaks and provenance metadata.
+- Add benchmark fixtures and acceptance gates for recall/precision drift.
+
+Definition of Done:
+- Deterministic discovery benchmark improves document recall on reference fixtures.
+- All ranking/tie-break behavior remains explicit and test-covered.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-000 — ADR: NotebookLM MCP Regulatory Research Service (Completed)
+Objective:
+Formalize NotebookLM as workflow-only research support with explicit scoring isolation.
+
+Scope:
+- Add ADR documenting usage boundaries, non-goals, governance, and breakage handling.
+- Include rollout notebook reference and kill-switch requirement.
+
+Definition of Done:
+- ADR states: no scoring-path dependency on NotebookLM.
+- ADR states: integration is behind feature flags + kill switch.
+- ADR includes clear disable/fallback breakage plan.
+
+---
+
+## PR-NBLM-001 — Research Provider Interface + Orchestrator (Completed)
+Objective:
+Add provider-agnostic research abstraction with deterministic request hashing.
+
+Scope:
+- Add request/response/citation types.
+- Add provider interface.
+- Add research service orchestrator with provider injection.
+- Add unit tests for hash determinism and service pass-through behavior.
+
+Definition of Done:
+- New research modules compile and tests pass.
+- No scoring modules import research package.
+
+---
+
+## PR-NBLM-002 — Feature Flags + Kill Switch (Completed)
+Objective:
+Add safe-default feature controls with deterministic disabled behavior.
+
+Scope:
+- Add `FEATURE_REG_RESEARCH_ENABLED`, `FEATURE_NOTEBOOKLM_ENABLED`, strict-citation, persist, fail-open, and cache TTL settings.
+- Service returns deterministic stub response when disabled.
+- Document flags in README/.example env.
+
+Definition of Done:
+- Default configuration performs no external calls.
+- Disabled mode returns deterministic `stub` response.
+
+---
+
+## PR-NBLM-003 — Citation Validation Policy (Completed)
+Objective:
+Enforce citation quality contract before any persistence path.
+
+Scope:
+- Add citation validator with strict/non-strict modes.
+- Add typed citation validation error.
+- Wire validator into research service.
+- Add tests for strict reject/non-strict persist gating.
+
+Definition of Done:
+- Strict mode rejects empty/invalid citations.
+- Non-strict mode allows responses but blocks persistence when citation quality is insufficient.
+
+---
+
+## PR-NBLM-004 — DB-Backed Research Cache (Completed)
+Objective:
+Add deterministic request-response caching in Postgres.
+
+Scope:
+- Migration + model for `regulatory_research_cache`.
+- Cache repo with read-through and TTL behavior.
+- Service cache-hit short-circuit and failure caching.
+- Tests for hit/miss/failure paths.
+
+Definition of Done:
+- Cache hit bypasses provider call.
+- Success and failure outcomes are persisted with TTLs.
+
+---
+
+## PR-NBLM-005 — Requirement-Linked Research Notes (Completed)
+Objective:
+Persist additive research notes linked to requirements without mutating canonical requirement records.
+
+Scope:
+- Migration + model for `regulatory_requirement_research_notes`.
+- Notes repo and service method `query_and_maybe_persist`.
+- Feature-flag and citation-gated persistence behavior.
+- Tests for enabled/disabled persistence and citation enforcement.
+
+Definition of Done:
+- Notes are persisted only when enabled and citations allow persistence.
+- Canonical requirement content is not auto-mutated.
+
+---
+
+## PR-NBLM-006 — NotebookLM Provider Adapter (Completed)
+Objective:
+Implement concrete NotebookLM MCP provider adapter wiring into `ResearchProvider`.
+
+Scope:
+- Added HTTP JSON-RPC MCP client with timeout/retry controls and typed error handling.
+- Added NotebookLM provider implementation with corpus-key notebook resolution and ordered tool calls.
+- Added citation parser for trailing `CITATIONS:` markdown block.
+- Added tests for MCP retry behavior, provider call order, parser extraction, and default notebook mapping.
+
+Definition of Done:
+- Provider can be injected into `RegulatoryResearchService`.
+- Default notebook mapping includes `EU-CSRD-ESRS -> 7bbf7d0b-db30-488e-8d2d-e7cbad3dbbe5`.
+- Errors are typed and workflow-safe.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-007 — Infra Sidecar + Compose Profile (Completed)
+Objective:
+Provide a standard dev/staging NotebookLM MCP sidecar path without production impact.
+
+Scope:
+- Added `docker/compose.notebooklm.yml` for standalone NotebookLM MCP sidecar runtime.
+- Added persistent named volumes for Chrome profile/config.
+- Added runbook `docs/runbooks/notebooklm-mcp-local-setup.md`.
+- Added `.gitignore` guards for any local NotebookLM artifacts.
+
+Definition of Done:
+- Sidecar compose file exists and is documented.
+- Backend can be pointed at sidecar via `COMPLIANCE_APP_NOTEBOOKLM_MCP_BASE_URL`.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-008 — Internal Workflow API + CLI (Completed)
+Objective:
+Expose internal-only research query paths for analysts/Codex workflows (no scoring integration).
+
+Scope:
+- Added internal endpoints:
+  - `POST /internal/regulatory-research/query`
+  - `POST /internal/regulatory-research/requirements/{requirement_id}/query`
+- Added CLI wrapper:
+  - `python -m apps.api.app.scripts.regulatory_research_query ...`
+- Added schema docs in `docs/regulatory_research_service.md`.
+
+Definition of Done:
+- Endpoints are internal prefix + auth-protected.
+- Feature flag gate enforced.
+- Response includes answer/citations/provider/request hash/persisted note id.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-009 — CI Stub Provider Safety Harness (Completed)
+Objective:
+Ensure CI/dev tests do not require NotebookLM MCP auth/session.
+
+Scope:
+- Added deterministic stub provider for research flows.
+- Added provider factory selecting stub when NotebookLM flag is off.
+- Added tests for stub path and internal route behavior under flag gating.
+- Added manual integration runbook for NotebookLM-connected verification.
+
+Definition of Done:
+- CI research tests pass with NotebookLM disabled.
+- Stub path remains deterministic and citation-valid.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-010 — Ops Runbooks: Auth, Monitoring, Breakage, Data Governance (Completed)
+Objective:
+Document operational controls and breakage playbook for NotebookLM workflow usage.
+
+Scope:
+- Added:
+  - `docs/runbooks/notebooklm-auth-governance.md`
+  - `docs/runbooks/notebooklm-monitoring.md`
+  - `docs/runbooks/notebooklm-breakage-response.md`
+  - `docs/runbooks/notebooklm-data-governance.md`
+- Explicit kill-switch in <=3 steps.
+- Monitoring signals and governance boundary documented.
+
+Definition of Done:
+- Runbooks define executable kill switch and fallback behavior.
+- Workflow-only/non-scoring boundary documented in operations docs.
+
+Tests:
+- `make lint`
+- `make test`
+
+---
+
+## PR-NBLM-011 — Research Health Probe Endpoint (Planned)
+Objective:
+Add NotebookLM MCP health probe endpoint with actionable diagnostics for workflow operators.
 
 Tests:
 - `make lint`

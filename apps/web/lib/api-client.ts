@@ -16,9 +16,14 @@ export type UploadPayload = {
 
 export type RunConfigPayload = {
   companyId: number;
-  bundleId: string;
-  bundleVersion: string;
+  bundlePreset?: "eu_pre_2026" | "eu_post_2026" | "eu_with_jurisdiction_overlay";
+  bundleId?: string;
+  bundleVersion?: string;
+  jurisdictions?: string[];
+  regimes?: string[];
+  compilerMode?: "legacy" | "registry";
   llmProvider: "deterministic_fallback" | "local_lm_studio" | "openai_cloud";
+  regulatoryResearchProvider?: "disabled" | "stub" | "notebooklm";
 };
 
 export type LLMHealthResponse = {
@@ -51,6 +56,46 @@ export type GuidedRunFlowResult = {
   stages: string[];
   discovery: AutoDiscoverResponse;
 };
+
+export type RunDiagnosticsResponse = {
+  run_id: number;
+  company_id: number;
+  status: string;
+  compiler_mode: string;
+  llm_provider: string | null;
+  regulatory_research_provider: string | null;
+  cache_hit: boolean | null;
+  manifest_present: boolean;
+  direct_document_count: number;
+  scoped_document_count: number;
+  shared_document_count: number;
+  chunk_count: number;
+  required_datapoints_count: number | null;
+  required_datapoints_error: string | null;
+  assessment_count: number;
+  assessment_status_counts: Record<string, number>;
+  retrieval_hit_count: number;
+  diagnostics_count: number;
+  diagnostics_failures: number;
+  integrity_warning: boolean;
+  latest_failure_reason: string | null;
+  stage_outcomes: Record<string, boolean>;
+  stage_event_counts: Record<string, number>;
+};
+
+function resolveBundleIdVersion(payload: RunConfigPayload): { bundleId: string; bundleVersion: string } {
+  if (payload.bundleId && payload.bundleVersion) {
+    return { bundleId: payload.bundleId, bundleVersion: payload.bundleVersion };
+  }
+  const preset = payload.bundlePreset ?? "eu_post_2026";
+  if (preset === "eu_pre_2026") {
+    return { bundleId: "esrs_mini", bundleVersion: payload.bundleVersion ?? "2024.01" };
+  }
+  if (preset === "eu_with_jurisdiction_overlay") {
+    return { bundleId: "esrs_mini", bundleVersion: payload.bundleVersion ?? "2026.01" };
+  }
+  return { bundleId: "esrs_mini", bundleVersion: payload.bundleVersion ?? "2026.01" };
+}
 
 export type EvidencePackPreviewResponse = {
   run_id: number;
@@ -151,6 +196,7 @@ export async function autoDiscoverDocuments(
 }
 
 export async function configureRun(payload: RunConfigPayload): Promise<{ runId: number } | null> {
+  const resolved = resolveBundleIdVersion(payload);
   const created = await request<{ run_id: number; status: string }>("/runs", {
     method: "POST",
     body: JSON.stringify({
@@ -163,9 +209,13 @@ export async function configureRun(payload: RunConfigPayload): Promise<{ runId: 
     {
       method: "POST",
       body: JSON.stringify({
-        bundle_id: payload.bundleId,
-        bundle_version: payload.bundleVersion,
-        llm_provider: payload.llmProvider
+        bundle_id: resolved.bundleId,
+        bundle_version: resolved.bundleVersion,
+        llm_provider: payload.llmProvider,
+        regulatory_research_provider: payload.regulatoryResearchProvider ?? "disabled",
+        compiler_mode: payload.compilerMode,
+        regulatory_jurisdictions: payload.jurisdictions,
+        regulatory_regimes: payload.regimes
       })
     }
   );
@@ -195,6 +245,28 @@ export async function orchestrateDiscoveryAndRun(
 
 export async function fetchRunStatus(runId: number): Promise<{ status: string }> {
   return request<{ status: string }>(`/runs/${runId}/status`);
+}
+
+export async function fetchRunDiagnostics(runId: number): Promise<RunDiagnosticsResponse> {
+  return request<RunDiagnosticsResponse>(`/runs/${runId}/diagnostics`);
+}
+
+export async function rerunWithoutCache(
+  runId: number,
+  llmProvider?: "deterministic_fallback" | "local_lm_studio" | "openai_cloud",
+  regulatoryResearchProvider?: "disabled" | "stub" | "notebooklm"
+): Promise<{ source_run_id: number; run_id: number; status: string }> {
+  return request<{ source_run_id: number; run_id: number; status: string }>(
+    `/runs/${runId}/rerun`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        bypass_cache: true,
+        llm_provider: llmProvider,
+        regulatory_research_provider: regulatoryResearchProvider
+      })
+    }
+  );
 }
 
 export async function fetchReportHtml(runId: number): Promise<string> {
