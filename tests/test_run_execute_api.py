@@ -96,7 +96,13 @@ def _wait_for_terminal_status(
             run = session.get(Run, run_id)
             assert run is not None
             status = run.status
-        if status in {"completed", "failed"}:
+        if status in {
+            "completed",
+            "completed_with_warnings",
+            "failed",
+            "failed_pipeline",
+            "degraded_no_evidence",
+        }:
             return status
         time.sleep(0.05)
     raise AssertionError("run did not reach terminal status in time")
@@ -163,7 +169,7 @@ def test_run_execute_fails_when_chunk_table_empty(monkeypatch, tmp_path: Path) -
     )
     assert response.status_code == 200
     terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
-    assert terminal_status == "failed"
+    assert terminal_status == "failed_pipeline"
 
 
 def test_run_execute_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
@@ -265,6 +271,67 @@ def test_run_execute_accepts_regulatory_research_provider(monkeypatch, tmp_path:
     assert queued["payload"]["regulatory_research_provider"] == "notebooklm"
 
 
+def test_run_execute_degrades_on_required_narrative_chunk_not_found(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class _MissingChunkTransport:
+        def create_response(self, *, model, input_text, temperature, json_schema):
+            del model, input_text, temperature, json_schema
+            return {
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": (
+                                    '{"status":"Present","value":"Narrative content",'
+                                    '"evidence_chunk_ids":["missing-chunk-id"],'
+                                    '"rationale":"Provider returned a non-existent chunk id."}'
+                                ),
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+    from apps.api.app.services import run_execution_worker as worker_module
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        worker_module,
+        "build_extraction_client_from_settings",
+        lambda _settings, **_kwargs: ExtractionClient(
+            transport=_MissingChunkTransport(),
+            model="gpt-4o-mini",
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        f"/runs/{run_id}/execute",
+        json={
+            "bundle_id": "esrs_mini",
+            "bundle_version": "2026.01",
+            "llm_provider": "openai_cloud",
+        },
+        headers=AUTH_DEFAULT,
+    )
+    assert response.status_code == 200
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "degraded_no_evidence"
+
+    diagnostics = client.get(f"/runs/{run_id}/diagnostics", headers=AUTH_DEFAULT)
+    assert diagnostics.status_code == 200
+    payload = diagnostics.json()
+    assert payload["status"] == "degraded_no_evidence"
+    assert payload["diagnostics_failures"] >= 1
+
+
 def test_run_execute_accepts_regulatory_context_overrides(monkeypatch, tmp_path: Path) -> None:
     db_url, run_id = _prepare_fixture(tmp_path)
     monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
@@ -288,7 +355,7 @@ def test_run_execute_accepts_regulatory_context_overrides(monkeypatch, tmp_path:
     assert response.status_code == 200
 
     terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
-    assert terminal_status in {"completed", "failed"}
+    assert terminal_status in {"completed", "completed_with_warnings", "failed", "failed_pipeline"}
 
     engine = create_engine(db_url)
     with Session(engine) as session:
@@ -421,6 +488,10 @@ def test_run_execute_persists_and_returns_manifest(monkeypatch, tmp_path: Path) 
             "version": "hybrid-v1",
         },
         "retrieval_model_name": "default",
+        "smoke_test": {
+            "auto_relaxed_filters": False,
+            "diagnostic": "none",
+        },
         "top_k": 7,
     }
     assert payload["model_name"] == "deterministic-local-v1"
@@ -532,6 +603,95 @@ def test_run_manifest_is_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
 
     forbidden = client.get(f"/runs/{run_id}/manifest", headers=AUTH_OTHER)
     assert forbidden.status_code == 404
+
+
+def test_run_manifest_truth_returns_observability_inventory(monkeypatch, tmp_path: Path) -> None:
+    db_url, run_id = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    execute_response = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert execute_response.status_code == 200
+    terminal_status = _wait_for_terminal_status(db_url, run_id=run_id)
+    assert terminal_status == "completed"
+
+    manifest_truth = client.get(f"/runs/{run_id}/manifest-truth", headers=AUTH_DEFAULT)
+    assert manifest_truth.status_code == 200
+    payload = manifest_truth.json()
+    assert payload["run_id"] == run_id
+    assert payload["terminal_status"] == "completed"
+    assert len(payload["selected_documents"]) == 1
+    assert payload["selected_documents"][0]["checksum"] == "a" * 64
+    assert payload["chunking_results"]["chunk_count"] >= 1
+    assert payload["indexing_results"]["status"] == "ready"
+    assert payload["retrieval_smoke_test"]["strict_result_count"] >= 1
+
+
+def test_run_execute_auto_relaxes_after_retrieval_smoke_filter_mismatch(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_url, _ = _prepare_fixture(tmp_path)
+    monkeypatch.setenv("COMPLIANCE_APP_DATABASE_URL", db_url)
+    monkeypatch.setenv("COMPLIANCE_APP_RETRIEVAL_SMOKE_AUTO_RELAX_FILTERS", "true")
+    monkeypatch.setenv("COMPLIANCE_APP_QUALITY_GATE_MIN_DOCS_INGESTED", "0")
+    monkeypatch.setenv("COMPLIANCE_APP_QUALITY_GATE_MIN_CHUNKS_INDEXED", "0")
+
+    from apps.api.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    engine = create_engine(db_url)
+    with Session(engine) as session:
+        company = Company(
+            name="No Docs Co",
+            tenant_id="default",
+            employees=200,
+            turnover=8_000_000.0,
+            listed_status=True,
+            reporting_year=2026,
+        )
+        session.add(company)
+        session.flush()
+        run = Run(company_id=company.id, tenant_id="default", status="queued")
+        session.add(run)
+        session.commit()
+        run_id = run.id
+
+    client = TestClient(app)
+    execute_response = client.post(
+        f"/runs/{run_id}/execute",
+        json={"bundle_id": "esrs_mini", "bundle_version": "2026.01"},
+        headers=AUTH_DEFAULT,
+    )
+    assert execute_response.status_code == 200
+    _wait_for_terminal_status(db_url, run_id=run_id)
+
+    events = client.get(f"/runs/{run_id}/events", headers=AUTH_DEFAULT)
+    assert events.status_code == 200
+    smoke_events = [
+        item
+        for item in events.json()["events"]
+        if item["event_type"] == "run.execution.retrieval_smoke_test"
+    ]
+    assert len(smoke_events) == 1
+    smoke_payload = smoke_events[0]["payload"]
+    assert smoke_payload["diagnostic"] == "FILTER_TOO_STRICT"
+    assert smoke_payload["auto_relaxed_filters"] is True
+
+    manifest_response = client.get(f"/runs/{run_id}/manifest", headers=AUTH_DEFAULT)
+    assert manifest_response.status_code == 200
+    manifest_payload = manifest_response.json()
+    assert manifest_payload["retrieval_params"]["smoke_test"] == {
+        "diagnostic": "FILTER_TOO_STRICT",
+        "auto_relaxed_filters": True,
+    }
 
 
 def test_run_execute_cache_hit_skips_pipeline_and_preserves_cached_output(
@@ -673,7 +833,7 @@ def test_run_execute_retry_failed_is_idempotent(monkeypatch, tmp_path: Path) -> 
         headers=AUTH_DEFAULT,
     )
     assert failing.status_code == 200
-    assert _wait_for_terminal_status(db_url, run_id=run_id) == "failed"
+    assert _wait_for_terminal_status(db_url, run_id=run_id) == "failed_pipeline"
 
     no_retry = client.post(
         f"/runs/{run_id}/execute",
@@ -681,7 +841,7 @@ def test_run_execute_retry_failed_is_idempotent(monkeypatch, tmp_path: Path) -> 
         headers=AUTH_DEFAULT,
     )
     assert no_retry.status_code == 200
-    assert no_retry.json()["status"] == "failed"
+    assert no_retry.json()["status"] == "failed_pipeline"
 
     with_retry = client.post(
         f"/runs/{run_id}/execute",
@@ -693,7 +853,7 @@ def test_run_execute_retry_failed_is_idempotent(monkeypatch, tmp_path: Path) -> 
         headers=AUTH_DEFAULT,
     )
     assert with_retry.status_code == 200
-    assert with_retry.json()["status"] == "failed"
+    assert with_retry.json()["status"] == "failed_pipeline"
 
     engine = create_engine(db_url)
     with Session(engine) as session:
@@ -736,7 +896,7 @@ def test_run_execute_retry_failed_allows_retry_for_retryable_failure(
         headers=AUTH_DEFAULT,
     )
     assert first.status_code == 200
-    assert _wait_for_terminal_status(db_url, run_id=run_id) == "failed"
+    assert _wait_for_terminal_status(db_url, run_id=run_id) == "failed_pipeline"
 
     retry = client.post(
         f"/runs/{run_id}/execute",

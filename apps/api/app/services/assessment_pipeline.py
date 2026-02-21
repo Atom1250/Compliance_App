@@ -39,6 +39,7 @@ class AssessmentRunConfig:
     bundle_version: str
     retrieval_top_k: int = 5
     retrieval_model_name: str = "default"
+    relax_retrieval_company_filter: bool = False
 
 
 @dataclass(frozen=True)
@@ -185,7 +186,7 @@ def execute_assessment_pipeline(
             query_embedding=None,
             top_k=config.retrieval_top_k,
             tenant_id=run.tenant_id,
-            company_id=run.company_id,
+            company_id=None if config.relax_retrieval_company_filter else run.company_id,
             model_name=config.retrieval_model_name,
             policy=get_retrieval_policy(),
         )

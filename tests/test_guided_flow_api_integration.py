@@ -44,7 +44,7 @@ def _wait_for_terminal_status(db_url: str, *, run_id: int, timeout_seconds: floa
         with Session(engine) as session:
             run = session.get(Run, run_id)
             assert run is not None
-            if run.status in {"completed", "failed"}:
+            if run.status in {"completed", "completed_with_warnings", "failed", "failed_pipeline"}:
                 return run.status
         time.sleep(0.05)
     raise AssertionError("run did not reach terminal status in time")

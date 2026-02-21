@@ -25,6 +25,9 @@ from compliance_app.golden_run import generate_golden_snapshot
 
 AUTH_HEADERS = {"X-API-Key": "dev-key", "X-Tenant-ID": "default"}
 SCENARIO_FIXTURE_PATH = Path("tests/fixtures/uat/scenarios.json")
+REPORTABLE_TERMINAL_STATUSES = {"completed", "completed_with_warnings"}
+FAILED_TERMINAL_STATUSES = {"failed", "failed_pipeline", "degraded_no_evidence"}
+ALL_TERMINAL_STATUSES = REPORTABLE_TERMINAL_STATUSES | FAILED_TERMINAL_STATUSES
 
 
 @contextmanager
@@ -70,7 +73,7 @@ def _wait_for_terminal_status(
     while time.time() < deadline:
         with Session(engine) as session:
             status = session.get(Run, run_id).status
-        if status in {"completed", "failed"}:
+        if status in ALL_TERMINAL_STATUSES:
             return status
         time.sleep(0.05)
     raise AssertionError("run did not reach terminal status in time")
@@ -239,7 +242,7 @@ def run_uat_harness(*, work_dir: Path) -> dict[str, object]:
             raise AssertionError("golden snapshot drift detected during UAT harness")
 
         for result in scenario_results:
-            if result["terminal_status"] == "completed":
+            if result["terminal_status"] in REPORTABLE_TERMINAL_STATUSES:
                 if result["contracts"]["report_status_code"] != 200:
                     raise AssertionError(f"scenario {result['id']} expected report contract 200")
             else:

@@ -68,6 +68,18 @@ class Settings(BaseSettings):
     )
     notebooklm_mcp_timeout_seconds: float = 30.0
     notebooklm_mcp_retries: int = 1
+    quality_gate_min_docs_discovered: int = 0
+    quality_gate_min_docs_ingested: int = 1
+    quality_gate_min_chunks_indexed: int = 1
+    quality_gate_max_chunk_not_found_rate: float = 1.0
+    quality_gate_min_evidence_hits: int = 0
+    quality_gate_min_evidence_hits_per_section: int = 0
+    quality_gate_fail_on_required_narrative_chunk_not_found: bool = True
+    quality_gate_pipeline_failure_status: str = "failed_pipeline"
+    quality_gate_evidence_failure_status: str = "degraded_no_evidence"
+    ingestion_text_char_per_page_threshold: float = 20.0
+    retrieval_smoke_top_k: int = 3
+    retrieval_smoke_auto_relax_filters: bool = False
 
     model_config = SettingsConfigDict(
         env_prefix="COMPLIANCE_APP_",

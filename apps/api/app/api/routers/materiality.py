@@ -43,8 +43,12 @@ from apps.api.app.services.run_execution_worker import (
     current_assessment_count,
     enqueue_run_execution,
 )
+from apps.api.app.services.run_observability_manifest import build_run_observability_manifest
 
 router = APIRouter(prefix="/runs", tags=["materiality"])
+
+REPORTABLE_TERMINAL_STATUSES = {"completed", "completed_with_warnings"}
+FAILED_TERMINAL_STATUSES = {"failed", "failed_pipeline", "degraded_no_evidence"}
 
 
 class MaterialityEntry(BaseModel):
@@ -137,6 +141,17 @@ class RunManifestResponse(BaseModel):
     regulatory_plan_json: dict[str, object] | None = None
     regulatory_plan_hash: str | None = None
     git_sha: str
+
+
+class RunManifestTruthResponse(BaseModel):
+    run_id: int
+    terminal_status: str
+    discovery_candidates: list[dict[str, object]]
+    selected_documents: list[dict[str, object]]
+    ingest_results: list[dict[str, object]]
+    chunking_results: dict[str, object]
+    indexing_results: dict[str, object]
+    retrieval_smoke_test: dict[str, object] | None = None
 
 
 class RunRegulatoryPlanResponse(BaseModel):
@@ -335,7 +350,7 @@ def _compute_export_readiness(
         is not None
     )
     checks = {
-        "run_completed": run.status == "completed",
+        "run_completed": run.status in REPORTABLE_TERMINAL_STATUSES,
         "has_manifest": has_manifest,
         "has_assessments": has_assessments,
     }
@@ -399,7 +414,7 @@ def _load_completed_run(
         _require_export_ready(readiness=readiness, resource=resource)
     except HTTPException:
         # Preserve existing compatibility text for non-completed runs.
-        if run.status != "completed":
+        if run.status not in REPORTABLE_TERMINAL_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"{resource_name} available only for completed runs",
@@ -775,6 +790,19 @@ def run_manifest(
     )
 
 
+@router.get("/{run_id}/manifest-truth", response_model=RunManifestTruthResponse)
+def run_manifest_truth(
+    run_id: int,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> RunManifestTruthResponse:
+    run = db.scalar(select(Run).where(Run.id == run_id, Run.tenant_id == auth.tenant_id))
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+    payload = build_run_observability_manifest(db, run=run)
+    return RunManifestTruthResponse(**payload)
+
+
 @router.get("/{run_id}/regulatory-plan", response_model=RunRegulatoryPlanResponse)
 def run_regulatory_plan(
     run_id: int,
@@ -1034,7 +1062,7 @@ def execute_run(
         .order_by(RunEvent.id.desc())
         .limit(1)
     )
-    if run.status == "completed":
+    if run.status in REPORTABLE_TERMINAL_STATUSES:
         return RunExecuteResponse(
             run_id=run.id,
             status=run.status,
@@ -1055,13 +1083,13 @@ def execute_run(
             status=run.status,
             assessment_count=assessment_count,
         )
-    if run.status == "failed" and not payload.retry_failed:
+    if run.status in FAILED_TERMINAL_STATUSES and not payload.retry_failed:
         return RunExecuteResponse(
             run_id=run.id,
             status=run.status,
             assessment_count=assessment_count,
         )
-    if run.status == "failed" and payload.retry_failed:
+    if run.status in FAILED_TERMINAL_STATUSES and payload.retry_failed:
         latest_failure_event = db.scalar(
             select(RunEvent)
             .where(

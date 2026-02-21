@@ -6,6 +6,7 @@ import hashlib
 import json
 import threading
 from dataclasses import dataclass
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from sqlalchemy import func, select
@@ -18,8 +19,13 @@ from apps.api.app.db.models import (
     Chunk,
     Company,
     DatapointAssessment,
+    DatapointDefinition,
+    Document,
+    DocumentDiscoveryCandidate,
+    DocumentFile,
     ExtractionDiagnostics,
     RegulatoryBundle,
+    RequirementBundle,
     Run,
     RunMateriality,
 )
@@ -41,7 +47,11 @@ from apps.api.app.services.llm_extraction import ExtractionClient
 from apps.api.app.services.llm_provider import build_extraction_client_from_settings
 from apps.api.app.services.regulatory_compiler import compile_company_regulatory_plan
 from apps.api.app.services.regulatory_registry import compile_from_db
-from apps.api.app.services.retrieval import get_retrieval_policy, retrieval_policy_to_dict
+from apps.api.app.services.retrieval import (
+    get_retrieval_policy,
+    retrieval_policy_to_dict,
+    retrieve_chunks,
+)
 from apps.api.app.services.run_cache import (
     RunHashInput,
     get_or_compute_cached_output,
@@ -49,6 +59,13 @@ from apps.api.app.services.run_cache import (
 )
 from apps.api.app.services.run_input_snapshot import persist_run_input_snapshot
 from apps.api.app.services.run_manifest import RunManifestPayload, persist_run_manifest
+from apps.api.app.services.run_quality_gate import (
+    TERMINAL_STATUS_FAILED_PIPELINE,
+    RunQualityGateConfig,
+    RunQualityGateDecision,
+    RunQualityMetrics,
+    evaluate_run_quality_gate,
+)
 from apps.api.app.services.run_registry_artifacts import persist_registry_outputs_for_run
 
 
@@ -171,6 +188,287 @@ def _materialize_assessments_from_cache(
         db.add(row)
     db.flush()
     return rows
+
+
+def _quality_gate_config_from_settings() -> RunQualityGateConfig:
+    settings = get_settings()
+    return RunQualityGateConfig(
+        min_docs_discovered=settings.quality_gate_min_docs_discovered,
+        min_docs_ingested=settings.quality_gate_min_docs_ingested,
+        min_chunks_indexed=settings.quality_gate_min_chunks_indexed,
+        max_chunk_not_found_rate=settings.quality_gate_max_chunk_not_found_rate,
+        min_evidence_hits=settings.quality_gate_min_evidence_hits,
+        min_evidence_hits_per_section=settings.quality_gate_min_evidence_hits_per_section,
+        fail_on_required_narrative_chunk_not_found=(
+            settings.quality_gate_fail_on_required_narrative_chunk_not_found
+        ),
+        pipeline_failure_status=settings.quality_gate_pipeline_failure_status,
+        evidence_failure_status=settings.quality_gate_evidence_failure_status,
+    )
+
+
+def _required_narrative_datapoints(
+    db: Session,
+    *,
+    bundle_id: str,
+    bundle_version: str,
+    required_datapoint_universe: list[str],
+) -> set[str]:
+    required_set = set(required_datapoint_universe)
+    if not required_set:
+        return set()
+    rows = db.scalars(
+        select(DatapointDefinition)
+        .join(RequirementBundle, RequirementBundle.id == DatapointDefinition.requirement_bundle_id)
+        .where(
+            RequirementBundle.bundle_id == bundle_id,
+            RequirementBundle.version == bundle_version,
+            DatapointDefinition.datapoint_key.in_(required_set),
+            DatapointDefinition.datapoint_type == "narrative",
+        )
+    ).all()
+    return {row.datapoint_key for row in rows}
+
+
+def _evaluate_quality_gate(
+    *,
+    db: Session,
+    run: Run,
+    bundle_id: str,
+    bundle_version: str,
+    required_datapoint_universe: list[str],
+    company_document_ids: list[int],
+    chunk_count: int,
+    assessment_count: int,
+    assessments: list[DatapointAssessment],
+    diagnostics_rows: list[ExtractionDiagnostics],
+) -> tuple[RunQualityGateDecision, RunQualityMetrics]:
+    required_narrative_keys = _required_narrative_datapoints(
+        db,
+        bundle_id=bundle_id,
+        bundle_version=bundle_version,
+        required_datapoint_universe=required_datapoint_universe,
+    )
+    evidence_hits_by_key = {
+        row.datapoint_key: len(json.loads(row.evidence_chunk_ids))
+        for row in assessments
+    }
+    required_section_hits = [evidence_hits_by_key.get(key, 0) for key in required_narrative_keys]
+    min_required_section_hits = min(required_section_hits) if required_section_hits else 0
+    chunk_not_found_keys: set[str] = set()
+    for row in diagnostics_rows:
+        payload_json = row.diagnostics_json if isinstance(row.diagnostics_json, dict) else {}
+        if payload_json.get("failure_reason_code") == "CHUNK_NOT_FOUND":
+            chunk_not_found_keys.add(row.datapoint_key)
+
+    docs_discovered = int(
+        db.scalar(
+            select(func.count())
+            .select_from(DocumentDiscoveryCandidate)
+            .where(
+                DocumentDiscoveryCandidate.company_id == run.company_id,
+                DocumentDiscoveryCandidate.tenant_id == run.tenant_id,
+                DocumentDiscoveryCandidate.accepted.is_(True),
+            )
+        )
+        or 0
+    )
+    metrics = RunQualityMetrics(
+        docs_discovered=docs_discovered,
+        docs_ingested=len(company_document_ids),
+        chunks_indexed=chunk_count,
+        required_narrative_section_count=len(required_narrative_keys),
+        required_narrative_chunk_not_found_count=len(
+            chunk_not_found_keys & required_narrative_keys
+        ),
+        chunk_not_found_count=len(chunk_not_found_keys),
+        assessment_count=assessment_count,
+        evidence_hits_total=sum(evidence_hits_by_key.values()),
+        min_evidence_hits_in_required_section=min_required_section_hits,
+    )
+    decision = evaluate_run_quality_gate(
+        config=_quality_gate_config_from_settings(),
+        metrics=metrics,
+    )
+    return decision, metrics
+
+
+def _canonicalize_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    parsed = urlsplit(url.strip())
+    if not parsed.netloc:
+        return url.strip()
+    normalized = urlunsplit(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            parsed.path.rstrip("/"),
+            parsed.query,
+            "",
+        )
+    )
+    return normalized
+
+
+def _extract_http_status_from_reason(reason: str) -> int | None:
+    if not reason.startswith("http_status_"):
+        return None
+    suffix = reason.split("http_status_", 1)[1].strip()
+    if not suffix.isdigit():
+        return None
+    return int(suffix)
+
+
+def _discovery_candidates_snapshot(
+    db: Session,
+    *,
+    run: Run,
+) -> list[dict[str, object]]:
+    rows = db.scalars(
+        select(DocumentDiscoveryCandidate)
+        .where(
+            DocumentDiscoveryCandidate.company_id == run.company_id,
+            DocumentDiscoveryCandidate.tenant_id == run.tenant_id,
+        )
+        .order_by(DocumentDiscoveryCandidate.id)
+    ).all()
+    snapshot: list[dict[str, object]] = []
+    for row in rows:
+        host = urlsplit(row.source_url).netloc.lower() if row.source_url else ""
+        snapshot.append(
+            {
+                "url": row.source_url,
+                "host": host,
+                "http_status": _extract_http_status_from_reason(row.reason or ""),
+                "accepted": bool(row.accepted),
+                "reason": row.reason,
+                "score": row.score,
+            }
+        )
+    return snapshot
+
+
+def _selected_documents_snapshot(
+    db: Session,
+    *,
+    run: Run,
+    company_document_ids: list[int],
+) -> list[dict[str, object]]:
+    if not company_document_ids:
+        return []
+    rows = (
+        db.query(Document, DocumentFile)
+        .outerjoin(DocumentFile, DocumentFile.document_id == Document.id)
+        .filter(Document.id.in_(company_document_ids), Document.tenant_id == run.tenant_id)
+        .order_by(Document.id)
+        .all()
+    )
+    snapshot: list[dict[str, object]] = []
+    for document, document_file in rows:
+        snapshot.append(
+            {
+                "document_id": document.id,
+                "title": document.title,
+                "source_url": document.source_url,
+                "canonical_url": _canonicalize_url(document.source_url),
+                "checksum": document_file.sha256_hash if document_file is not None else None,
+                "year": document.reporting_year,
+                "doc_type": document.doc_type,
+            }
+        )
+    return snapshot
+
+
+def _retrieval_smoke_query(
+    db: Session,
+    *,
+    bundle_id: str,
+    bundle_version: str,
+    required_datapoint_universe: list[str],
+    company: Company,
+) -> str:
+    required_set = set(required_datapoint_universe)
+    if required_set:
+        row = db.scalar(
+            select(DatapointDefinition)
+            .join(
+                RequirementBundle,
+                RequirementBundle.id == DatapointDefinition.requirement_bundle_id,
+            )
+            .where(
+                RequirementBundle.bundle_id == bundle_id,
+                RequirementBundle.version == bundle_version,
+                DatapointDefinition.datapoint_key.in_(required_set),
+            )
+            .order_by(DatapointDefinition.datapoint_key)
+            .limit(1)
+        )
+        if row is not None:
+            return f"{row.title} {row.disclosure_reference}".strip()
+    reporting_year = company.reporting_year_end or company.reporting_year
+    if reporting_year:
+        return f"{company.name} annual report {reporting_year}"
+    return f"{company.name} annual report"
+
+
+def _run_retrieval_smoke_test(
+    db: Session,
+    *,
+    run: Run,
+    company: Company,
+    bundle_id: str,
+    bundle_version: str,
+    required_datapoint_universe: list[str],
+    top_k: int,
+    model_name: str,
+) -> dict[str, object]:
+    settings = get_settings()
+    query = _retrieval_smoke_query(
+        db,
+        bundle_id=bundle_id,
+        bundle_version=bundle_version,
+        required_datapoint_universe=required_datapoint_universe,
+        company=company,
+    )
+    strict_results = retrieve_chunks(
+        db,
+        query=query,
+        query_embedding=None,
+        top_k=top_k,
+        tenant_id=run.tenant_id,
+        company_id=run.company_id,
+        model_name=model_name,
+        policy=get_retrieval_policy(),
+    )
+    relaxed_results: list = []
+    if len(strict_results) == 0:
+        relaxed_results = retrieve_chunks(
+            db,
+            query=query,
+            query_embedding=None,
+            top_k=top_k,
+            tenant_id=run.tenant_id,
+            company_id=None,
+            model_name=model_name,
+            policy=get_retrieval_policy(),
+        )
+    diagnostic = "none"
+    if len(strict_results) == 0 and len(relaxed_results) > 0:
+        diagnostic = "FILTER_TOO_STRICT"
+    auto_relaxed = diagnostic == "FILTER_TOO_STRICT" and settings.retrieval_smoke_auto_relax_filters
+    return {
+        "query": query,
+        "top_k": top_k,
+        "strict_result_count": len(strict_results),
+        "strict_chunk_ids": [item.chunk_id for item in strict_results],
+        "relaxed_result_count": len(relaxed_results),
+        "relaxed_chunk_ids": [item.chunk_id for item in relaxed_results],
+        "diagnostic": diagnostic,
+        "auto_relaxed_filters": auto_relaxed,
+        "strict_filters": {"tenant_id": run.tenant_id, "company_id": run.company_id},
+        "relaxed_filters": {"tenant_id": run.tenant_id, "company_id": None},
+    }
 
 
 def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
@@ -340,6 +638,31 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     bundle_version=payload.bundle_version,
                     run_id=run.id,
                 )
+            discovery_candidates_snapshot = _discovery_candidates_snapshot(db, run=run)
+            selected_documents_snapshot = _selected_documents_snapshot(
+                db, run=run, company_document_ids=company_document_ids
+            )
+            retrieval_smoke_test = _run_retrieval_smoke_test(
+                db,
+                run=run,
+                company=company,
+                bundle_id=payload.bundle_id,
+                bundle_version=payload.bundle_version,
+                required_datapoint_universe=required_datapoint_universe,
+                top_k=max(1, settings.retrieval_smoke_top_k),
+                model_name=payload.retrieval_model_name,
+            )
+            retrieval_params["smoke_test"] = {
+                "diagnostic": retrieval_smoke_test["diagnostic"],
+                "auto_relaxed_filters": retrieval_smoke_test["auto_relaxed_filters"],
+            }
+            append_run_event(
+                db,
+                run_id=run.id,
+                tenant_id=run.tenant_id,
+                event_type="run.execution.retrieval_smoke_test",
+                payload={"tenant_id": run.tenant_id, **retrieval_smoke_test},
+            )
             persist_run_input_snapshot(
                 db,
                 run_id=run.id,
@@ -362,6 +685,9 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     "compiler_mode": run.compiler_mode,
                     "retrieval": retrieval_params,
                     "required_datapoint_universe": required_datapoint_universe,
+                    "discovery_candidates": discovery_candidates_snapshot,
+                    "selected_documents": selected_documents_snapshot,
+                    "retrieval_smoke_test": retrieval_smoke_test,
                 },
             )
 
@@ -377,12 +703,6 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                 if company_document_ids
                 else 0
             )
-            if chunk_count == 0:
-                raise ValueError(
-                    "chunk_table_empty_for_run "
-                    f"(documents_in_scope={document_count}, chunks={chunk_count})"
-                )
-
             computed_assessments: list[DatapointAssessment] | None = None
 
             def _compute_assessments():
@@ -396,6 +716,9 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                         bundle_version=payload.bundle_version,
                         retrieval_top_k=payload.retrieval_top_k,
                         retrieval_model_name=payload.retrieval_model_name,
+                        relax_retrieval_company_filter=bool(
+                            retrieval_smoke_test["auto_relaxed_filters"]
+                        ),
                     ),
                 )
                 return computed_assessments
@@ -504,6 +827,16 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                     ExtractionDiagnostics.tenant_id == run.tenant_id,
                 )
             ).all()
+            run_assessments_for_quality = computed_assessments
+            if run_assessments_for_quality is None:
+                run_assessments_for_quality = db.scalars(
+                    select(DatapointAssessment)
+                    .where(
+                        DatapointAssessment.run_id == run.id,
+                        DatapointAssessment.tenant_id == run.tenant_id,
+                    )
+                    .order_by(DatapointAssessment.datapoint_key)
+                ).all()
             failure_count = 0
             for row in diag_rows:
                 payload_json = (
@@ -528,31 +861,100 @@ def _process_run_execution(run_id: int, payload: RunExecutionPayload) -> None:
                         "diagnostics_count": len(diag_rows),
                     },
                 )
-            run.status = "completed"
+            quality_decision, quality_metrics = _evaluate_quality_gate(
+                db=db,
+                run=run,
+                bundle_id=payload.bundle_id,
+                bundle_version=payload.bundle_version,
+                required_datapoint_universe=required_datapoint_universe,
+                company_document_ids=company_document_ids,
+                chunk_count=chunk_count,
+                assessment_count=assessment_count,
+                assessments=run_assessments_for_quality,
+                diagnostics_rows=diag_rows,
+            )
             append_run_event(
                 db,
                 run_id=run.id,
                 tenant_id=run.tenant_id,
-                event_type="run.execution.completed",
+                event_type="run.execution.quality_gated",
                 payload={
                     "tenant_id": run.tenant_id,
-                    "assessment_count": assessment_count,
-                    "cache_hit": cache_hit,
-                    "research_provider": payload.research_provider,
+                    "decision": quality_decision.as_payload(),
+                    "metrics": {
+                        "docs_discovered": quality_metrics.docs_discovered,
+                        "docs_ingested": quality_metrics.docs_ingested,
+                        "chunks_indexed": quality_metrics.chunks_indexed,
+                        "required_narrative_section_count": (
+                            quality_metrics.required_narrative_section_count
+                        ),
+                        "required_narrative_chunk_not_found_count": (
+                            quality_metrics.required_narrative_chunk_not_found_count
+                        ),
+                        "chunk_not_found_count": quality_metrics.chunk_not_found_count,
+                        "assessment_count": quality_metrics.assessment_count,
+                        "evidence_hits_total": quality_metrics.evidence_hits_total,
+                        "min_evidence_hits_in_required_section": (
+                            quality_metrics.min_evidence_hits_in_required_section
+                        ),
+                    },
                 },
             )
-            log_structured_event(
-                "run.execution.completed",
-                run_id=run.id,
-                tenant_id=run.tenant_id,
-                assessment_count=assessment_count,
-                cache_hit=cache_hit,
-                research_provider=payload.research_provider,
-            )
+            run.status = quality_decision.final_status
+            completion_payload = {
+                "tenant_id": run.tenant_id,
+                "assessment_count": assessment_count,
+                "cache_hit": cache_hit,
+                "research_provider": payload.research_provider,
+                "final_status": quality_decision.final_status,
+                "quality_gate_passed": quality_decision.passed,
+                "quality_gate_failures": quality_decision.failures,
+                "quality_gate_warnings": quality_decision.warnings,
+            }
+            if quality_decision.final_status == TERMINAL_STATUS_FAILED_PIPELINE:
+                append_run_event(
+                    db,
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    event_type="run.execution.failed",
+                    payload={
+                        **completion_payload,
+                        "error": "run_quality_gate_failed",
+                        "failure_category": "quality_gate_failed",
+                        "retryable": False,
+                    },
+                )
+                log_structured_event(
+                    "run.execution.failed",
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    error="run_quality_gate_failed",
+                    failure_category="quality_gate_failed",
+                    retryable=False,
+                    final_status=quality_decision.final_status,
+                )
+            else:
+                append_run_event(
+                    db,
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    event_type="run.execution.completed",
+                    payload=completion_payload,
+                )
+                log_structured_event(
+                    "run.execution.completed",
+                    run_id=run.id,
+                    tenant_id=run.tenant_id,
+                    assessment_count=assessment_count,
+                    cache_hit=cache_hit,
+                    research_provider=payload.research_provider,
+                    final_status=quality_decision.final_status,
+                    quality_gate_passed=quality_decision.passed,
+                )
             db.commit()
         except Exception as exc:  # pragma: no cover - defensive worker path
             failure_category, retryable = _classify_failure(exc)
-            run.status = "failed"
+            run.status = TERMINAL_STATUS_FAILED_PIPELINE
             append_run_event(
                 db,
                 run_id=run.id,

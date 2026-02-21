@@ -37,7 +37,7 @@
       "blocking_reasons": [
         "assessments_missing",
         "manifest_missing_for_report",
-        "run_not_completed:failed"
+        "run_not_completed:failed_pipeline"
       ],
       "evidence_pack_ready": false,
       "evidence_preview_status_code": 409,
@@ -45,7 +45,7 @@
       "llm_provider": "openai_cloud",
       "report_ready": false,
       "report_status_code": 409,
-      "terminal_status": "failed"
+      "terminal_status": "failed_pipeline"
     }
   ]
 }

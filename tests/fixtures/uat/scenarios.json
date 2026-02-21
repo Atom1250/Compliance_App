@@ -14,7 +14,7 @@
       "llm_provider": "openai_cloud",
       "bundle_id": "esrs_mini",
       "bundle_version": "2026.01",
-      "expected_terminal_status": "failed"
+      "expected_terminal_status": "failed_pipeline"
     }
   ]
 }

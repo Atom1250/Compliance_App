@@ -3,6 +3,11 @@
 Next PR ID: PR-NBLM-011
 
 ## Completed Work
+- Run hardening increment completed (post triage for Iberdrola 2025 runs 60-65).
+- Added fail-closed terminal status handling in execution/readiness paths with quality-gate integration (`completed_with_warnings`, `degraded_no_evidence`, `failed_pipeline`).
+- Added retrieval smoke test event + optional automatic filter relaxation gate (`COMPLIANCE_APP_RETRIEVAL_SMOKE_AUTO_RELAX_FILTERS`) and persisted smoke diagnostics in run retrieval params.
+- Added run observability inventory endpoint `GET /runs/{run_id}/manifest-truth` combining discovery candidates, selected docs, ingest metrics, chunk/index status, and retrieval smoke payload.
+- Updated UAT harness + fixtures/golden snapshot for expanded terminal statuses.
 - PR-NBLM-007..PR-NBLM-010 completed (NotebookLM infra, workflow API, CI stub safety, ops runbooks).
 - Added NotebookLM sidecar compose file `docker/compose.notebooklm.yml` plus local setup/manual integration runbooks.
 - Added internal regulatory research endpoints and CLI (`/internal/regulatory-research/*`, `python -m apps.api.app.scripts.regulatory_research_query`).
