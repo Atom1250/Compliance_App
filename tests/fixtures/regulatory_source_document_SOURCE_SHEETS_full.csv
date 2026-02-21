@@ -1,0 +1,31 @@
+record_id,jurisdiction,document_name,legal_reference,official_source_url
+EU-L1-CSRD,EU,Corporate Sustainability Reporting Directive,Directive (EU) 2022/2464,https://eur-lex.europa.eu
+EU-L2-ESRS-DA,EU,ESRS Delegated Act,Commission Delegated Regulation (EU) 2023/2772,https://eur-lex.europa.eu
+EU-L2-ESRSE1,EU,,ESRS E1,https://eur-lex.europa.eu
+EU-L2-ESRSE2,EU,,ESRS E2,https://eur-lex.europa.eu
+EU-L2-ESRSE3,EU,,ESRS E3,https://eur-lex.europa.eu
+EU-L2-ESRSE4,EU,,ESRS E4,https://eur-lex.europa.eu
+EU-L2-ESRSE5,EU,,ESRS E5,https://eur-lex.europa.eu
+EU-L2-ESRSS1,EU,,ESRS S1,https://eur-lex.europa.eu
+EU-L2-ESRSS2,EU,,ESRS S2,https://eur-lex.europa.eu
+EU-L2-ESRSS3,EU,,ESRS S3,https://eur-lex.europa.eu
+EU-L2-ESRSS4,EU,,ESRS S4,https://eur-lex.europa.eu
+EU-L2-ESRSG1,EU,,ESRS G1,https://eur-lex.europa.eu
+EU-TAX-L1-2020-852,EU,EU Taxonomy Regulation,Regulation (EU) 2020/852,https://eur-lex.europa.eu
+EU-TAX-DA-CLIMATE,EU,,Commission Delegated Regulation (EU) 2021/2139,https://eur-lex.europa.eu
+EU-TAX-DA-DISCLOSURE,EU,,Commission Delegated Regulation (EU) 2021/2178,https://eur-lex.europa.eu
+EU-TAX-DA-ENV,EU,,Commission Delegated Regulation (EU) 2023/2486,https://eur-lex.europa.eu
+EU-GUID-FAQ-CSRD,EU,FAQ on CSRD,EU Commission FAQ,https://finance.ec.europa.eu
+DE-L1-CSRD-UMSETZUNG-BMJV-2025-07-10,DE,German CSRD Law Draft,Ref DE 2025-07-10,https://bmjv.de
+DE-L1-CSRD-UMSETZUNG-BT-21-018-2101857,DE,German Bundestag Filing,BT 21/018/2101857,https://bundestag.de
+ES-L1-CSRD-BILL-15-A-38-1,ES,Spanish CSRD Bill,Boletin 15-A-38-1,https://congreso.es
+ES-GUID-CNMV-ICAC-2024-11,ES,CNMV/ICAC Guidance,CNMV ICAC 2024-11,https://cnmv.es
+FR-L1-CSRD-ORD-2023-1142,FR,French CSRD Ordinance,Ordonnance 2023-1142,https://legifrance.gouv.fr
+NL-L1-CSRD-BILL-36678,NL,Dutch CSRD Bill,36678,https://tweedekamer.nl
+NO-L1-LOV-2024-06-21-42,NO,Norway Transparency Act Update,Lov 2024-06-21-42,https://lovdata.no
+NO-GUID-REGJERINGEN-TOPIC,NO,Government Guidance,Topic Guidance,https://regjeringen.no
+UK-REG-FCA-SDLR,UK,FCA SDR Rules,PS23/16,https://fca.org.uk
+UK-POL-SDR-2024,UK,UK SDR Policy,SDR Policy 2024,https://gov.uk
+UK-STD-UKSRS,UK,UK Sustainability Reporting Standard,UKSRS Exposure Draft,https://gov.uk
+EU-L2-ESRS1,EU,,ESRS 1,https://eur-lex.europa.eu
+EU-L2-ESRS2,EU,,ESRS 2,https://eur-lex.europa.eu

@@ -38,6 +38,10 @@ def _fixture_path() -> Path:
     return Path("tests/fixtures/regulatory_sources_eu_sample.csv")
 
 
+def _source_sheets_fixture_path() -> Path:
+    return Path("tests/fixtures/regulatory_source_document_SOURCE_SHEETS_full.csv")
+
+
 def test_normalization_tags_dates_and_url_validation() -> None:
     issues: list[ImportIssue] = []
     normalized = _normalize_row(
@@ -82,6 +86,42 @@ def test_source_sheets_csv_import_has_zero_invalid_rows(tmp_path: Path) -> None:
     assert summary.rows_seen == 2
     assert summary.rows_deduped == 2
     assert summary.invalid_rows == 0
+
+
+def test_source_sheets_fixture_import_uses_document_name_fallback_and_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    with _prepare_sqlite_session(tmp_path) as session:
+        first = import_regulatory_sources(
+            session,
+            file_path=_source_sheets_fixture_path(),
+            dry_run=False,
+            issues_out=tmp_path / "issues.csv",
+        )
+        second = import_regulatory_sources(
+            session,
+            file_path=_source_sheets_fixture_path(),
+            dry_run=False,
+            issues_out=tmp_path / "issues_second.csv",
+        )
+        rows = session.scalars(
+            select(RegulatorySourceDocument).order_by(RegulatorySourceDocument.record_id)
+        ).all()
+
+    assert first.rows_seen == 30
+    assert first.rows_deduped == 30
+    assert first.invalid_rows == 0
+    assert first.inserted == 30
+    assert second.inserted == 0
+    assert second.updated == 0
+    assert second.skipped == 30
+
+    by_record = {row.record_id: row for row in rows}
+    assert by_record["EU-L2-ESRS1"].document_name == "EU L2 ESRS1 (EU-L2-ESRS1) - ESRS 1"
+    assert (
+        by_record["EU-TAX-DA-CLIMATE"].document_name
+        == "EU TAX DA CLIMATE (EU-TAX-DA-CLIMATE) - Commission Delegated Regulation (EU) 2021/2139"
+    )
 
 
 def test_missing_table_guard_returns_clear_error(tmp_path: Path) -> None:
